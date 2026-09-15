@@ -44,7 +44,7 @@ Trilha única — o projeto não tem frontend. A ordem numérica já respeita as
 | 010 | [CLI catálogo](010-cli-catalog.md) | 007 | S | feito | `julius mercados … / produtos …` |
 | 011 | [Cliente HTTP de LLM](011-llm-http-client.md) | — | S | feito | `infra/llm_client.py` → `HttpLlmClient` |
 | 012 | [Serviço suggestions](012-service-suggestions.md) | 011 | M | feito | `services/suggestions.py` + `repositories/ai_usage.py` |
-| 013 | [Comparar produtos](013-compare-products.md) | 007, 010, 012 | S | pendente | `catalog.compare_products` + `julius produtos comparar` |
+| 013 | [Comparar produtos](013-compare-products.md) | 007, 010, 012 | S | feito | `catalog.compare_products` + `julius produtos comparar` |
 | 014 | [Ponta a ponta](014-e2e-content-price.md) | 009, 010, 013 | M | pendente | fixture sintético + fluxos completos via CLI |
 
 Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente.

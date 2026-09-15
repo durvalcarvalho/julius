@@ -112,6 +112,26 @@ def test_produtos_fundir_same_id_exits_1():
     assert "different" in result.stderr
 
 
+def test_produtos_comparar_without_ai_prints_similarity_and_hint(monkeypatch):
+    for name in ("JULIUS_AI_API_KEY", "JULIUS_AI_BASE_URL", "JULIUS_AI_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    _import("qrcode.html")
+    before = _run("produtos", "listar").output
+    result = _run("produtos", "comparar", "1", "2")
+    assert result.exit_code == 0, result.output
+    assert "Similaridade de texto" in result.output
+    assert "IA indisponível" in result.output
+    assert "produtos fundir 1 2" in result.output
+    assert _run("produtos", "listar").output == before
+
+
+def test_produtos_comparar_unknown_id_exits_1():
+    _import("qrcode.html")
+    result = _run("produtos", "comparar", "1", "999")
+    assert result.exit_code == 1
+    assert "999" in result.stderr
+
+
 def test_help_shows_subcommands():
     assert "mercados" in _run("--help").output and "produtos" in _run("--help").output
     stores_help = _run("mercados", "--help").output

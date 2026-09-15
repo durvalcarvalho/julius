@@ -1,13 +1,29 @@
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
+from julius.config import Config
+from julius.domain.models import MergeSuggestion
+from julius.infra.llm_client import LlmResponse
 from julius.parsers.df import DFReceiptParser
-from julius.repositories import prices, products, stores
+from julius.repositories import ai_usage, prices, products, stores
 from julius.services import catalog
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 CNPJ = "00000000000191"
+NO_AI = Config(Path("unused"), None, None, None, 1.0, None, None)
+AI = Config(Path("unused"), "key", "https://llm.example/v1", "cheap", 1.0, 1.0, 1.0)
+
+
+class FakeLlmClient:
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.calls = 0
+
+    def complete(self, system_prompt: str, user_prompt: str) -> LlmResponse:
+        self.calls += 1
+        return LlmResponse(self.text, 100, 50)
 
 
 def _import(conn, fixture_name):
@@ -141,3 +157,43 @@ def test_set_product_content_rejects_bad_unit_and_non_positive(conn):
     with pytest.raises(ValueError):
         catalog.set_product_content(conn, product_id, 0, "KG")
     assert products.get_product(conn, product_id).content_quantity is None
+
+
+def test_compare_returns_text_similarity_without_client(conn):
+    _import(conn, "qrcode.html")
+    _import(conn, "qrcode-3.html")
+    id_a, id_b = _tomato_ids(conn)
+    result = catalog.compare_products(conn, NO_AI, None, id_a, id_b)
+    assert result.ai_suggestion is None
+    assert 0.7 < result.text_similarity <= 1
+    assert _tomato_ids(conn) == [id_a, id_b]
+
+
+def test_compare_uses_ai_when_available(conn):
+    id_a, id_b = _product(conn, "A", "1"), _product(conn, "B", "2")
+    client = FakeLlmClient('{"same_product": true, "confidence": 0.9, "rationale": "mesmo item"}')
+    result = catalog.compare_products(conn, AI, client, id_a, id_b)
+    assert result.ai_suggestion == MergeSuggestion(True, 0.9, "mesmo item")
+    assert client.calls == 1
+
+
+def test_compare_skips_ai_when_budget_exhausted(conn):
+    id_a, id_b = _product(conn, "A", "1"), _product(conn, "B", "2")
+    with conn:
+        ai_usage.add_spent(conn, datetime.now().strftime("%Y-%m"), AI.ai_budget_usd)
+    client = FakeLlmClient('{"same_product": true, "confidence": 0.9, "rationale": "x"}')
+    result = catalog.compare_products(conn, AI, client, id_a, id_b)
+    assert result.ai_suggestion is None
+    assert client.calls == 0
+
+
+def test_compare_same_id_raises(conn):
+    product_id = _product(conn, "A", "1")
+    with pytest.raises(ValueError):
+        catalog.compare_products(conn, NO_AI, None, product_id, product_id)
+
+
+def test_compare_unknown_id_raises(conn):
+    product_id = _product(conn, "A", "1")
+    with pytest.raises(LookupError):
+        catalog.compare_products(conn, NO_AI, None, product_id, 9999)

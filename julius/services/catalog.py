@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import sqlite3
 
-from julius.domain.models import Product, Store
-from julius.domain.normalization import normalize_content
+from rapidfuzz import fuzz
+
+from julius.config import Config
+from julius.domain.models import Product, ProductComparison, Store
+from julius.domain.normalization import normalize_content, normalize_text
+from julius.infra.llm_client import LlmClient
 from julius.repositories import prices, products, stores
+from julius.services import suggestions
 
 
 def list_stores(conn: sqlite3.Connection) -> list[Store]:
@@ -49,6 +54,21 @@ def set_product_content(conn: sqlite3.Connection, product_id: int, quantity: flo
     normalized_quantity, unit = normalize_content(quantity, raw_unit)
     with conn:
         products.set_content(conn, product_id, normalized_quantity, unit)
+
+
+def compare_products(
+    conn: sqlite3.Connection, config: Config, client: LlmClient | None, id_a: int, id_b: int
+) -> ProductComparison:
+    """An opinion, never an action: merging stays a separate, manual command."""
+    if id_a == id_b:
+        raise ValueError("cannot compare a product with itself")
+    a = _require_product(conn, id_a)
+    b = _require_product(conn, id_b)
+    similarity = fuzz.token_set_ratio(normalize_text(a.canonical_name), normalize_text(b.canonical_name)) / 100
+    suggestion = None
+    if client is not None and suggestions.is_available(conn, config):
+        suggestion = suggestions.suggest_merge(conn, config, client, a.canonical_name, b.canonical_name)
+    return ProductComparison(text_similarity=similarity, ai_suggestion=suggestion)
 
 
 def _non_blank(value: str, field: str) -> str:

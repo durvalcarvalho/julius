@@ -5,8 +5,10 @@ from typing import Annotated
 import typer
 from rich.table import Table
 
+from julius import config
 from julius.cli._common import console, fail, open_db
 from julius.domain.models import Product
+from julius.infra.llm_client import HttpLlmClient
 from julius.services import catalog
 
 app = typer.Typer()
@@ -99,6 +101,33 @@ def set_content(
     finally:
         conn.close()
     console.print(f"Conteúdo do produto {product_id} definido.")
+
+
+@app.command("comparar")
+def compare_products(
+    id_a: Annotated[int, typer.Argument(help="ID do primeiro produto.")],
+    id_b: Annotated[int, typer.Argument(help="ID do segundo produto.")],
+) -> None:
+    """Opina se dois produtos são a mesma coisa (texto + IA, se configurada). Não funde nada."""
+    settings = config.load()
+    conn = open_db()
+    try:
+        names = {product.id: product.canonical_name for product in catalog.list_products(conn)}
+        comparison = catalog.compare_products(conn, settings, HttpLlmClient.from_config(settings), id_a, id_b)
+    except (ValueError, LookupError) as error:
+        fail(str(error))
+    finally:
+        conn.close()
+    console.print(f"A: {names[id_a]}")
+    console.print(f"B: {names[id_b]}")
+    console.print(f"Similaridade de texto: {comparison.text_similarity:.0%}")
+    suggestion = comparison.ai_suggestion
+    if suggestion is None:
+        console.print("IA indisponível (não configurada ou orçamento do mês esgotado) — só similaridade de texto.")
+    else:
+        verdict = "mesmo produto" if suggestion.same_product else "produtos diferentes"
+        console.print(f"IA: {verdict} (confiança {suggestion.confidence:.1f}) — {suggestion.rationale}")
+    console.print(f"Para fundir: julius produtos fundir {id_a} {id_b}")
 
 
 def _content(product: Product) -> str:
