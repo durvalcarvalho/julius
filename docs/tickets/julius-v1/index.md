@@ -46,6 +46,8 @@ Trilha única — o projeto não tem frontend. A ordem numérica já respeita as
 | 012 | [Serviço suggestions](012-service-suggestions.md) | 011 | M | feito | `services/suggestions.py` + `repositories/ai_usage.py` |
 | 013 | [Comparar produtos](013-compare-products.md) | 007, 010, 012 | S | feito | `catalog.compare_products` + `julius produtos comparar` |
 | 014 | [Ponta a ponta](014-e2e-content-price.md) | 009, 010, 013 | M | feito | fixture sintético + fluxos completos via CLI |
+| 015 | [Serviço guidance](015-service-guidance.md) | 005, 006 | M | pendente | `Hint`/`HintKind`, `guidance.py`, `search.closest_names`, `ImportResult.new_product_ids` |
+| 016 | [CLI dicas](016-cli-hints.md) | 015 | S | pendente | `cli/_hints.py` + dicas em `consultar`, `importar`, `comparar` |
 
 Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente.
 
@@ -74,6 +76,7 @@ Paralelizável: {001, 002, 003, 011} desde o início; {006, 007, 008} após 004;
 - **C — CLI utilizável**: 009, 010
 - **D — IA opcional**: 011, 012, 013
 - **E — integração**: 014
+- **v1.1 — dicas de uso** (ver `CLAUDE.md` § "Dicas de uso"): 015 → 016
 
 ## Riscos e mitigações
 

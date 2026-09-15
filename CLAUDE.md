@@ -12,12 +12,14 @@ Fase: **v1 implementada.** Os 14 tickets de `docs/tickets/julius-v1/` estão fei
 
 Ambiente: `make install` instala `julius` global via `pipx install --editable .` (aponta pro código do diretório — editar ou trocar de branch já vale, sem reinstalar; rode de novo só se o `pyproject.toml` mudar). `make test` cria o `.venv/` na primeira vez e roda o pytest. `make uninstall` remove.
 
+**v1.1 em andamento — módulo de dicas de uso** (ver "Dicas de uso (`guidance`)"): nasceu do primeiro uso real (`consultar` num banco vazio dizia só "Nenhum resultado."). Tickets 015 e 016 em `docs/tickets/julius-v1/`.
+
 Ainda em aberto (questões de gosto, não bugs):
 - `julius produtos pendentes` (revisão periódica) — ver "Requisitos novos", item 2.
-- Dica via padrão `C/<número>` no `importar` — ver "Requisitos novos", item 3; `suggestions.suggest_content` já existe, ninguém a chama no import.
+- ~~Dica via padrão `C/<número>` no `importar`~~ → resolvido pelo módulo de dicas (`PACKAGE_SIZE_IN_DESCRIPTION`).
 - Empates de preço em `consultar`: todas as linhas com o menor/maior preço são mantidas mesmo fora de `--limite` (honesto, mas com 4 preços iguais a tabela cresce). Ajustar se incomodar.
 
-Próximo passo sugerido: usar de verdade por algumas semanas (importar os recibos de `~/.local/share/julius/entrada/`), e só então decidir os itens acima e a v2 (outros estados, Telegram).
+Próximo passo sugerido: usar de verdade por algumas semanas (novos recibos vão em `~/.local/share/julius/entrada/`), e só então decidir os itens acima e a v2 (outros estados, Telegram).
 
 ## Convenções de código (regra dura, veio de irritação real do usuário)
 
@@ -393,6 +395,48 @@ Nomes de comando em português (são UI); cada um mapeia pra uma função em ing
 ### Empacotamento
 
 `pyproject.toml` com `[project.scripts] julius = "julius.cli:app"` — depois de `.venv/bin/pip install -e '.[dev]'`, o comando `.venv/bin/julius` fica disponível sem `python -m` nem caminho de script. Dependências: `typer`, `rich`, `rapidfuzz`; dev: `pytest`. `infra/llm_client.py` não adiciona dependência — chamada HTTP via `urllib.request` da stdlib. `[tool.setuptools.package-data]` inclui os `.sql` (ver "Migração de schema").
+
+### Dicas de uso (`guidance`) — v1.1
+
+**Motivação (caso real):** `julius consultar banana` num banco recém-criado respondia `Nenhum resultado.` — verdadeiro e inútil. O usuário não tinha como saber que o problema era "nada foi importado ainda". Pedido explícito: quando algo dá vazio ou errado, o CLI **diagnostica o que aconteceu e sugere o próximo comando**, pronto pra copiar. Isso é um módulo, não um punhado de `if`s espalhados pela CLI.
+
+**Princípios (não negociáveis dentro do módulo):**
+1. **Dica é dado, não texto.** `services/guidance.py` devolve `Hint(kind, details)`; `cli/_hints.py` traduz `kind` → frase em português com o comando sugerido. Mesma separação de sempre: serviço diagnostica olhando o banco, CLI escreve.
+2. **Só três gatilhos:** resultado vazio, erro, ou situação de primeira vez. Nunca em saída normal cheia — dica em cima de resultado bom vira ruído e o usuário aprende a ignorar. Máximo **2 dicas por comando**.
+3. **Sem memória de "já mostrei".** A limitação natural já evita repetição: dica de embalagem só pra produtos *novos* daquele import; dica de apelido só enquanto houver loja com `nickname == legal_name`. Nada de tabela `hints_shown` (YAGNI).
+4. **Nunca muda exit code, nunca pergunta, nunca executa.** Só imprime, em estilo discreto (`dim`), prefixo `Dica:`. Em erro, vai pra `stderr` junto do erro; em resultado vazio, `stdout`.
+5. **Sem IA.** Diagnóstico é determinístico: estado do banco + tipo da exceção + padrão de texto. IA continua só em `produtos comparar`.
+
+**Catálogo v1.1 de `HintKind`** (todos ancorados em problema observado ou em decisão já tomada no design):
+
+| kind | gatilho | `details` | frase (CLI) |
+|---|---|---|---|
+| `NO_RECEIPTS_IMPORTED` | `consultar` com banco sem nenhuma loja | — | Nenhum recibo importado ainda. Comece com: `julius importar ARQUIVO.html` |
+| `NO_MATCH_DID_YOU_MEAN` | `consultar TERMO` vazio, mas há nomes com score entre `NEAR_MISS_CUTOFF` (45) e `MATCH_SCORE_CUTOFF` | até 3 nomes | Nenhum produto bate com "TERMO". Parecidos: A, B, C |
+| `NO_MATCH_TRY_TAGS` | `consultar TERMO` vazio e sem parecidos | até 5 tags existentes (pode ser vazio) | Busca é por nome, não por categoria. Pra agrupar (ex.: "carne"): `julius produtos tag ID carne` e `julius consultar --tag carne`. Tags que já existem: … |
+| `UNKNOWN_TAG` | `consultar --tag X` e a tag não existe | tags existentes | Não existe a tag "X". Tags atuais: …. Crie com `julius produtos tag ID X` |
+| `FIRST_IMPORT_NAME_STORES` | `importar` com sucesso e alguma loja ainda com `nickname == legal_name` | quantidade | N mercado(s) ainda com a razão social como nome. Dê apelidos: `julius mercados listar` → `julius mercados renomear CNPJ "Apelido"` |
+| `PACKAGE_SIZE_IN_DESCRIPTION` | `importar` criou produto novo cuja descrição casa `C/\d+` ou `\d+(,\d+)?\s?(ML\|L\|G\|KG)\b` | até 3 `"id · nome"` + total | Estes produtos parecem ter tamanho na descrição; pra comparar por litro/kg/unidade: `julius produtos definir-conteudo ID QTD UNIDADE` |
+| `IMPORT_FILE_NOT_FOUND` | `FileNotFoundError` | caminho | Arquivo não encontrado. Se usou `*.html`, nenhum arquivo casou com o padrão nessa pasta |
+| `IMPORT_NOT_A_RECEIPT` | `ReceiptParseError` | caminho | Não parece a página de NFC-e da Receita/DF salva como HTML (PDF e `.har` não servem). Abra o link do QR code no navegador e "Salvar página como…" |
+| `IMPORT_UNKNOWN_UNIT` | `UnknownUnitError` | código bruto | Código de unidade novo. Adicione uma linha em `UNIT_MAP` (`julius/domain/normalization.py`) — o import inteiro desse arquivo foi ignorado, nada gravado |
+| `AI_NOT_CONFIGURED` | `produtos comparar` sem `Config.ai_configured` | — | Pra ter a opinião da IA, defina `JULIUS_AI_API_KEY`, `JULIUS_AI_BASE_URL`, `JULIUS_AI_MODEL` e os dois preços por token (ver README) |
+
+Isso **fecha a questão em aberto nº 3** ("dica via `C/<n>`"): vira `PACKAGE_SIZE_IN_DESCRIPTION`, só pra produtos novos, sem IA — a sugestão de conteúdo por LLM (`suggestions.suggest_content`) continua sem chamador.
+
+**Contratos:**
+- `domain/models.py`: `HintKind = Literal[...]` (os 10 acima) e `Hint(kind: HintKind, details: tuple[str, ...] = ())`. `ImportResult` ganha `new_product_ids: tuple[int, ...] = ()` (quem cria produto novo é `importing`; sem isso a dica de embalagem não sabe o que é novo).
+- `services/search.py`: `closest_names(conn, term, limit=3) -> list[tuple[str, int]]` — nomes com score em `[NEAR_MISS_CUTOFF, MATCH_SCORE_CUTOFF)`, ordenados por score desc. `NEAR_MISS_CUTOFF = 45`, constante nomeada.
+- `services/guidance.py` (só funções puras sobre `conn`/valores; nunca lança — dica que falha é dica que não aparece):
+  - `after_search(conn, term, tag, records) -> list[Hint]`
+  - `after_import(conn, result: ImportResult) -> list[Hint]`
+  - `for_import_error(error: Exception, path: Path) -> list[Hint]`
+  - `for_compare(config: Config) -> list[Hint]`
+  - Todas cortam em `MAX_HINTS = 2`.
+- `cli/_hints.py`: `TEXTS: dict[HintKind, str]` (templates com `{details}`) e `print_hints(hints, *, to_stderr=False)`. Um teste garante que **todo** `HintKind` tem texto — esquecer um vira falha de teste, não frase em branco.
+- A checagem ad hoc `has_imports` que hoje vive em `cli/receipts.py` some: vira `NO_RECEIPTS_IMPORTED` pelo caminho normal.
+
+**Fora do escopo v1.1:** dicas em saída cheia, "não mostrar de novo", dicas geradas por IA, tutorial interativo, telemetria de uso.
 
 ### Fora do escopo v1 (de propósito)
 Detecção automática de estado, comando de correção para linhas de preço (usa `sqlite3` direto), veredito automático de preço, lock de concorrência, flag `--db` por comando, `platformdirs`, **sugestão automática (não pedida) de fusão de produtos** (similaridade de string erra sabor/tamanho — sugestão sob pedido explícito via `produtos comparar` é diferente, ver seção "Camada opcional de IA"), **busca semântica/embeddings** (desproporcional pro tamanho do catálogo), **auto-classificação de tags sem confirmação** (sugestão via IA é diferente — grava só quando o usuário confirma com `produtos tag`), **extração automática de conteúdo/tamanho de embalagem da descrição** (números ambíguos ou irrelevantes no texto real — sugestão via IA precisa igual de confirmação por `definir-conteudo`), **classificar código de unidade novo via IA** (evento raro, curadoria manual do mapa já resolve, não vale o custo).
