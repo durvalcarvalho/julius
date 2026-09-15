@@ -1,0 +1,21 @@
+Makefile
+  s_a934641e0de9f7::t_052836723435b8 1-16
+CLAUDE.md
+  s_a934641e0de9f7::t_79167b486f5266 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8e3543826b9e8e4cb2a5dcfb24bd48bc24b05910",
+  "prompts": {},
+  "sessions": {
+    "s_a934641e0de9f7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed2a4b0e-e848-49a7-86f3-aa0ebd106e0f",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
