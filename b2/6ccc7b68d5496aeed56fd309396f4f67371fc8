@@ -1,0 +1,28 @@
+julius/cli/stores.py
+  s_d4671dfe41156d::t_052ab075dd1210 1-46
+julius/cli/__init__.py
+  s_d4671dfe41156d::t_eb808a74fe9ba5 21-22
+  s_d4671dfe41156d::t_49d851f86519f8 3
+tests/test_cli_catalog.py
+  s_d4671dfe41156d::t_551e02bbf22021 1-121
+docs/tickets/julius-v1/index.md
+  s_d4671dfe41156d::t_0e84396cfd4b2b 44
+julius/cli/products.py
+  s_d4671dfe41156d::t_78b2c2b7eb05d0 1-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b26ccc7b68d5496aeed56fd309396f4f67371fc8",
+  "prompts": {},
+  "sessions": {
+    "s_d4671dfe41156d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00c40540-b183-4add-b755-f3344486505b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
