@@ -1,0 +1,23 @@
+README.md
+  s_d4671dfe41156d::t_a6de1a5d9213ad 43,45,48,52,54-55
+  s_d4671dfe41156d::t_887f1e7e103a23 1-42,44,46-47,49-51,53,56-57,71-72,74-205,207-374,378,381-434
+  s_d4671dfe41156d::t_397a865e0b1cd7 206
+  s_d4671dfe41156d::t_67d37fc2984b13 58-70,73
+  s_d4671dfe41156d::t_df14e903a3cf69 375-377,379-380
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ae97e3104dcf847866b3c0511d6bdf0d9694aa78",
+  "prompts": {},
+  "sessions": {
+    "s_d4671dfe41156d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00c40540-b183-4add-b755-f3344486505b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
