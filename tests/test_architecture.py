@@ -1,6 +1,7 @@
 """Guards the dependency DAG between layers. A violation here means a shortcut was taken."""
 
 import ast
+import sys
 from pathlib import Path
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1] / "julius"
@@ -65,12 +66,13 @@ def test_layers_only_import_what_the_dag_allows():
 
 
 def test_domain_imports_nothing_outside_the_standard_library():
+    allowed = sys.stdlib_module_names | {"julius"}
     for name, path in _modules():
         if _layer_of(name) != "domain":
             continue
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if isinstance(node, ast.Import | ast.ImportFrom) and not (
-                isinstance(node, ast.ImportFrom) and node.level
-            ):
+            if isinstance(node, ast.ImportFrom) and node.level:
+                continue
+            if isinstance(node, ast.Import | ast.ImportFrom):
                 root = (node.names[0].name if isinstance(node, ast.Import) else node.module or "").split(".")[0]
-                assert root in {"dataclasses", "typing", "__future__", "julius"}, f"{name} imports {root}"
+                assert root in allowed, f"{name} imports third-party module {root}"
