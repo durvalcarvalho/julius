@@ -32,9 +32,9 @@ Trilha única — o projeto não tem frontend. A ordem numérica já respeita as
 
 | # | Ticket | Depende de | Esforço | Estado | Entrega |
 |---|---|---|---|---|---|
-| 001 | [Parser DF](001-parser-df.md) | — | M | pendente | `parsers/df.py` lendo os 5 HTMLs reais |
+| 001 | [Parser DF](001-parser-df.md) | — | M | feito | `parsers/df.py` lendo os 5 HTMLs reais |
 | 002 | [Repositório stores](002-repository-stores.md) | — | S | feito | `repositories/stores.py` |
-| 003 | [Repositório products](003-repository-products.md) | — | M | pendente | `repositories/products.py` (SKUs, tags, conteúdo) |
+| 003 | [Repositório products](003-repository-products.md) | — | M | feito | `repositories/products.py` (SKUs, tags, conteúdo) |
 | 004 | [Repositório prices](004-repository-prices.md) | 002, 003 | S | pendente | `repositories/prices.py` (inserção idempotente, consulta, export) |
 | 005 | [Serviço importing](005-service-importing.md) | 001–004 | M | pendente | `services/importing.py` |
 | 006 | [Serviço search](006-service-search.md) | 003, 004 | M | pendente | `services/search.py` (rapidfuzz, highlight por unidade) |
