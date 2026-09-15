@@ -42,7 +42,7 @@ Trilha única — o projeto não tem frontend. A ordem numérica já respeita as
 | 008 | [Serviço export](008-service-export.md) | 004 | S | pendente | `services/export.py` |
 | 009 | [CLI recibos](009-cli-receipts.md) | 005, 006, 008 | M | pendente | `julius importar / consultar / exportar` |
 | 010 | [CLI catálogo](010-cli-catalog.md) | 007 | S | pendente | `julius mercados … / produtos …` |
-| 011 | [Cliente HTTP de LLM](011-llm-http-client.md) | — | S | pendente | `infra/llm_client.py` → `HttpLlmClient` |
+| 011 | [Cliente HTTP de LLM](011-llm-http-client.md) | — | S | feito | `infra/llm_client.py` → `HttpLlmClient` |
 | 012 | [Serviço suggestions](012-service-suggestions.md) | 011 | M | pendente | `services/suggestions.py` + `repositories/ai_usage.py` |
 | 013 | [Comparar produtos](013-compare-products.md) | 007, 010, 012 | S | pendente | `catalog.compare_products` + `julius produtos comparar` |
 | 014 | [Ponta a ponta](014-e2e-content-price.md) | 009, 010, 013 | M | pendente | fixture sintético + fluxos completos via CLI |
