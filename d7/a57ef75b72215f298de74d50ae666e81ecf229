@@ -1,0 +1,19 @@
+claudedocs/research_ia_chinesa_llm_20260915.md
+  s_dbb0c29847ad71::t_1e682fa7fb73d9 1-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d7a57ef75b72215f298de74d50ae666e81ecf229",
+  "prompts": {},
+  "sessions": {
+    "s_dbb0c29847ad71": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4c547cb0-ae4e-41dd-b667-f4dfe0721a87",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
