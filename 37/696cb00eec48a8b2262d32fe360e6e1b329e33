@@ -1,0 +1,27 @@
+docs/tickets/julius-v1/016-cli-hints.md
+  s_d4671dfe41156d::t_0e29dc237ac955 1-67
+CLAUDE.md
+  s_d4671dfe41156d::t_25eb022eb32f6f 399-440
+  s_d4671dfe41156d::t_0a5149238c8817 15-16,19,22
+docs/tickets/julius-v1/index.md
+  s_d4671dfe41156d::t_5ecf68d3293aca 49-50
+  s_d4671dfe41156d::t_ee51d09f5fbc91 79
+docs/tickets/julius-v1/015-service-guidance.md
+  s_d4671dfe41156d::t_bde82fcc4a8085 1-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "37696cb00eec48a8b2262d32fe360e6e1b329e33",
+  "prompts": {},
+  "sessions": {
+    "s_d4671dfe41156d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00c40540-b183-4add-b755-f3344486505b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
