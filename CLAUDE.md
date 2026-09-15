@@ -8,11 +8,11 @@ Não é uma ferramenta de comparação entre mercados em geral nem de controle d
 
 ## Status
 
-Fase: **v1 implementada.** Os 14 tickets de `docs/tickets/julius-v1/` estão feitos, um commit por ticket, 220 testes verdes (`.venv/bin/pytest`), nenhum `NotImplementedError`, nenhum identificador em português. Todos os comandos do CLI funcionam de ponta a ponta contra os 5 recibos reais e o fixture sintético dos ovos; `tests/test_e2e.py` exercita os fluxos como o usuário usa. Camada de IA existe e está testada com fake, mas **nunca foi chamada contra um provedor real** — falta escolher provedor/modelo e configurar `JULIUS_AI_*` (ver "Camada opcional de IA").
+Fase: **v1.1 implementada.** Os 16 tickets de `docs/tickets/julius-v1/` estão feitos, um commit por ticket, 253 testes verdes (`.venv/bin/pytest`), nenhum `NotImplementedError`, nenhum identificador em português. Todos os comandos do CLI funcionam de ponta a ponta contra os 5 recibos reais e o fixture sintético dos ovos; `tests/test_e2e.py` exercita os fluxos como o usuário usa. Camada de IA existe e está testada com fake, mas **nunca foi chamada contra um provedor real** — falta escolher provedor/modelo e configurar `JULIUS_AI_*` (ver "Camada opcional de IA").
 
 Ambiente: `make install` instala `julius` global via `pipx install --editable .` (aponta pro código do diretório — editar ou trocar de branch já vale, sem reinstalar; rode de novo só se o `pyproject.toml` mudar). `make test` cria o `.venv/` na primeira vez e roda o pytest. `make uninstall` remove.
 
-**v1.1 em andamento — módulo de dicas de uso** (ver "Dicas de uso (`guidance`)"): nasceu do primeiro uso real (`consultar` num banco vazio dizia só "Nenhum resultado."). Tickets 015 e 016 em `docs/tickets/julius-v1/`.
+**v1.1 (módulo de dicas de uso) feita** — tickets 015 e 016. Nasceu do primeiro uso real (`consultar` num banco vazio dizia só "Nenhum resultado."). Ver "Dicas de uso (`guidance`)"; a única diferença em relação ao design original está registrada lá (`closest_names` compara palavra a palavra, não por faixa de WRatio).
 
 Ainda em aberto (questões de gosto, não bugs):
 - `julius produtos pendentes` (revisão periódica) — ver "Requisitos novos", item 2.
@@ -412,13 +412,13 @@ Nomes de comando em português (são UI); cada um mapeia pra uma função em ing
 | kind | gatilho | `details` | frase (CLI) |
 |---|---|---|---|
 | `NO_RECEIPTS_IMPORTED` | `consultar` com banco sem nenhuma loja | — | Nenhum recibo importado ainda. Comece com: `julius importar ARQUIVO.html` |
-| `NO_MATCH_DID_YOU_MEAN` | `consultar TERMO` vazio, mas há nomes com score entre `NEAR_MISS_CUTOFF` (45) e `MATCH_SCORE_CUTOFF` | até 3 nomes | Nenhum produto bate com "TERMO". Parecidos: A, B, C |
+| `NO_MATCH_DID_YOU_MEAN` | `consultar TERMO` vazio, mas `search.closest_names` acha nomes que a busca não casou e têm uma palavra com `fuzz.ratio >= NEAR_MISS_CUTOFF` (70) contra o termo | até 3 nomes | Nenhum produto bate com esse nome. Parecidos: A, B, C |
 | `NO_MATCH_TRY_TAGS` | `consultar TERMO` vazio e sem parecidos | até 5 tags existentes (pode ser vazio) | Busca é por nome, não por categoria. Pra agrupar (ex.: "carne"): `julius produtos tag ID carne` e `julius consultar --tag carne`. Tags que já existem: … |
 | `UNKNOWN_TAG` | `consultar --tag X` e a tag não existe | tags existentes | Não existe a tag "X". Tags atuais: …. Crie com `julius produtos tag ID X` |
 | `FIRST_IMPORT_NAME_STORES` | `importar` com sucesso e alguma loja ainda com `nickname == legal_name` | quantidade | N mercado(s) ainda com a razão social como nome. Dê apelidos: `julius mercados listar` → `julius mercados renomear CNPJ "Apelido"` |
 | `PACKAGE_SIZE_IN_DESCRIPTION` | `importar` criou produto novo cuja descrição casa `C/\d+` ou `\d+(,\d+)?\s?(ML\|L\|G\|KG)\b` | até 3 `"id · nome"` + total | Estes produtos parecem ter tamanho na descrição; pra comparar por litro/kg/unidade: `julius produtos definir-conteudo ID QTD UNIDADE` |
 | `IMPORT_FILE_NOT_FOUND` | `FileNotFoundError` | caminho | Arquivo não encontrado. Se usou `*.html`, nenhum arquivo casou com o padrão nessa pasta |
-| `IMPORT_NOT_A_RECEIPT` | `ReceiptParseError` | caminho | Não parece a página de NFC-e da Receita/DF salva como HTML (PDF e `.har` não servem). Abra o link do QR code no navegador e "Salvar página como…" |
+| `IMPORT_NOT_A_RECEIPT` | `ReceiptParseError` ou `UnicodeDecodeError` (PDF/binário no meio dos HTMLs) | nome do arquivo | Não parece a página de NFC-e da Receita/DF salva como HTML (PDF e `.har` não servem). Abra o link do QR code no navegador e "Salvar página como…" |
 | `IMPORT_UNKNOWN_UNIT` | `UnknownUnitError` | código bruto | Código de unidade novo. Adicione uma linha em `UNIT_MAP` (`julius/domain/normalization.py`) — o import inteiro desse arquivo foi ignorado, nada gravado |
 | `AI_NOT_CONFIGURED` | `produtos comparar` sem `Config.ai_configured` | — | Pra ter a opinião da IA, defina `JULIUS_AI_API_KEY`, `JULIUS_AI_BASE_URL`, `JULIUS_AI_MODEL` e os dois preços por token (ver README) |
 
@@ -426,7 +426,7 @@ Isso **fecha a questão em aberto nº 3** ("dica via `C/<n>`"): vira `PACKAGE_SI
 
 **Contratos:**
 - `domain/models.py`: `HintKind = Literal[...]` (os 10 acima) e `Hint(kind: HintKind, details: tuple[str, ...] = ())`. `ImportResult` ganha `new_product_ids: tuple[int, ...] = ()` (quem cria produto novo é `importing`; sem isso a dica de embalagem não sabe o que é novo).
-- `services/search.py`: `closest_names(conn, term, limit=3) -> list[tuple[str, int]]` — nomes com score em `[NEAR_MISS_CUTOFF, MATCH_SCORE_CUTOFF)`, ordenados por score desc. `NEAR_MISS_CUTOFF = 45`, constante nomeada.
+- `services/search.py`: `closest_names(conn, term, limit=3) -> list[tuple[str, int]]` — nomes que `search_prices` **não** casaria (WRatio < `MATCH_SCORE_CUTOFF`) mas cuja melhor palavra tem `fuzz.ratio >= NEAR_MISS_CUTOFF` (70) contra o termo, ordenados por score desc. **Mudou em relação ao design original (faixa WRatio 45–70) por medição nos 5 recibos reais**: WRatio de termo curto contra nome longo bate no piso 45–60 pra qualquer entrada (`xyzabc` → 45 contra "CHA LEAO RELAXA…", `leite` → 67,5 contra "PAO ZINHO … BAGUETE") enquanto o erro real `pikana` → PICANHA fica em 65,5 — a faixa era só ruído e `NO_MATCH_TRY_TAGS` nunca dispararia. Palavra a palavra separa: `pikana` → PICANHA 77 e `arros` → ARR 75 entram; `frango`, `carne`, `sabao`, `feijao` ficam abaixo de 70. Falso positivo conhecido: `queijo` → QUERO 73. Números no docstring da constante.
 - `services/guidance.py` (só funções puras sobre `conn`/valores; nunca lança — dica que falha é dica que não aparece):
   - `after_search(conn, term, tag, records) -> list[Hint]`
   - `after_import(conn, result: ImportResult) -> list[Hint]`
@@ -434,7 +434,7 @@ Isso **fecha a questão em aberto nº 3** ("dica via `C/<n>`"): vira `PACKAGE_SI
   - `for_compare(config: Config) -> list[Hint]`
   - Todas cortam em `MAX_HINTS = 2`.
 - `cli/_hints.py`: `TEXTS: dict[HintKind, str]` (templates com `{details}`) e `print_hints(hints, *, to_stderr=False)`. Um teste garante que **todo** `HintKind` tem texto — esquecer um vira falha de teste, não frase em branco.
-- A checagem ad hoc `has_imports` que hoje vive em `cli/receipts.py` some: vira `NO_RECEIPTS_IMPORTED` pelo caminho normal.
+- A checagem ad hoc `has_imports` que vivia em `cli/receipts.py` sumiu: virou `NO_RECEIPTS_IMPORTED` pelo caminho normal. Em `importar` com vários arquivos, `after_import` roda **uma vez no fim** sobre os resultados somados (não por arquivo), pra respeitar o máximo de 2 dicas por comando; as dicas de erro saem por arquivo, em `stderr`.
 
 **Fora do escopo v1.1:** dicas em saída cheia, "não mostrar de novo", dicas geradas por IA, tutorial interativo, telemetria de uso.
 
