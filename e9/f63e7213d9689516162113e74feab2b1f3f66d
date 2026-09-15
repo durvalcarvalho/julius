@@ -1,0 +1,37 @@
+julius/services/search.py
+  s_7cc8c7a08e3668::t_8347e34fdbb98e 20-30,52-73,77
+tests/test_services_guidance.py
+  s_7cc8c7a08e3668::t_73a5c89a71bd4c 1-131
+tests/test_services_search.py
+  s_7cc8c7a08e3668::t_73a5c89a71bd4c 10,60-79
+  s_7cc8c7a08e3668::t_888f250463b39a 80-81
+julius/domain/models.py
+  s_7cc8c7a08e3668::t_8347e34fdbb98e 9-20,76-84
+julius/repositories/products.py
+  s_7cc8c7a08e3668::t_8347e34fdbb98e 8,13-19
+julius/services/importing.py
+  s_7cc8c7a08e3668::t_8347e34fdbb98e 15,19-22,25-29
+tests/test_services_importing.py
+  s_7cc8c7a08e3668::t_73a5c89a71bd4c 25-26,60-66
+  s_7cc8c7a08e3668::t_0692d81d4d8ca4 67-68
+julius/services/guidance.py
+  s_7cc8c7a08e3668::t_8347e34fdbb98e 1-91
+docs/tickets/julius-v1/index.md
+  s_7cc8c7a08e3668::t_5a0f27a111035d 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e9f63e7213d9689516162113e74feab2b1f3f66d",
+  "prompts": {},
+  "sessions": {
+    "s_7cc8c7a08e3668": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "756cabce-b9f7-487a-925a-d9db4b4d9672",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
