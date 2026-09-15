@@ -1,0 +1,22 @@
+julius/cli/receipts.py
+  s_d4671dfe41156d::t_27d4db9e79d78c 50,53-55
+  s_d4671dfe41156d::t_c7d88454f3f55a 12
+tests/test_cli_receipts.py
+  s_d4671dfe41156d::t_86c96688450106 64-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9bfd4706e3d5b86b4e5067dd6216c84e8cf5f259",
+  "prompts": {},
+  "sessions": {
+    "s_d4671dfe41156d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00c40540-b183-4add-b755-f3344486505b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
