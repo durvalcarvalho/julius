@@ -13,7 +13,8 @@ ALLOWED_IMPORTS = {
     "parsers": {"domain"},
     "repositories": {"domain"},
     "services": {"domain", "config", "infra", "parsers", "repositories"},
-    "cli": {"domain", "config", "infra", "services"},
+    # cli is the composition root: it instantiates the concrete parser and passes it to services.
+    "cli": {"domain", "config", "infra", "parsers", "services"},
 }
 
 

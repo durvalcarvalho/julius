@@ -317,7 +317,7 @@ julius/
 | `infra` | `domain`, `config` |
 | `parsers`, `repositories` | `domain` |
 | `services` | `domain`, `config`, `infra`, `parsers`, `repositories` |
-| `cli` | `domain`, `config`, `infra`, `services` |
+| `cli` | `domain`, `config`, `infra`, `parsers`, `services` (é o composition root: instancia o parser concreto e o cliente de LLM e os passa aos serviços) |
 
 **Onde há `Protocol` e onde não há — decisão consciente, não uniformidade.** `ReceiptParser` (segundo estado é evolução prevista) e `LlmClient` (teste de serviço substitui a rede por fake). Nada mais: repositórios são funções que recebem `conn` — o `conn` de um SQLite em `tmp_path` já é a "injeção"; serviços são funções; a CLI é consumidora, não provedora. Interface pra implementação única é manutenção sem retorno.
 
