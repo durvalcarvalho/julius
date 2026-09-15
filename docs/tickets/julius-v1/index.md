@@ -40,7 +40,7 @@ Trilha única — o projeto não tem frontend. A ordem numérica já respeita as
 | 006 | [Serviço search](006-service-search.md) | 003, 004 | M | feito (cutoff 70) | `services/search.py` (rapidfuzz, highlight por unidade) |
 | 007 | [Serviço catalog](007-service-catalog.md) | 002–004 | M | feito (sem compare_products → 013) | `services/catalog.py` (renomear, fundir, tag, conteúdo) |
 | 008 | [Serviço export](008-service-export.md) | 004 | S | feito | `services/export.py` |
-| 009 | [CLI recibos](009-cli-receipts.md) | 005, 006, 008 | M | pendente | `julius importar / consultar / exportar` |
+| 009 | [CLI recibos](009-cli-receipts.md) | 005, 006, 008 | M | feito | `julius importar / consultar / exportar` |
 | 010 | [CLI catálogo](010-cli-catalog.md) | 007 | S | pendente | `julius mercados … / produtos …` |
 | 011 | [Cliente HTTP de LLM](011-llm-http-client.md) | — | S | feito | `infra/llm_client.py` → `HttpLlmClient` |
 | 012 | [Serviço suggestions](012-service-suggestions.md) | 011 | M | feito | `services/suggestions.py` + `repositories/ai_usage.py` |

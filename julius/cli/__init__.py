@@ -1,5 +1,7 @@
 import typer
 
+from julius.cli import receipts
+
 app = typer.Typer(
     help="Julius — memória de preços de mercado a partir de recibos NFC-e.",
     no_args_is_help=True,
@@ -11,3 +13,8 @@ app = typer.Typer(
 @app.callback()
 def _root() -> None:
     pass
+
+
+app.command("importar")(receipts.import_receipts)
+app.command("consultar")(receipts.search)
+app.command("exportar")(receipts.export)
