@@ -8,15 +8,16 @@ Não é uma ferramenta de comparação entre mercados em geral nem de controle d
 
 ## Status
 
-Fase: **camadas-folha implementadas e testadas; casos de uso ainda não.** Estrutura em camadas (DAG, ver "Estrutura de pacote") reescrita em inglês. Já existem de verdade, com testes de caminho feliz e triste (55 testes, `pytest` verde): `julius/config.py`, `julius/domain/` (modelos + normalização, incluindo `UNIT_MAP`), `julius/infra/db.py` (conexão, schema v1, migrações com backup), os `Protocol`s `ReceiptParser` e `LlmClient`, o `app` Typer vazio (`julius --help` roda pelo entry point instalado, sem tocar em disco) e `tests/test_architecture.py`, que impede qualquer camada de importar o que a DAG não permite. **Não existe nenhum stub `NotImplementedError` no pacote**: o que não está implementado simplesmente ainda não existe (parser DF, repositórios, serviços, comandos do CLI) — cada um é um ticket em `docs/tickets/julius-v1/`.
+Fase: **v1 implementada.** Os 14 tickets de `docs/tickets/julius-v1/` estão feitos, um commit por ticket, 220 testes verdes (`.venv/bin/pytest`), nenhum `NotImplementedError`, nenhum identificador em português. Todos os comandos do CLI funcionam de ponta a ponta contra os 5 recibos reais e o fixture sintético dos ovos; `tests/test_e2e.py` exercita os fluxos como o usuário usa. Camada de IA existe e está testada com fake, mas **nunca foi chamada contra um provedor real** — falta escolher provedor/modelo e configurar `JULIUS_AI_*` (ver "Camada opcional de IA").
 
-Ambiente: `.venv/` próprio do projeto (`python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'`); rodar `.venv/bin/pytest`.
+Ambiente: `.venv/` próprio do projeto (`python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'`); rodar `.venv/bin/pytest`. Uso: `.venv/bin/julius --help`.
 
-Ainda em aberto, sem bloquear a próxima rodada de implementação:
-- `julius produtos pendentes` (revisão periódica) — questão de gosto, ver "Requisitos novos", item 2.
-- Dica via padrão `C/<número>` no `importar` — questão de gosto, ver "Requisitos novos", item 3.
+Ainda em aberto (questões de gosto, não bugs):
+- `julius produtos pendentes` (revisão periódica) — ver "Requisitos novos", item 2.
+- Dica via padrão `C/<número>` no `importar` — ver "Requisitos novos", item 3; `suggestions.suggest_content` já existe, ninguém a chama no import.
+- Empates de preço em `consultar`: todas as linhas com o menor/maior preço são mantidas mesmo fora de `--limite` (honesto, mas com 4 preços iguais a tabela cresce). Ajustar se incomodar.
 
-Próximo passo: gerar os tickets (um por nó da DAG) e implementá-los em ordem, começando por `parsers/df.py`.
+Próximo passo sugerido: usar de verdade por algumas semanas (importar os recibos de `~/.local/share/julius/entrada/`), e só então decidir os itens acima e a v2 (outros estados, Telegram).
 
 ## Convenções de código (regra dura, veio de irritação real do usuário)
 
