@@ -10,7 +10,7 @@ Não é uma ferramenta de comparação entre mercados em geral nem de controle d
 
 Fase: **v1 implementada.** Os 14 tickets de `docs/tickets/julius-v1/` estão feitos, um commit por ticket, 220 testes verdes (`.venv/bin/pytest`), nenhum `NotImplementedError`, nenhum identificador em português. Todos os comandos do CLI funcionam de ponta a ponta contra os 5 recibos reais e o fixture sintético dos ovos; `tests/test_e2e.py` exercita os fluxos como o usuário usa. Camada de IA existe e está testada com fake, mas **nunca foi chamada contra um provedor real** — falta escolher provedor/modelo e configurar `JULIUS_AI_*` (ver "Camada opcional de IA").
 
-Ambiente: `.venv/` próprio do projeto (`python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'`); rodar `.venv/bin/pytest`. Uso: `.venv/bin/julius --help`.
+Ambiente: `make install` instala `julius` global via `pipx install --editable .` (aponta pro código do diretório — editar ou trocar de branch já vale, sem reinstalar; rode de novo só se o `pyproject.toml` mudar). `make test` cria o `.venv/` na primeira vez e roda o pytest. `make uninstall` remove.
 
 Ainda em aberto (questões de gosto, não bugs):
 - `julius produtos pendentes` (revisão periódica) — ver "Requisitos novos", item 2.
