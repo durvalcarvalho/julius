@@ -1,0 +1,47 @@
+.claude/commands/apply-pr-reviews.md
+  s_9aed6ff7f881f5::t_5b58a77dbb61c7 1-216
+.claude/commands/architecture-assessment.md
+  s_9aed6ff7f881f5::t_392078338f5da4 1-245
+.claude/commands/generate-tickets.md
+  s_9aed6ff7f881f5::t_d41cdaa7d84640 1-322
+.claude/commands/implement-sprint.md
+  s_9aed6ff7f881f5::t_06ebe7af942408 1-309
+.claude/commands/implement.md
+  s_9aed6ff7f881f5::t_13798fbcfbe208 1-328
+.claude/commands/project-preflight.md
+  s_9aed6ff7f881f5::t_476477e338f3f8 1-38
+.claude/commands/review-pr.md
+  s_9aed6ff7f881f5::t_f0d876d664cd24 1-197
+.claude/commands/sc/agent.md
+  s_44313fec6e3fdc::t_41ac3f9d6cce01 1-72
+.claude/commands/sc/business-panel.md
+  s_9aed6ff7f881f5::t_5d1b2703bb5436 1-122
+.claude/commands/spaghetti-audit.md
+  s_9aed6ff7f881f5::t_4e8781cf48c3e0 1-128
+.claude/commands/tech-debt.md
+  s_9aed6ff7f881f5::t_e24707cbef7e98 1-162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a94780636b614452303ddb47f904a57fa901bfa4",
+  "prompts": {},
+  "sessions": {
+    "s_44313fec6e3fdc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c5acff03-9f04-4988-8a9b-487a95a21427",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    },
+    "s_9aed6ff7f881f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e4ff340-bf59-4e29-99fb-2e59a334cc7d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
