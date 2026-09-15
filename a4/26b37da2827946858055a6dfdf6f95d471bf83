@@ -1,0 +1,28 @@
+tests/fixtures/qrcode-4.html
+  s_d4671dfe41156d::t_d95a3d12bc33c9 1-1096
+julius/parsers/__init__.py
+  s_d4671dfe41156d::t_f92b32776fa935 8-11
+tests/test_parser_df.py
+  s_d4671dfe41156d::t_7672a653296e61 1,3-8,11-117
+  s_d4671dfe41156d::t_7299528bd8d4cd 2,9-10
+julius/parsers/df.py
+  s_d4671dfe41156d::t_c4d7081681bc76 1-79
+tests/fixtures/qrcode-5.html
+  s_d4671dfe41156d::t_d95a3d12bc33c9 1-1851
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a426b37da2827946858055a6dfdf6f95d471bf83",
+  "prompts": {},
+  "sessions": {
+    "s_d4671dfe41156d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00c40540-b183-4add-b755-f3344486505b",
+        "model": "unknown"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
