@@ -9,7 +9,7 @@ from rich.table import Table
 from julius.cli._common import console, error_console, fail, open_db
 from julius.domain.models import PriceRecord
 from julius.parsers.df import DFReceiptParser
-from julius.services import export as export_service, importing, search as search_service
+from julius.services import catalog, export as export_service, importing, search as search_service
 
 _HIGHLIGHT_STYLE = {"lowest": "green", "highest": "red"}
 
@@ -47,8 +47,12 @@ def search(
     conn = open_db()
     try:
         records = search_service.search_prices(conn, term=term, tag=tag, limit=limit)
+        has_imports = bool(records) or bool(catalog.list_stores(conn))
     finally:
         conn.close()
+    if not has_imports:
+        console.print("Nenhum recibo importado ainda. Comece com: julius importar ARQUIVO.html")
+        return
     if not records:
         console.print("Nenhum resultado.")
         return

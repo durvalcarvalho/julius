@@ -61,6 +61,14 @@ def test_consultar_no_results_message():
     assert "Nenhum resultado." in result.output
 
 
+def test_consultar_on_empty_db_explains_how_to_start():
+    result = runner.invoke(app, ["consultar", "banana"])
+    assert result.exit_code == 0
+    assert "Nenhum recibo importado ainda" in result.output
+    assert "julius importar" in result.output
+    assert "Nenhum resultado." not in result.output
+
+
 def test_exportar_writes_file_and_reports_count(tmp_path):
     _import("qrcode.html")
     output = tmp_path / "out" / "precos.csv"
