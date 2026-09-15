@@ -1,0 +1,23 @@
+julius/services/importing.py
+  s_d4671dfe41156d::t_dd9300c78b9187 1-21
+tests/test_services_importing.py
+  s_d4671dfe41156d::t_5479f0a74a2809 1-87
+docs/tickets/julius-v1/index.md
+  s_d4671dfe41156d::t_eb350381df8176 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f38e9a1cf80274a4cea02a11ba662288b2633db4",
+  "prompts": {},
+  "sessions": {
+    "s_d4671dfe41156d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00c40540-b183-4add-b755-f3344486505b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
