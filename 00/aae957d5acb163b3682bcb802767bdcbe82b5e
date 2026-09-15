@@ -1,0 +1,30 @@
+tests/test_normalization.py
+  s_d4671dfe41156d::t_1fb67edc42b1a1 100-109
+  s_d4671dfe41156d::t_ac3b60145b538a 8
+julius/services/search.py
+  s_d4671dfe41156d::t_cab3ac64322914 1-68
+docs/tickets/julius-v1/index.md
+  s_d4671dfe41156d::t_66e0bd7c36bbe6 40
+tests/test_services_search.py
+  s_d4671dfe41156d::t_7ed124083bb87b 1-74,79-126
+  s_d4671dfe41156d::t_8dfc37eec506c6 75-78
+julius/domain/normalization.py
+  s_d4671dfe41156d::t_b862494022eead 3-4
+  s_d4671dfe41156d::t_c9258f3f76b8a0 67-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "00aae957d5acb163b3682bcb802767bdcbe82b5e",
+  "prompts": {},
+  "sessions": {
+    "s_d4671dfe41156d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00c40540-b183-4add-b755-f3344486505b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
