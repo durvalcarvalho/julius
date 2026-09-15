@@ -53,6 +53,7 @@ class PriceRecord:
     unit_price: float
     purchased_at: str
     price_per_content: float | None = None
+    content_unit: ContentUnit | None = None
     highlight: Highlight | None = None
 
 
