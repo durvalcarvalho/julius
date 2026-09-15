@@ -1,0 +1,23 @@
+julius/infra/llm_client.py
+  s_d4671dfe41156d::t_46d3c2e1d7ff2a 3,6-8,22-66
+tests/test_llm_client.py
+  s_d4671dfe41156d::t_706ff74589662b 1-137
+docs/tickets/julius-v1/index.md
+  s_d4671dfe41156d::t_12e29cad81cdbc 45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8897bdefa330910512c3cd465f34848c657515fd",
+  "prompts": {},
+  "sessions": {
+    "s_d4671dfe41156d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00c40540-b183-4add-b755-f3344486505b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
