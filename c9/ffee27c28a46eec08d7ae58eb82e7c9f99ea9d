@@ -1,0 +1,20 @@
+tests/test_architecture.py
+  s_d4671dfe41156d::t_66d171fc1d2eea 69,74-76,78
+  s_d4671dfe41156d::t_075d42531f9c5c 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c9ffee27c28a46eec08d7ae58eb82e7c9f99ea9d",
+  "prompts": {},
+  "sessions": {
+    "s_d4671dfe41156d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00c40540-b183-4add-b755-f3344486505b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
