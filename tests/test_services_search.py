@@ -7,7 +7,7 @@ from julius.parsers.df import DFReceiptParser
 from julius.repositories.prices import insert_price
 from julius.repositories.products import add_tag, product_names, resolve_product_id
 from julius.repositories.stores import ensure_store
-from julius.services.search import search_prices
+from julius.services.search import closest_names, search_prices
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 STORE = "00000000000001"
@@ -55,6 +55,28 @@ def test_typo_still_matches(conn):
 def test_unrelated_term_returns_empty(conn):
     _import(conn, "qrcode.html")
     assert search_prices(conn, "hortifruti") == []
+
+
+def test_closest_names_returns_near_misses_that_search_would_not_match(conn):
+    _import(conn, "qrcode.html")
+    assert search_prices(conn, "pikana") == []
+    names = closest_names(conn, "pikana")
+    assert names and names[0][0] == "PICANHA BOV FAT kg PROMO"
+    assert all(score < 100 for _, score in names)
+    assert names == sorted(names, key=lambda item: -item[1])
+    assert len(closest_names(conn, "pikana", limit=1)) == 1
+
+
+def test_closest_names_excludes_names_search_already_matches(conn):
+    _import(conn, "qrcode.html")
+    assert search_prices(conn, "pcanha")
+    assert all(name != "PICANHA BOV FAT kg PROMO" for name, _ in closest_names(conn, "pcanha"))
+
+
+def test_closest_names_empty_when_nothing_close(conn):
+    _import(conn, "qrcode.html")
+    assert closest_names(conn, "xyzabc") == []
+    assert closest_names(conn, "hortifruti") == []
 
 
 def test_never_mixes_units_in_highlight(conn):

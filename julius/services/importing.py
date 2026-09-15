@@ -12,10 +12,18 @@ def import_receipt(conn: sqlite3.Connection, path: Path, parser: ReceiptParser) 
     # Parse everything before touching the database: a bad file must leave it untouched.
     receipt = parser.parse(path.read_text(encoding="utf-8"), source=path.name)
     new_items = 0
+    new_product_ids: list[int] = []
     with conn:
         stores.ensure_store(conn, receipt.store_cnpj, receipt.store_legal_name)
         for item in receipt.items:
-            product_id = products.resolve_product_id(conn, receipt.store_cnpj, item.product_code, item.description)
+            product_id = products.find_product_id(conn, receipt.store_cnpj, item.product_code)
+            if product_id is None:
+                product_id = products.resolve_product_id(conn, receipt.store_cnpj, item.product_code, item.description)
+                new_product_ids.append(product_id)
             if prices.insert_price(conn, receipt, item, product_id):
                 new_items += 1
-    return ImportResult(new_items=new_items, existing_items=len(receipt.items) - new_items)
+    return ImportResult(
+        new_items=new_items,
+        existing_items=len(receipt.items) - new_items,
+        new_product_ids=tuple(new_product_ids),
+    )

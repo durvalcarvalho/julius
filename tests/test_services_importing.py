@@ -22,7 +22,8 @@ def _import(conn, name: str) -> ImportResult:
 
 
 def test_import_single_receipt(conn):
-    assert _import(conn, "qrcode.html") == ImportResult(new_items=20, existing_items=0)
+    result = _import(conn, "qrcode.html")
+    assert (result.new_items, result.existing_items) == (20, 0)
     assert _count(conn, "stores") == 1
     assert _count(conn, "products") == 15
     assert _count(conn, "prices") == 20
@@ -54,6 +55,15 @@ def test_nickname_survives_reimport(conn):
     conn.commit()
     _import(conn, "qrcode.html")
     assert stores.get_store(conn, "27289076001379").nickname == "FL 3 Costa"
+
+
+def test_new_product_ids_lists_only_products_created_in_this_call(conn):
+    first = _import(conn, "qrcode.html")
+    assert len(first.new_product_ids) == 15
+    assert len(set(first.new_product_ids)) == 15
+    assert set(first.new_product_ids) == {row[0] for row in conn.execute("SELECT id FROM products")}
+    assert _import(conn, "qrcode.html").new_product_ids == ()
+    assert len(_import(conn, "qrcode-3.html").new_product_ids) == 5
 
 
 def test_same_sku_reuses_product_across_imports(conn):

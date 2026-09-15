@@ -17,6 +17,17 @@ only passed by floating-point luck; unrelated words ("HORTIFRUTI", "XYZABC") sco
 70 keeps one-letter typos in with margin and unrelated words out.
 """
 
+NEAR_MISS_CUTOFF = 70
+"""Minimum fuzz.ratio (0-100) between the term and a single word of a non-matching name for a
+"did you mean" suggestion.
+
+WRatio cannot do this job: a short term against a long name bottoms out at 45-60 for any input
+("xyzabc" scores 45 against "CHA LEAO RELAXA...", "leite" 67.5 against "PAO ZINHO ... BAGUETE"),
+so a WRatio band below MATCH_SCORE_CUTOFF is all noise. Word-level ratio measured on the 5 real
+receipts: "pikana" -> PICANHA 77 and "arros" -> ARR 75 stay in; "frango" -> FGO 67 and
+"sabao" -> ARBO 67 stay out. Known false positive: "queijo" -> QUERO 73.
+"""
+
 
 def search_prices(
     conn: sqlite3.Connection,
@@ -38,14 +49,32 @@ def search_prices(
     return result
 
 
+def closest_names(conn: sqlite3.Connection, term: str, limit: int = 3) -> list[tuple[str, int]]:
+    """Names that search_prices would NOT match but have one word close to the term, best first."""
+    normalized_term = normalize_text(term)
+    matched = _matching_ids(conn, term)
+    scores: dict[str, int] = {}
+    for product_id, name in products.product_names(conn):
+        if product_id in matched:
+            continue
+        score = max((fuzz.ratio(normalized_term, word) for word in normalize_text(name).split()), default=0)
+        if score >= NEAR_MISS_CUTOFF:
+            scores[name] = max(int(score), scores.get(name, 0))
+    return sorted(scores.items(), key=lambda item: -item[1])[:limit]
+
+
+def _matching_ids(conn: sqlite3.Connection, term: str) -> set[int]:
+    names = {product_id: normalize_text(name) for product_id, name in products.product_names(conn)}
+    matches = process.extract(
+        normalize_text(term), names, scorer=fuzz.WRatio, score_cutoff=MATCH_SCORE_CUTOFF, limit=None
+    )
+    return {product_id for _, _, product_id in matches}
+
+
 def _candidate_ids(conn: sqlite3.Connection, term: str | None, tag: str | None) -> set[int]:
     ids: set[int] | None = None
     if term is not None:
-        names = {product_id: normalize_text(name) for product_id, name in products.product_names(conn)}
-        matches = process.extract(
-            normalize_text(term), names, scorer=fuzz.WRatio, score_cutoff=MATCH_SCORE_CUTOFF, limit=None
-        )
-        ids = {product_id for _, _, product_id in matches}
+        ids = _matching_ids(conn, term)
     if tag is not None:
         tagged = set(products.product_ids_with_tag(conn, tag.strip().lower()))
         ids = tagged if ids is None else ids & tagged

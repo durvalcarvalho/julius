@@ -5,13 +5,18 @@ import sqlite3
 from julius.domain.models import ContentUnit, Product
 
 
-def resolve_product_id(conn: sqlite3.Connection, store_cnpj: str, product_code: str, description: str) -> int:
+def find_product_id(conn: sqlite3.Connection, store_cnpj: str, product_code: str) -> int | None:
     row = conn.execute(
         "SELECT product_id FROM product_skus WHERE store_cnpj = ? AND product_code = ?",
         (store_cnpj, product_code),
     ).fetchone()
-    if row is not None:
-        return row["product_id"]
+    return None if row is None else row["product_id"]
+
+
+def resolve_product_id(conn: sqlite3.Connection, store_cnpj: str, product_code: str, description: str) -> int:
+    product_id = find_product_id(conn, store_cnpj, product_code)
+    if product_id is not None:
+        return product_id
     product_id = conn.execute("INSERT INTO products (canonical_name) VALUES (?)", (description,)).lastrowid
     conn.execute(
         "INSERT INTO product_skus (store_cnpj, product_code, product_id) VALUES (?, ?, ?)",

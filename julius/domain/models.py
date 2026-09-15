@@ -6,6 +6,18 @@ from typing import Literal
 SaleUnit = Literal["UN", "KG"]
 ContentUnit = Literal["L", "KG", "UN"]
 Highlight = Literal["lowest", "highest"]
+HintKind = Literal[
+    "NO_RECEIPTS_IMPORTED",
+    "NO_MATCH_DID_YOU_MEAN",
+    "NO_MATCH_TRY_TAGS",
+    "UNKNOWN_TAG",
+    "FIRST_IMPORT_NAME_STORES",
+    "PACKAGE_SIZE_IN_DESCRIPTION",
+    "IMPORT_FILE_NOT_FOUND",
+    "IMPORT_NOT_A_RECEIPT",
+    "IMPORT_UNKNOWN_UNIT",
+    "AI_NOT_CONFIGURED",
+]
 
 
 @dataclass(frozen=True)
@@ -61,6 +73,15 @@ class PriceRecord:
 class ImportResult:
     new_items: int
     existing_items: int
+    new_product_ids: tuple[int, ...] = ()  # products first seen in this import, in receipt order
+
+
+@dataclass(frozen=True)
+class Hint:
+    """A usage hint as data; the CLI owns the wording (see julius/cli/_hints.py)."""
+
+    kind: HintKind
+    details: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
