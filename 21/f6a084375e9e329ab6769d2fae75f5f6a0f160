@@ -1,0 +1,30 @@
+julius/cli/_common.py
+  s_d4671dfe41156d::t_6c5c21bcbffc8b 1-22
+julius/cli/__init__.py
+  s_d4671dfe41156d::t_ee2c152eaa1741 3-4,16-20
+julius/cli/receipts.py
+  s_d4671dfe41156d::t_17a348ef10eff1 75-76
+  s_d4671dfe41156d::t_fa521020c04df8 56
+  s_d4671dfe41156d::t_ea28b0ad1de102 1-11,13-55,57-74,77-88
+  s_d4671dfe41156d::t_66b1d6f92c0e49 12
+docs/tickets/julius-v1/index.md
+  s_d4671dfe41156d::t_b86182745256f3 43
+tests/test_cli_receipts.py
+  s_d4671dfe41156d::t_4fc462636992af 1-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "21f6a084375e9e329ab6769d2fae75f5f6a0f160",
+  "prompts": {},
+  "sessions": {
+    "s_d4671dfe41156d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00c40540-b183-4add-b755-f3344486505b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
