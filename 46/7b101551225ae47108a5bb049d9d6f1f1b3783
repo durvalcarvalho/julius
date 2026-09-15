@@ -1,0 +1,54 @@
+docs/tickets/julius-v1/011-llm-http-client.md
+  s_d4671dfe41156d::t_1e87eca083d752 1-58
+docs/tickets/julius-v1/index.md
+  s_d4671dfe41156d::t_116b2df1757fb2 1-91
+docs/tickets/julius-v1/008-service-export.md
+  s_d4671dfe41156d::t_bb37d1ca57ffc2 1-54
+CLAUDE.md
+  s_d4671dfe41156d::t_b163b05a35fe5d 320
+docs/tickets/julius-v1/001-parser-df.md
+  s_d4671dfe41156d::t_380e31df13caff 1-83
+docs/tickets/julius-v1/013-compare-products.md
+  s_d4671dfe41156d::t_efe0ad867c5258 1-55
+docs/tickets/julius-v1/004-repository-prices.md
+  s_d4671dfe41156d::t_c70a1537ff46f1 1-59
+docs/tickets/julius-v1/014-e2e-content-price.md
+  s_d4671dfe41156d::t_21c64ea2d08047 1-47
+docs/tickets/julius-v1/005-service-importing.md
+  s_d4671dfe41156d::t_e5b97e3d7e0f79 1-59
+docs/tickets/julius-v1/012-service-suggestions.md
+  s_d4671dfe41156d::t_c36c61d1cc6c34 1-69
+docs/tickets/julius-v1/006-service-search.md
+  s_d4671dfe41156d::t_0afa24906ac11f 1-22,25-38,43-44,46-66
+  s_d4671dfe41156d::t_b62cd55f004f3f 23-24
+  s_d4671dfe41156d::t_131d9adc13f693 39-42,45
+docs/tickets/julius-v1/010-cli-catalog.md
+  s_d4671dfe41156d::t_93b4578ada06f4 1-63
+docs/tickets/julius-v1/007-service-catalog.md
+  s_d4671dfe41156d::t_c664dffbb76aa1 1-60
+docs/tickets/julius-v1/002-repository-stores.md
+  s_d4671dfe41156d::t_42c9c0760b97e1 1-57
+docs/tickets/julius-v1/009-cli-receipts.md
+  s_d4671dfe41156d::t_1f90e94b56d867 1-60,62
+  s_d4671dfe41156d::t_c610f3890e72ce 61
+tests/test_architecture.py
+  s_d4671dfe41156d::t_8de21fccc598e7 16-17
+docs/tickets/julius-v1/003-repository-products.md
+  s_d4671dfe41156d::t_53284ee8b3d1dd 1-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "467b101551225ae47108a5bb049d9d6f1f1b3783",
+  "prompts": {},
+  "sessions": {
+    "s_d4671dfe41156d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00c40540-b183-4add-b755-f3344486505b",
+        "model": "unknown"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
