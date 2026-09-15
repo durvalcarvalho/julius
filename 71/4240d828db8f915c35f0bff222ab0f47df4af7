@@ -1,0 +1,19 @@
+CLAUDE.md
+  s_7cc8c7a08e3668::t_1086d5615c5d4d 11,15,415,421,429,437
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "714240d828db8f915c35f0bff222ab0f47df4af7",
+  "prompts": {},
+  "sessions": {
+    "s_7cc8c7a08e3668": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "756cabce-b9f7-487a-925a-d9db4b4d9672",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
