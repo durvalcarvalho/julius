@@ -37,7 +37,7 @@ Trilha única — o projeto não tem frontend. A ordem numérica já respeita as
 | 003 | [Repositório products](003-repository-products.md) | — | M | feito | `repositories/products.py` (SKUs, tags, conteúdo) |
 | 004 | [Repositório prices](004-repository-prices.md) | 002, 003 | S | feito | `repositories/prices.py` (inserção idempotente, consulta, export) |
 | 005 | [Serviço importing](005-service-importing.md) | 001–004 | M | feito | `services/importing.py` |
-| 006 | [Serviço search](006-service-search.md) | 003, 004 | M | pendente | `services/search.py` (rapidfuzz, highlight por unidade) |
+| 006 | [Serviço search](006-service-search.md) | 003, 004 | M | feito (cutoff 70) | `services/search.py` (rapidfuzz, highlight por unidade) |
 | 007 | [Serviço catalog](007-service-catalog.md) | 002–004 | M | feito (sem compare_products → 013) | `services/catalog.py` (renomear, fundir, tag, conteúdo) |
 | 008 | [Serviço export](008-service-export.md) | 004 | S | feito | `services/export.py` |
 | 009 | [CLI recibos](009-cli-receipts.md) | 005, 006, 008 | M | pendente | `julius importar / consultar / exportar` |

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import unicodedata
+
 from .models import ContentUnit, SaleUnit
 
 # Raw sale-unit codes observed in real DF receipts. Unknown codes fail loudly on purpose:
@@ -62,3 +64,9 @@ def parse_decimal_br(text: str) -> float:
 
 def digits_only(text: str) -> str:
     return "".join(ch for ch in text if ch.isdigit())
+
+
+def normalize_text(text: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", text)
+    without_accents = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return " ".join(without_accents.upper().split())

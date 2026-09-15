@@ -5,6 +5,7 @@ from julius.domain.normalization import (
     digits_only,
     normalize_content,
     normalize_sale_unit,
+    normalize_text,
     parse_decimal_br,
 )
 
@@ -96,3 +97,13 @@ def test_digits_only_strips_cnpj_and_access_key_formatting():
         == "53260927289076001379652060002038951930768277"
     )
     assert digits_only("abc") == ""
+
+
+def test_normalize_text_uppercases_strips_accents_and_collapses_spaces():
+    assert normalize_text("  pão   francês ") == "PAO FRANCES"
+    assert normalize_text("Maçã Verde") == "MACA VERDE"
+
+
+def test_normalize_text_empty_stays_empty():
+    assert normalize_text("") == ""
+    assert normalize_text("   ") == ""
