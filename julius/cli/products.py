@@ -7,9 +7,10 @@ from rich.table import Table
 
 from julius import config
 from julius.cli._common import console, fail, open_db
+from julius.cli._hints import print_hints
 from julius.domain.models import Product
 from julius.infra.llm_client import HttpLlmClient
-from julius.services import catalog
+from julius.services import catalog, guidance
 
 app = typer.Typer()
 
@@ -122,12 +123,13 @@ def compare_products(
     console.print(f"B: {names[id_b]}")
     console.print(f"Similaridade de texto: {comparison.text_similarity:.0%}")
     suggestion = comparison.ai_suggestion
-    if suggestion is None:
-        console.print("IA indisponível (não configurada ou orçamento do mês esgotado) — só similaridade de texto.")
-    else:
+    if suggestion is not None:
         verdict = "mesmo produto" if suggestion.same_product else "produtos diferentes"
         console.print(f"IA: {verdict} (confiança {suggestion.confidence:.1f}) — {suggestion.rationale}")
+    elif settings.ai_configured:
+        console.print("IA indisponível (orçamento do mês esgotado ou falha na chamada) — só similaridade de texto.")
     console.print(f"Para fundir: julius produtos fundir {id_a} {id_b}")
+    print_hints(guidance.for_compare(settings))
 
 
 def _content(product: Product) -> str:

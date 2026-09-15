@@ -7,9 +7,10 @@ import typer
 from rich.table import Table
 
 from julius.cli._common import console, error_console, fail, open_db
-from julius.domain.models import PriceRecord
+from julius.cli._hints import print_hints
+from julius.domain.models import ImportResult, PriceRecord
 from julius.parsers.df import DFReceiptParser
-from julius.services import catalog, export as export_service, importing, search as search_service
+from julius.services import export as export_service, guidance, importing, search as search_service
 
 _HIGHLIGHT_STYLE = {"lowest": "green", "highest": "red"}
 
@@ -20,6 +21,7 @@ def import_receipts(
     """Importa um ou mais recibos NFC-e para a base de preços."""
     parser = DFReceiptParser()
     failed = False
+    results: list[ImportResult] = []
     conn = open_db()
     try:
         for path in files:
@@ -28,8 +30,13 @@ def import_receipts(
             except (FileNotFoundError, ValueError) as error:
                 failed = True
                 error_console.print(f"{path.name}: erro — {error}")
+                print_hints(guidance.for_import_error(error, path), to_stderr=True)
                 continue
             console.print(f"{path.name}: {result.new_items} itens novos, {result.existing_items} já existiam")
+            results.append(result)
+        if results:
+            # Hints once per command, not per file: importing a folder must not repeat them.
+            print_hints(guidance.after_import(conn, _merge(results)))
     finally:
         conn.close()
     if failed:
@@ -47,17 +54,14 @@ def search(
     conn = open_db()
     try:
         records = search_service.search_prices(conn, term=term, tag=tag, limit=limit)
-        has_imports = bool(records) or bool(catalog.list_stores(conn))
+        hints = guidance.after_search(conn, term, tag, records)
     finally:
         conn.close()
-    if not has_imports:
-        console.print("Nenhum recibo importado ainda. Comece com: julius importar ARQUIVO.html")
-        return
-    if not records:
+    if not records and not hints:
         console.print("Nenhum resultado.")
-        return
     for unit in sorted({record.unit for record in records}):
         console.print(_table(unit, [record for record in records if record.unit == unit]))
+    print_hints(hints)
 
 
 def export(
@@ -70,6 +74,14 @@ def export(
     finally:
         conn.close()
     console.print(f"{count} linhas exportadas para {output}")
+
+
+def _merge(results: list[ImportResult]) -> ImportResult:
+    return ImportResult(
+        new_items=sum(result.new_items for result in results),
+        existing_items=sum(result.existing_items for result in results),
+        new_product_ids=tuple(product_id for result in results for product_id in result.new_product_ids),
+    )
 
 
 def _money(value: float) -> str:

@@ -112,7 +112,7 @@ def test_produtos_fundir_same_id_exits_1():
     assert "different" in result.stderr
 
 
-def test_produtos_comparar_without_ai_prints_similarity_and_hint(monkeypatch):
+def test_produtos_comparar_without_ai_shows_env_var_names(monkeypatch):
     for name in ("JULIUS_AI_API_KEY", "JULIUS_AI_BASE_URL", "JULIUS_AI_MODEL"):
         monkeypatch.delenv(name, raising=False)
     _import("qrcode.html")
@@ -120,8 +120,9 @@ def test_produtos_comparar_without_ai_prints_similarity_and_hint(monkeypatch):
     result = _run("produtos", "comparar", "1", "2")
     assert result.exit_code == 0, result.output
     assert "Similaridade de texto" in result.output
-    assert "IA indisponível" in result.output
-    assert "produtos fundir 1 2" in result.output
+    assert "IA indisponível" not in result.output
+    assert "Dica:" in result.output and "JULIUS_AI_API_KEY" in result.output
+    assert result.output.index("produtos fundir 1 2") < result.output.index("Dica:")
     assert _run("produtos", "listar").output == before
 
 
