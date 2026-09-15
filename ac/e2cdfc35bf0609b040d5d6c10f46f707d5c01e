@@ -1,0 +1,118 @@
+CLAUDE.md
+  s_d4671dfe41156d::t_99d7b857e5273f 11-14,18-27
+  s_d4671dfe41156d::t_90a064152f5444 125-182
+  s_b7fce08abfd582::t_4a84aa4ed7ec3d 519-521
+  s_b7fce08abfd582::t_3ca7ae63342007 15
+  s_d4671dfe41156d::t_87997196af720f 378-390
+  s_d4671dfe41156d::t_6992a660ed22c2 190,193-198,201-208
+  s_d4671dfe41156d::t_353565b95e6c02 121
+  s_d4671dfe41156d::t_f467c8a0a66871 507-508
+  s_d4671dfe41156d::t_7724425b69b1dc 98-113
+  s_d4671dfe41156d::t_428cc257c37f50 401-403
+  s_b7fce08abfd582::t_fa4565c5ca5812 191,200
+  s_d4671dfe41156d::t_16276dc9241100 475-478,480-488
+  s_d4671dfe41156d::t_55d52cc884ffcf 117-119
+  s_d4671dfe41156d::t_12904a030c77c5 61
+  s_d4671dfe41156d::t_3d0aaf6ac987ee 394
+  s_d4671dfe41156d::t_0ad3236a6a6b9f 496
+  s_d4671dfe41156d::t_377c85f317931e 285-327,329-358
+  s_d4671dfe41156d::t_1f72005d4cfc71 82
+  s_d4671dfe41156d::t_4c7203bad99e4e 260-279
+  s_d4671dfe41156d::t_10b38a1f1e20bf 283
+  s_d4671dfe41156d::t_47d7d0bcc183d8 328
+  s_b7fce08abfd582::t_91ab67302bd936 479
+  s_d4671dfe41156d::t_4370b49fa1e15b 8-10
+  s_d4671dfe41156d::t_d63914ef778239 28-30,58-60
+  s_d4671dfe41156d::t_ee0783ee3d11f2 62-64,79-81
+  s_d4671dfe41156d::t_2ed7fcfb2ef4f0 83-85,95-97
+  s_d4671dfe41156d::t_0d7cd3faccc9ab 114-116
+  s_d4671dfe41156d::t_34b0df1b5d60a5 120
+  s_d4671dfe41156d::t_8b04283dbe1fe5 122-124
+  s_d4671dfe41156d::t_a79cf359870a02 183-185,187-189
+  s_d4671dfe41156d::t_232b972add23a9 209-211,257-259
+  s_d4671dfe41156d::t_8ae0b9eea73132 280-282
+  s_d4671dfe41156d::t_8e828ba076c7fe 284
+  s_d4671dfe41156d::t_789eade8e9c074 359-361,375-377
+  s_d4671dfe41156d::t_a0d0e5da8fe6dd 391-393
+  s_d4671dfe41156d::t_57bf62575d52e9 395-400
+  s_d4671dfe41156d::t_f828e821092da9 404-406,472-474
+  s_d4671dfe41156d::t_4f9e88e306bff0 489-491,493-495
+  s_d4671dfe41156d::t_2291cecf460c80 497-499,504-506
+  s_b7fce08abfd582::t_3a77850436c2e3 1-7,16-17,31-57,65-78,86-94,186,192,199,212-256,362-374,407-471,492,500-503,509-518
+tests/test_cli.py
+  s_d4671dfe41156d::t_0123b6bbc447bd 1-24
+tests/test_db.py
+  s_d4671dfe41156d::t_f8a2831aabdc44 1-90
+tests/test_architecture.py
+  s_d4671dfe41156d::t_2982db05c8b149 1-75
+julius/config.py
+  s_d4671dfe41156d::t_8b8b482212106e 1-47
+.gitignore
+  s_d4671dfe41156d::t_e9f663dd9ff39b 5-6
+  s_d4671dfe41156d::t_40d2ce20d51f7f 2-4
+  s_d4671dfe41156d::t_6fc9c752f75a2b 7-9
+  s_b7fce08abfd582::t_bfabbaaea32672 1,10-11
+julius/domain/normalization.py
+  s_d4671dfe41156d::t_50083308967aa6 1-64
+julius/infra/migrations/0001_initial_schema.sql
+  s_d4671dfe41156d::t_2da7099bdeb5ab 1-50
+tests/test_config.py
+  s_d4671dfe41156d::t_b212a8b194d9b1 1-62
+julius/parsers/__init__.py
+  s_d4671dfe41156d::t_6c76603fbbb718 1-11
+julius/domain/__init__.py
+  s_d4671dfe41156d::t_b82a27f0ffb5cd 1
+julius/cli/__init__.py
+  s_d4671dfe41156d::t_bd514127b37c4e 1-13
+julius/infra/db.py
+  s_d4671dfe41156d::t_fd79a1f9c93127 1-43
+julius/services/__init__.py
+  s_d4671dfe41156d::t_9cf458df06bd77 1-4
+julius/infra/__init__.py
+  s_d4671dfe41156d::t_36577661529b9d 1
+julius/repositories/__init__.py
+  s_d4671dfe41156d::t_127a2c4a364a4b 1-4
+pyproject.toml
+  s_d4671dfe41156d::t_1551ca3af1a95c 8,26-29
+  s_b7fce08abfd582::t_fb3af126c116b0 21-25
+  s_d4671dfe41156d::t_5714ad209d0a83 5-7
+  s_b7fce08abfd582::t_ce3a390f5caed6 1-4,9-20
+julius/domain/models.py
+  s_d4671dfe41156d::t_df39d2a2a19562 1-82
+tests/test_normalization.py
+  s_d4671dfe41156d::t_172518b34caa2c 1-98
+tests/conftest.py
+  s_d4671dfe41156d::t_ad72964967786b 1-23
+julius/infra/llm_client.py
+  s_d4671dfe41156d::t_910c7db884c9df 1-17
+tests/fixtures/qrcode-2.html
+  s_b7fce08abfd582::t_ecbf94f310f788 1-857
+tests/fixtures/qrcode-3.html
+  s_b7fce08abfd582::t_33ceda99b96c82 1-964
+tests/fixtures/qrcode.html
+  s_b7fce08abfd582::t_659269775ed21e 1-1272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ace2cdfc35bf0609b040d5d6c10f46f707d5c01e",
+  "prompts": {},
+  "sessions": {
+    "s_b7fce08abfd582": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4f0f3f20-a5c4-4049-a0ec-1712cad83f34",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    },
+    "s_d4671dfe41156d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00c40540-b183-4add-b755-f3344486505b",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
