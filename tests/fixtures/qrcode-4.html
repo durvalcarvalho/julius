@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<!-- saved from url=(0206)https://ww1.receita.fazenda.df.gov.br/DecVisualizador/Nfce/Captcha?Chave=53260911832478000366651050004961121894470910&Codigo=100&Mensagem=QR%20Code%20Inv%c3%a1lido&Descricao=Hash%20QR%20Code%20inv%c3%a1lido -->
+<html><plasmo-csui id="ff-overlay-container"><template shadowrootmode="open"><style>#plasmo-shadow-container > div {
+  pointer-events: none !important;
+  background: none !important;
+  position: fixed !important;
+  inset: 0 !important;
+}
+
+.main_top_container_ff {
+  width: 400px;
+}
+
+.popup_container_wrapper_ff {
+  background-color: #fff;
+}
+
+.popup_container_wrapper_ff * {
+  font-family: PoppinsRegular;
+}
+
+.popup_container_wrapper_ff img {
+  background-color: #0000;
+}
+
+.popup_container_ff {
+  box-shadow: 0 5px 20px #1e1e2212;
+}
+
+.popup_div_ff {
+  box-sizing: border-box;
+  background-color: #fff;
+  width: 100%;
+  padding: 24px;
+}
+
+.main_component_ff {
+  width: 100%;
+  padding-bottom: 0 !important;
+}
+
+.popup_top_icon_div_ff {
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  display: flex;
+}
+
+.popup_top_icon_div_ff .btn_canvas_ff {
+  display: inline-flex;
+}
+
+.popup_top_icon_div_ff .ff_popup_top_image {
+  z-index: 0;
+  width: 100%;
+  height: auto;
+  position: absolute;
+  inset: 0 0 auto;
+}
+
+.popup_top_icon_btn_ff {
+  cursor: pointer;
+  z-index: 1;
+  background: none;
+  border: none;
+  justify-content: center;
+  align-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font-size: 20px;
+  display: inline-flex;
+}
+
+.popup_top_icon_btn_ff img {
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
+.popup_top_icon_btn_ff:focus {
+  outline: none;
+}
+
+.dot_ff {
+  background-color: red;
+  border-radius: 50%;
+  width: 15px;
+  height: 15px;
+}
+
+.dot_ff-top-right {
+  position: absolute;
+  top: 33%;
+  right: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot_ff {
+    animation: none;
+  }
+}
+
+.topbar_cross_icon_ff {
+  cursor: pointer;
+  background: #eaeaea;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: flex;
+}
+
+.topbar_cross_icon_ff img {
+  width: 12px;
+  height: 12px;
+}
+
+.btn_canvas_ff .topbar_detail_submit_btn_ff {
+  cursor: pointer;
+  color: #6e75ff;
+  background: #f0f0ff;
+  border: none;
+  border-radius: 5px;
+  justify-content: center;
+  align-items: center;
+  min-width: 108px;
+  min-height: 40px;
+  margin: 0;
+  padding: 10px 30px;
+  font-family: PoppinsRegular;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  display: flex;
+}
+
+.btn_canvas_ff .topbar_detail_submit_btn_ff:hover {
+  box-shadow: none;
+  color: #fff;
+  cursor: pointer;
+  background: #6e75ff;
+  border: none;
+  outline: none;
+}
+
+.btn_canvas_ff .topbar_detail_okay_btn_ff {
+  cursor: pointer;
+  color: #555;
+  background: #eee;
+  border: none;
+  border-radius: 5px;
+  justify-content: center;
+  align-items: center;
+  min-width: 108px;
+  min-height: 40px;
+  margin: 0;
+  padding: 10px 30px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  display: flex;
+}
+
+.btn_canvas_ff .topbar_detail_okay_btn_ff:hover, .btn_canvas_ff .topbar_detail_okay_btn_ff:focus {
+  box-shadow: none;
+  color: #eee;
+  cursor: pointer;
+  background: #555;
+  border: none;
+  outline: none;
+}
+
+.btn_canvas_ff .topbar_detail_submit_btn_ff:disabled, .btn_canvas_ff .topbar_detail_okay_btn_ff:disabled {
+  color: #696969 !important;
+  background-color: #d3d3d3 !important;
+}
+
+.spaced_icon_ff {
+  margin-left: 5px;
+  background-color: #0000 !important;
+}
+
+.toggle_btn_ff {
+  justify-content: center;
+  align-items: center;
+  padding: 6px 0 18px;
+  display: flex;
+  position: relative;
+}
+
+.create_notification_container_ff {
+  cursor: auto;
+  box-sizing: border-box;
+  z-index: 99999;
+  pointer-events: initial;
+  background-color: #fff;
+  border: none;
+  border-radius: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 512px;
+  margin-top: 16px;
+  padding: 24px;
+  position: absolute;
+  inset: 20px 100px auto auto;
+  box-shadow: 0 0 10px;
+}
+
+plasmo-csui#ff-overlay-container, plasmo-csui#real-time-panel {
+  z-index: 999;
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+}
+
+.ff_input_container {
+  box-sizing: border-box;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+  display: flex;
+}
+
+.ff_input_container .input_input {
+  box-sizing: border-box;
+  resize: none;
+  background: none;
+  border: 1px solid #f2f4f7;
+  border-radius: 8px;
+  width: 100%;
+  height: 20px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 20px;
+  box-shadow: none !important;
+  color: #475467 !important;
+  padding: 8px 16px !important;
+  font-family: Roboto !important;
+  font-size: 14px !important;
+}
+
+.ff_input_container .input_input:focus-visible {
+  outline: none;
+}
+
+.ff_input_container .input_label {
+  letter-spacing: -.01em;
+  color: #101828;
+  background-color: #0000;
+  padding-bottom: 8px;
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.ff_input_container .input_description {
+  letter-spacing: -.01em;
+  color: #878f97;
+  background-color: #0000;
+  margin: 0;
+  padding-bottom: 8px;
+  font-family: Roboto;
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.input_icon_container {
+  box-sizing: border-box;
+  border: 1px solid #f2f4f7;
+  border-radius: 8px;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding-left: 16px;
+  display: flex;
+  border-bottom-right-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+
+.input_icon_container .input_input {
+  border: none;
+  padding-left: 0 !important;
+}
+
+.ff_select_container {
+  box-sizing: border-box;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+  display: flex;
+  position: relative;
+}
+
+.ff_select_option_list_container {
+  box-sizing: border-box;
+  z-index: 1;
+  background: #fff;
+  border: 1px solid #f2f4f7;
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  width: 100%;
+  max-height: 80px;
+  margin: 0;
+  padding: 10px;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  overflow-y: scroll;
+}
+
+.ff_select_option_list {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: hidden;
+}
+
+.ff_select_option_item {
+  color: #475467;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  align-self: stretch;
+  align-items: center;
+  gap: 8px;
+  min-height: 16px;
+  padding: 8px;
+  display: flex;
+  overflow: hidden;
+}
+
+.ff_select_option_item:hover, .ff_select_option_item:focus {
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.ff_select_option_item span {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: none;
+  overflow: hidden;
+}
+
+.ff_select_search {
+  border-bottom-right-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+
+.ff_select_dropdown_container {
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: 10px;
+  margin-bottom: 55px;
+  display: flex;
+  position: relative;
+}
+
+.topbar_heading_box_ff {
+  flex-direction: row;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  display: flex;
+}
+
+.topbar_icon_ff {
+  justify-content: center;
+  align-items: center;
+  margin-right: 10px;
+  display: flex;
+}
+
+.topbar_middle_icon_ff {
+  justify-content: flex-start;
+  align-items: center;
+  margin-bottom: 1rem;
+  display: flex;
+}
+
+.topbar_detail_head_ff {
+  text-align: left;
+  letter-spacing: -.01em;
+  color: #22262a;
+  border: none;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: PoppinsRegular;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  font-family: PoppinsMedium !important;
+}
+
+.topbar_detail_body_ff {
+  letter-spacing: 0;
+  align-items: flex-start;
+  margin: 16px 0 17px;
+  padding: 0;
+  display: flex;
+}
+
+.topbar_detail_para_ff {
+  width: 100%;
+  margin: 0;
+}
+
+.topbar_detail_para_ff .topbar_detail_text {
+  color: #484f56;
+  letter-spacing: -.01em;
+  margin: 0;
+  padding: 0;
+  font-family: PoppinsRegular;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 21px;
+}
+
+.topbar_detail_para_ff .topbar_detail_text_last {
+  color: #878f97;
+  letter-spacing: -.01em;
+  margin: 0;
+  padding-top: 8px;
+  padding-bottom: 2px;
+  font-family: PoppinsRegular;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.topbar_detail_static_arrow_ff {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+}
+
+.topbar_detail_static_arrow_ff img {
+  width: 24px;
+  height: 26px;
+  display: inline;
+}
+
+.topbar_detail_btns_ff {
+  justify-content: space-between;
+  width: 100%;
+  display: flex;
+}
+
+.narrow_btns_ff {
+  width: 70% !important;
+}
+
+.review_btns_ff {
+  gap: 1rem;
+  justify-content: flex-start !important;
+  width: 70% !important;
+}
+
+.topbar_detail_submit_btn_ff, .topbar_detail_okay_btn_ff {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 150px;
+  overflow: hidden;
+}
+
+.dot_ff {
+  border-radius: 50%;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  width: 8px;
+  height: 8px;
+  display: flex;
+}
+
+.success_dot_ff {
+  background-color: #12b76a !important;
+}
+
+.warning_dot_ff {
+  background-color: #f08c00 !important;
+}
+
+.error_dot_ff {
+  background-color: red !important;
+}
+
+.large_dot_ff {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+.medium_dot_ff {
+  width: 10px !important;
+  height: 10px !important;
+}
+
+.small_dot_ff {
+  width: 6px !important;
+  height: 6px !important;
+}
+
+</style><div id="plasmo-shadow-container" style="z-index: 2147483647; position: relative;"><div id="plasmo-overlay-0" class="plasmo-csui-container" style="display: flex; position: absolute; top: 0px; left: 0px;"></div></div></template></plasmo-csui><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>qrcode</title>
+    <link href="./qrcode-4_files/css" rel="stylesheet">
+
+<style>@font-face { font-family: DMSans; src: url('chrome-extension://meimoidfecamngeoanhnpdjjdcefoldn/assets/fonts/DMSans-Regular.ttf'); }@font-face { font-family: PoppinsMedium; src: url('chrome-extension://meimoidfecamngeoanhnpdjjdcefoldn/assets/fonts/Poppins-Medium.otf'); }@font-face { font-family: PoppinsRegular; src: url('chrome-extension://meimoidfecamngeoanhnpdjjdcefoldn/assets/fonts/Poppins-Regular.otf'); }@font-face { font-family: Roboto; src: url('chrome-extension://meimoidfecamngeoanhnpdjjdcefoldn/assets/fonts/Roboto-Regular.ttf'); }@font-face { font-family: Inter; src: url('chrome-extension://meimoidfecamngeoanhnpdjjdcefoldn/assets/fonts/Inter-VariableFont_opsz,wght.ttf'); }</style></head>
+<body>
+    
+
+
+<div class="container centralizar-texto" style="margin-top:25px; margin-bottom:-10px;">
+    <div class="col">
+        <a href="https://ww1.receita.fazenda.df.gov.br/DecVisualizador/NfceCompleta/53260911832478000366651050004961121894470910?token=RGVidWdnaW5nTW9kZQ==:COBoQBKTd6oYTmkQca40yxieQ2l73DzGMXhdkns4Gho=:7e9f6dc2bdff4d0f9f106528245c0a6d:1789499782" class="btn btn-success btn-sm">Visualizar NFC-e Detalhada</a>
+        <button class="btn btn-success btn-sm" style="margin-right: 10px" type="button" onclick="validar()" name="button" value="login">Imprimir Danfe</button>
+
+    </div>
+
+    <hr>
+</div>
+
+
+<div class="container" xmlns:date="http://exslt.org/formatoData" xmlns:chave="http://exslt.org/chaveacesso" xmlns:r="http://www.serpro.gov.br/nfe/remessanfe.xsd" xmlns:msxsl="urn:schemas-microsoft-com:xslt" xmlns:currentdatetime="urn:internal:my-javascript"><nav class="navbar navbar-expand-lg rounded d-print-block"><div class="centralizar-imagem"><img src="./qrcode-4_files/NFCe_horizontal.svg" class="img-logo d-print-block"></div></nav><div class="row centralizar-texto">
+    <div class="col" style="color:#6C6C6C; font-size: 13px; margin-top: 10px;">
+            DOCUMENTO AUXILIAR DA NOTA FISCAL DE CONSUMIDOR ELETRÔNICA
+          </div>
+  </div>
+  <div class="card accordion bg-success mb-3" id="accordion1">
+    <div class="card-header centralizar-texto text-white visao-mobile-nfce" id="heading1" data-toggle="collapse" data-target="#collapse1" aria-expanded="true" aria-controls="collapse1">
+      <div class="col" style="font-weight: bold;">DONA DE CASA S/A</div>
+      <div>
+                CNPJ:
+                11.832.478/0003-66</div>
+      <div>QUADRA QR 5,
+              05 MU 05,
+              ,
+              CANDANGOLANDIA,
+              BRASILIA,
+              DF</div>
+    </div>
+    <div id="collapse1" class="collapse show" aria-labelledby="heading1" data-parent="#accordion1">
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">
+          <div class="row" style="line-height:0.1px; margin-top:-7px;">
+            <div class="col-9">
+              <p class="h6">DESENGORD UAU 500ML GATILHO<small>
+                          (Cód: 4134)
+                        </small></p>
+            </div>
+            <div class="col-3" style="text-align:right;"><strong><p class="h6">
+                          Vl. Total
+                        </p></strong></div>
+          </div>
+          <div class="row" style="line-height:0.1px; margin-bottom:3px;">
+            <div class="col-9"><span style="font-size:11px;"><strong>
+                          Qtde.:
+                        </strong>1.0000<strong>
+                          UN:
+                        </strong>UN<strong>
+                          Vl. Unit.:
+                        </strong>22,99</span></div>
+            <div class="col-3" style="text-align:right;"><span style="font-weight: bold; font-size:10px;">22,99</span></div>
+          </div>
+        </li>
+        <li class="list-group-item">
+          <div class="row" style="line-height:0.1px; margin-top:-7px;">
+            <div class="col-9">
+              <p class="h6">SACOLA REUTILIZAVEL UND<small>
+                          (Cód: 29404)
+                        </small></p>
+            </div>
+            <div class="col-3" style="text-align:right;"><strong><p class="h6">
+                          Vl. Total
+                        </p></strong></div>
+          </div>
+          <div class="row" style="line-height:0.1px; margin-bottom:3px;">
+            <div class="col-9"><span style="font-size:11px;"><strong>
+                          Qtde.:
+                        </strong>1.0000<strong>
+                          UN:
+                        </strong>UN<strong>
+                          Vl. Unit.:
+                        </strong>0,22</span></div>
+            <div class="col-3" style="text-align:right;"><span style="font-weight: bold; font-size:10px;">0,22</span></div>
+          </div>
+        </li>
+        <li class="list-group-item">
+          <div class="row" style="line-height:0.1px; margin-top:-7px;">
+            <div class="col-9">
+              <p class="h6">MANTEIGA PARACATU 500G C/SAL<small>
+                          (Cód: 8839)
+                        </small></p>
+            </div>
+            <div class="col-3" style="text-align:right;"><strong><p class="h6">
+                          Vl. Total
+                        </p></strong></div>
+          </div>
+          <div class="row" style="line-height:0.1px; margin-bottom:3px;">
+            <div class="col-9"><span style="font-size:11px;"><strong>
+                          Qtde.:
+                        </strong>1.0000<strong>
+                          UN:
+                        </strong>UN<strong>
+                          Vl. Unit.:
+                        </strong>24,99</span></div>
+            <div class="col-3" style="text-align:right;"><span style="font-weight: bold; font-size:10px;">24,99</span></div>
+          </div>
+        </li>
+        <li class="list-group-item">
+          <div class="row" style="line-height:0.1px; margin-top:-7px;">
+            <div class="col-9">
+              <p class="h6">ALHO kg<small>
+                          (Cód: 6710)
+                        </small></p>
+            </div>
+            <div class="col-3" style="text-align:right;"><strong><p class="h6">
+                          Vl. Total
+                        </p></strong></div>
+          </div>
+          <div class="row" style="line-height:0.1px; margin-bottom:3px;">
+            <div class="col-9"><span style="font-size:11px;"><strong>
+                          Qtde.:
+                        </strong>0.2300<strong>
+                          UN:
+                        </strong>KG<strong>
+                          Vl. Unit.:
+                        </strong>49,90</span></div>
+            <div class="col-3" style="text-align:right;"><span style="font-weight: bold; font-size:10px;">11,48</span></div>
+          </div>
+        </li>
+        <li class="list-group-item">
+          <div class="row" style="line-height:0.1px; margin-top:-7px;">
+            <div class="col-9">
+              <p class="h6">CEBOLA kg<small>
+                          (Cód: 7708)
+                        </small></p>
+            </div>
+            <div class="col-3" style="text-align:right;"><strong><p class="h6">
+                          Vl. Total
+                        </p></strong></div>
+          </div>
+          <div class="row" style="line-height:0.1px; margin-bottom:3px;">
+            <div class="col-9"><span style="font-size:11px;"><strong>
+                          Qtde.:
+                        </strong>0.8550<strong>
+                          UN:
+                        </strong>KG<strong>
+                          Vl. Unit.:
+                        </strong>9,99</span></div>
+            <div class="col-3" style="text-align:right;"><span style="font-weight: bold; font-size:10px;">8,54</span></div>
+          </div>
+        </li>
+        <li class="list-group-item">
+          <div class="row" style="line-height:0.1px; margin-top:-7px;">
+            <div class="col-9">
+              <p class="h6">TEMP CORAL 20G DRY RUB BEEF<small>
+                          (Cód: 29502)
+                        </small></p>
+            </div>
+            <div class="col-3" style="text-align:right;"><strong><p class="h6">
+                          Vl. Total
+                        </p></strong></div>
+          </div>
+          <div class="row" style="line-height:0.1px; margin-bottom:3px;">
+            <div class="col-9"><span style="font-size:11px;"><strong>
+                          Qtde.:
+                        </strong>1.0000<strong>
+                          UN:
+                        </strong>UN<strong>
+                          Vl. Unit.:
+                        </strong>3,99</span></div>
+            <div class="col-3" style="text-align:right;"><span style="font-weight: bold; font-size:10px;">3,99</span></div>
+          </div>
+        </li>
+        <li class="list-group-item">
+          <div class="row" style="line-height:0.1px; margin-top:-7px;">
+            <div class="col-9">
+              <p class="h6">TEMP CORAL 20G DRY RUB TRAD<small>
+                          (Cód: 29505)
+                        </small></p>
+            </div>
+            <div class="col-3" style="text-align:right;"><strong><p class="h6">
+                          Vl. Total
+                        </p></strong></div>
+          </div>
+          <div class="row" style="line-height:0.1px; margin-bottom:3px;">
+            <div class="col-9"><span style="font-size:11px;"><strong>
+                          Qtde.:
+                        </strong>1.0000<strong>
+                          UN:
+                        </strong>UN<strong>
+                          Vl. Unit.:
+                        </strong>3,49</span></div>
+            <div class="col-3" style="text-align:right;"><span style="font-weight: bold; font-size:10px;">3,49</span></div>
+          </div>
+        </li>
+        <li class="list-group-item">
+          <div class="row" style="line-height:0.1px; margin-top:-7px;">
+            <div class="col-9">
+              <p class="h6">TEMP CORAL 20G DRY RUB CHICKEN<small>
+                          (Cód: 29503)
+                        </small></p>
+            </div>
+            <div class="col-3" style="text-align:right;"><strong><p class="h6">
+                          Vl. Total
+                        </p></strong></div>
+          </div>
+          <div class="row" style="line-height:0.1px; margin-bottom:3px;">
+            <div class="col-9"><span style="font-size:11px;"><strong>
+                          Qtde.:
+                        </strong>1.0000<strong>
+                          UN:
+                        </strong>UN<strong>
+                          Vl. Unit.:
+                        </strong>3,99</span></div>
+            <div class="col-3" style="text-align:right;"><span style="font-weight: bold; font-size:10px;">3,99</span></div>
+          </div>
+        </li>
+        <li class="list-group-item">
+          <div class="row" style="line-height:0.1px; margin-top:-7px;">
+            <div class="col-9">
+              <p class="h6">TEMP KITANO 12G CHIMICHURRI<small>
+                          (Cód: 14895)
+                        </small></p>
+            </div>
+            <div class="col-3" style="text-align:right;"><strong><p class="h6">
+                          Vl. Total
+                        </p></strong></div>
+          </div>
+          <div class="row" style="line-height:0.1px; margin-bottom:3px;">
+            <div class="col-9"><span style="font-size:11px;"><strong>
+                          Qtde.:
+                        </strong>1.0000<strong>
+                          UN:
+                        </strong>UN<strong>
+                          Vl. Unit.:
+                        </strong>7,99</span></div>
+            <div class="col-3" style="text-align:right;"><span style="font-weight: bold; font-size:10px;">7,99</span></div>
+          </div>
+        </li>
+        <li class="list-group-item">
+          <div class="row" style="line-height:0.1px; margin-top:-7px;">
+            <div class="col-9">
+              <p class="h6">TEMP CORAL 20G LEMON PEPPER<small>
+                          (Cód: 29507)
+                        </small></p>
+            </div>
+            <div class="col-3" style="text-align:right;"><strong><p class="h6">
+                          Vl. Total
+                        </p></strong></div>
+          </div>
+          <div class="row" style="line-height:0.1px; margin-bottom:3px;">
+            <div class="col-9"><span style="font-size:11px;"><strong>
+                          Qtde.:
+                        </strong>1.0000<strong>
+                          UN:
+                        </strong>UN<strong>
+                          Vl. Unit.:
+                        </strong>2,99</span></div>
+            <div class="col-3" style="text-align:right;"><span style="font-weight: bold; font-size:10px;">2,99</span></div>
+          </div>
+        </li>
+        <li class="list-group-item">
+          <div class="row" style="line-height:0.1px; margin-top:-7px;">
+            <div class="col-9">
+              <p class="h6">TEMP CORAL 20G LEMON PEPPER<small>
+                          (Cód: 29507)
+                        </small></p>
+            </div>
+            <div class="col-3" style="text-align:right;"><strong><p class="h6">
+                          Vl. Total
+                        </p></strong></div>
+          </div>
+          <div class="row" style="line-height:0.1px; margin-bottom:3px;">
+            <div class="col-9"><span style="font-size:11px;"><strong>
+                          Qtde.:
+                        </strong>1.0000<strong>
+                          UN:
+                        </strong>UN<strong>
+                          Vl. Unit.:
+                        </strong>2,99</span></div>
+            <div class="col-3" style="text-align:right;"><span style="font-weight: bold; font-size:10px;">2,99</span></div>
+          </div>
+        </li>
+        <li class="list-group-item">
+          <div class="row" style="line-height:0.1px; margin-top:-7px;">
+            <div class="col-9">
+              <p class="h6">TEMP CORAL 20G LEMON PEPPER<small>
+                          (Cód: 29507)
+                        </small></p>
+            </div>
+            <div class="col-3" style="text-align:right;"><strong><p class="h6">
+                          Vl. Total
+                        </p></strong></div>
+          </div>
+          <div class="row" style="line-height:0.1px; margin-bottom:3px;">
+            <div class="col-9"><span style="font-size:11px;"><strong>
+                          Qtde.:
+                        </strong>1.0000<strong>
+                          UN:
+                        </strong>UN<strong>
+                          Vl. Unit.:
+                        </strong>2,99</span></div>
+            <div class="col-3" style="text-align:right;"><span style="font-weight: bold; font-size:10px;">2,99</span></div>
+          </div>
+        </li>
+      </ul>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">
+          <div class="row" style="margin-top:-7px; margin-bottom:-13px;">
+            <div class="col-8" style="text-align:right;">
+              <p class="h6"><strong>
+                        Qtd. total de itens:
+                      </strong></p>
+            </div>
+            <div class="col-4" style="text-align:right;">
+              <p class="h6"><strong>12</strong></p>
+            </div>
+          </div>
+        </li>
+      </ul>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item campo-xml">
+          <div class="row" style="margin-top:-7px; margin-bottom:-13px;">
+            <div class="col-8" style="text-align:right;">
+              <p class="h6"><strong>
+                        Valor a pagar R$:
+                      </strong></p>
+            </div>
+            <div class="col-4" style="text-align:right;">
+              <p class="h6"><strong>96,65</strong></p>
+            </div>
+          </div>
+        </li>
+      </ul>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">
+          <div class="row" style="margin-top:-7px; margin-bottom:-13px;">
+            <div class="col-8" style="text-align:right;">
+              <p class="h6"><strong>
+                        Forma de pagamento:
+                      </strong></p>
+            </div>
+            <div class="col-4" style="text-align:right;">
+              <p class="h6"><strong>
+                        Valor pago R$:
+                      </strong></p>
+            </div>
+          </div>
+          <div class="row" style="margin-top:9px; margin-bottom:-13px;">
+            <div class="col-8" style="text-align:right;">
+              <p class="h6"><strong>Dinheiro</strong></p>
+            </div>
+            <div class="col-4" style="text-align:right;">
+              <p class="h6"><strong>96,65</strong></p>
+            </div>
+          </div>
+        </li>
+      </ul>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item campo-xml">
+          <div class="row" style="margin-top:-7px; margin-bottom:-13px;">
+            <div class="col-8" style="text-align:right;">
+              <p class="h6"><strong>
+                          Informação dos Tributos Totais Incidentes (Lei Federal 12.741/2012)&nbsp;R$:
+                        </strong></p>
+            </div>
+            <div class="col-4" style="text-align:right;">
+              <p class="h6"><strong>27,96</strong></p>
+            </div>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <div class="card accordion bg-success mb-3" id="accordion2">
+    <div class="card-header centralizar-texto text-white visao-mobile-nfce" id="heading2" data-toggle="collapse" data-target="#collapse2" aria-expanded="true" aria-controls="collapse2">
+      <div class="col" style="font-weight: bold;">
+              Consumidor
+            </div>
+    </div>
+    <div id="collapse2" class="collapse show" aria-labelledby="heading2" data-parent="#accordion2">
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">
+          <div class="row centralizar-texto">
+            <div class="col">
+              <p class="h6"><strong>
+                          Consumidor não identificado
+                        </strong></p>
+            </div>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <div class="card accordion bg-success mb-3" id="accordion3">
+    <div class="card-header centralizar-texto text-white visao-mobile-nfce" id="heading3" data-toggle="collapse" data-target="#collapse3" aria-expanded="true" aria-controls="collapse3">
+      <div class="col" style="font-weight: bold;">
+              Chave de acesso
+            </div>
+    </div>
+    <div id="collapse3" class="collapse show" aria-labelledby="heading3" data-parent="#accordion3">
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">
+          <div class="row">
+            <div class="col-12">
+              <p class="h6"><strong>Consulte pela Chave de Acesso em: </strong><a href="http://www.fazenda.df.gov.br/nfce/consulta">http://www.fazenda.df.gov.br/nfce/consulta</a></p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col">
+              <p class="h6"><strong>
+                        Chave de acesso:
+                      </strong></p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col">
+              <p class="h6">5326 0911 8324 7800 0366 6510 5000 4961 1218 9447 0910</p>
+            </div>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <div class="card accordion bg-success mb-3" id="accordion4">
+    <div class="card-header centralizar-texto text-white visao-mobile-nfce" id="heading4" data-toggle="collapse" data-target="#collapse4" aria-expanded="true" aria-controls="collapse4">
+      <div class="col" style="font-weight: bold;">
+                Informações de interesse do contribuinte
+              </div>
+    </div>
+    <div id="collapse4" class="collapse show" aria-labelledby="heading4" data-parent="#accordion4">
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">
+          <div class="row">
+            <div class="col-12">
+              <p class="h6">2.5.1134918.528.1</p>
+            </div>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <div class="card accordion bg-success mb-3" id="accordion6">
+    <div class="card-header centralizar-texto text-white visao-mobile-nfce" id="heading6" data-toggle="collapse" data-target="#collapse6" aria-expanded="true" aria-controls="collapse6">
+      <div class="col" style="font-weight: bold;">
+              Informações gerais da Nota
+            </div>
+    </div>
+    <div id="collapse6" class="collapse show" aria-labelledby="heading6" data-parent="#accordion6">
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">
+          <div class="row">
+            <div class="col-12">
+              <p class="h6"><strong>EMISSÃO NORMAL</strong></p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-12">
+              <p class="h6"><strong>Número: </strong>496112<strong> Série: </strong>105<strong> Emissão: </strong>10/09/2026 10:03:56  - Via Consumidor
+                    </p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-12">
+              <p class="h6"><strong>Protocolo de Autorização: </strong>253260517443424       10/09/2026 10:03:57</p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-12">
+              <p class="h6"><strong>Ambiente de Produção - 
+                        Versão XML: 4.00 - Versão XSLT: 2.03
+                      </strong></p>
+            </div>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <div data-role="footer" class="centralizar-texto">
+    <hr>
+      <h6 style="margin-top:-10px;"><strong>
+              Data/Hora da Consulta: 15/9/2026 16:16:22</strong></h6>
+    
+  </div>
+</div>
+<script>
+function validar() {
+
+        var chave = 'gJBOgCoz0enL08XIomEJE7d6At01VJC7LUL7zQhSHWJCK1t8KyHILxUvtgYmsixC';
+        var recaptchaData = {
+            success: true, // Defina o valor adequado para success
+            chave: chave,
+            response: "seu_valor_response_aqui" // Defina o valor adequado para response
+    };
+//    $.ajax({
+//        type: "GET",
+//        url: '../Validador/Danfe?chave=' + chave,
+
+//        contentType: "application/json; charset=utf-8",
+//        dataType: "json",
+//        success: function (data, textStatus) {
+//            console.log(data);
+//            var pdfUrl = URL.createObjectURL(data);
+//            window.open(pdfUrl, "_blank");
+//            return data;
+//            if (data.redirect) {
+//                // data.redirect contains the string URL to redirect to
+//                window.location.href = data.redirect;
+//            } else {
+//                // data.form contains the HTML for the replacement form
+//                $("#myform").replaceWith(data.form);
+//            }
+//        },
+//        error: function (xhr, status, error) {
+//            // Trata o erro aqui
+//            console.error("Erro na requisição:", status, error);
+//            // Exibe uma mensagem de erro para o usuário ou toma outras ações necessárias
+//            alert("Ocorreu um erro na requisição. Por favor, tente novamente mais tarde.");
+//        }
+//    });
+    $.ajax({
+        type: "GET",
+        url: '../Validador/Danfe?chave=' + chave,
+        contentType: "application/json; charset=utf-8",
+        success: function (data, textStatus, xhr) {
+            console.log('entrou sucessos');
+            console.log(data);
+            // Verifica se a resposta é um arquivo PDF (content type application/pdf)
+            
+                // Decodifica a string base64 para obter os dados do PDF
+                var pdfData = atob(data);
+
+                // Converte os dados do PDF para um array de bytes
+                var pdfBytes = new Uint8Array(pdfData.length);
+                for (var i = 0; i < pdfData.length; i++) {
+                    pdfBytes[i] = pdfData.charCodeAt(i);
+                }
+
+                // Cria um objeto Blob com os dados do PDF
+                var pdfBlob = new Blob([pdfBytes], { type: "application/pdf" });
+
+                // Cria uma URL para o arquivo PDF
+                var pdfUrl = URL.createObjectURL(pdfBlob);
+
+                // Abre o arquivo PDF em uma nova aba do navegador
+                window.open(pdfUrl, "_blank");
+        },
+        error: function (xhr, status, error) {
+            // Trata o erro aqui
+            console.error("Erro na requisição:", status, error);
+            // Exibe uma mensagem de erro para o usuário ou toma outras ações necessárias
+            alert("Ocorreu um erro na requisição. Por favor, tente novamente mais tarde.");
+        }
+    });
+}
+  
+
+</script>
+    <script src="./qrcode-4_files/jquery"></script>
+
+
+    <div id="back" class="alert div-btn-voltar" style="text-align:center">
+        <button class="btn btn-primary btn-sm" type="button" onclick="window.history.back()">Voltar principal</button>        
+    </div>
+
+    <script defer="">
+        if (window.history.length < 2) {
+            document.getElementByName("back").style.display = "none";
+        }
+    </script>
+<script type="module" src="./qrcode-4_files/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon="{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;7347d43be5c0435586f4a1d9eccafdac&quot;,&quot;spa&quot;:2}" crossorigin="anonymous"></script>
+
+</body></html>
