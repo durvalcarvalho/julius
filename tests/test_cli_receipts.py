@@ -381,3 +381,95 @@ def test_help_lists_the_three_commands():
     assert result.exit_code == 0
     for command in ("importar", "consultar", "exportar"):
         assert command in result.output
+
+
+def test_consultar_accepts_multiple_words_without_quotes():
+    _import("qrcode.html")
+    result = runner.invoke(app, ["consultar", "picanha", "bov"])
+    assert result.exit_code == 0, result.output
+    assert "PICANHA" in result.output
+
+
+def test_consultar_detects_tag_in_free_text_without_tag_flag():
+    _import("qrcode.html")
+    picanha_id = _product_id("PICANHA")
+    runner.invoke(app, ["produtos", "tag", str(picanha_id), "carnes"])
+    result = runner.invoke(app, ["consultar", "carnes"])
+    assert result.exit_code == 0, result.output
+    assert "PICANHA" in result.output
+
+
+def test_sem_tag_forces_plain_term_search():
+    _import("qrcode.html")
+    picanha_id = _product_id("PICANHA")
+    runner.invoke(app, ["produtos", "tag", str(picanha_id), "carnes"])
+
+    with_detection = runner.invoke(app, ["consultar", "carnes"])
+    without_detection = runner.invoke(app, ["consultar", "carnes", "--sem-tag"])
+
+    assert "PICANHA" in with_detection.output
+    assert "PICANHA" not in without_detection.output
+
+
+def test_explicit_tag_still_intersects_with_term():
+    _import("qrcode.html")
+    picanha_id = _product_id("PICANHA")
+    runner.invoke(app, ["produtos", "tag", str(picanha_id), "carnes"])
+    result = runner.invoke(app, ["consultar", "picanha", "--tag", "carnes"])
+    assert result.exit_code == 0, result.output
+    assert "PICANHA" in result.output
+
+
+def test_consultar_ai_fallback_fires_even_when_word_auto_detects_as_tag(monkeypatch):
+    _import("qrcode.html")
+    picanha_id = _product_id("PICANHA")
+    _ai_env(monkeypatch)
+    fake = ScriptedLlmClient([LlmResponse(json.dumps({"ids": [picanha_id]}), 10, 5)])
+    _stub_client(monkeypatch, fake)
+
+    result = runner.invoke(app, ["consultar", "hortifruti"])  # auto-detects the tag; retry as term is also empty
+
+    assert result.exit_code == 0, result.output
+    assert "PICANHA" in result.output
+    assert len(fake.calls) == 1
+
+
+def test_consultar_help_lists_sem_tag_flag():
+    result = runner.invoke(app, ["consultar", "--help"])
+    assert result.exit_code == 0
+    assert "--sem-tag" in result.output
+
+
+def test_consultar_logs_one_line_per_call(tmp_path):
+    _import("qrcode.html")
+    runner.invoke(app, ["consultar", "picanha"])
+    runner.invoke(app, ["consultar", "banana"])
+    lines = (tmp_path / "query_log.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2
+    first = json.loads(lines[0])
+    assert first["words"] == ["picanha"]
+    assert first["result_count"] == 3
+    assert first["tag_used"] is None
+    assert first["ai_fallback"] is False
+
+
+def test_consultar_logs_zero_results_without_raising(tmp_path):
+    runner.invoke(app, ["consultar", "banana"])
+    lines = (tmp_path / "query_log.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0])["result_count"] == 0
+
+
+def test_consultar_logs_ai_fallback_flag(tmp_path, monkeypatch):
+    _import("qrcode.html")
+    picanha_id = _product_id("PICANHA")
+    _ai_env(monkeypatch)
+    fake = ScriptedLlmClient([LlmResponse(json.dumps({"ids": [picanha_id]}), 10, 5)])
+    _stub_client(monkeypatch, fake)
+
+    runner.invoke(app, ["consultar", "carnes"])
+
+    lines = (tmp_path / "query_log.jsonl").read_text(encoding="utf-8").splitlines()
+    last = json.loads(lines[-1])
+    assert last["ai_fallback"] is True
+    assert last["detected_tag"] == "carnes"

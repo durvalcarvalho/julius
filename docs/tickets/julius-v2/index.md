@@ -55,7 +55,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 113 | [CLI importar + revisão](113-cli-importar-review.md) | 112 | S | feito | `importar [--sim]` revisa produtos novos; `reviewed` nas dicas |
 | 114 | [e2e, docs, backfill](114-e2e-docs-backfill.md) | 101–113 | M | feito (código); backfill real pendente do usuário | `test_e2e.py` v2, `CLAUDE.md`, `README.md`, reimport dos HTMLs reais |
 | 115 | [search: tag em texto livre](115-search-free-text.md) | — | M | feito | `domain.SearchOutcome`, `search.TAG_MATCH_CUTOFF`/`detect_tag`/`search_free_text` |
-| 116 | [CLI: consultar natural + log](116-cli-consultar-natural-query-log.md) | 115 | M | a fazer | `consultar` com várias palavras, `--sem-tag`, `Config.query_log_path`, `query_log.jsonl` |
+| 116 | [CLI: consultar natural + log](116-cli-consultar-natural-query-log.md) | 115 | M | feito | `consultar` com várias palavras, `--sem-tag`, `Config.query_log_path`, `query_log.jsonl` |
 
 Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum ticket L: o que ficaria L foi dividido (suggestions em 107/108; CLI em 111/112/113).
 

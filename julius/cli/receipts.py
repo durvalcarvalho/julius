@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -11,7 +12,8 @@ from julius import config
 from julius.cli import _review
 from julius.cli._common import console, error_console, fail, open_db
 from julius.cli._hints import print_hints
-from julius.domain.models import ImportResult, PriceRecord
+from julius.domain.models import ImportResult, PriceRecord, SearchOutcome
+from julius.infra import ai_log
 from julius.infra.llm_client import HttpLlmClient
 from julius.parsers.df import DFReceiptParser
 from julius.services import export as export_service, guidance, importing, search as search_service, suggestions
@@ -64,21 +66,51 @@ def import_receipts(
 
 
 def search(
-    term: Annotated[Optional[str], typer.Argument(help="Nome (ou parte) do produto; aceita erro de digitação.")] = None,
+    words: Annotated[
+        Optional[list[str]],
+        typer.Argument(help="Nome do produto e/ou tag — várias palavras sem aspas, aceita erro de digitação."),
+    ] = None,
     tag: Annotated[Optional[str], typer.Option("--tag", help="Filtra por tag marcada em `produtos tag`.")] = None,
+    no_tag_detection: Annotated[
+        bool,
+        typer.Option(
+            "--sem-tag", help="Trata tudo como nome de produto, mesmo que uma palavra combine com uma tag conhecida."
+        ),
+    ] = False,
     limit: Annotated[int, typer.Option("--limite", "-n", min=1, help="Linhas mais recentes por unidade.")] = 20,
 ) -> None:
     """Mostra o histórico de preços de um produto, agrupado por unidade."""
-    if term is None and tag is None:
+    words = words or []
+    if not words and tag is None:
         raise typer.BadParameter("Informe um termo de busca ou --tag.")
+    settings = config.load()
     conn = open_db()
     try:
-        records = search_service.search_prices(conn, term=term, tag=tag, limit=limit)
-        hints = guidance.after_search(conn, term, tag, records)
-        if not records and term is not None and tag is None:
-            fallback_records, fallback_hints = _ai_fallback(conn, term, limit)
+        if no_tag_detection or tag is not None:
+            term = " ".join(words) or None
+            outcome = SearchOutcome(tuple(search_service.search_prices(conn, term=term, tag=tag, limit=limit)), term, tag)
+        else:
+            outcome = search_service.search_free_text(conn, words, tag=None, limit=limit)
+        records = list(outcome.records)
+        hints = guidance.after_search(conn, outcome.term, outcome.tag, records)
+        used_ai_fallback = False
+        if not records and outcome.term is not None and outcome.tag is None:
+            fallback_records, fallback_hints = _ai_fallback(conn, outcome.term, limit)
             if fallback_records:
-                records, hints = fallback_records, fallback_hints
+                records, hints, used_ai_fallback = fallback_records, fallback_hints, True
+        ai_log.append(
+            settings.query_log_path,
+            {
+                "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "words": words,
+                "tag_explicit": tag,
+                "detected_tag": outcome.detected_tag,
+                "term_used": outcome.term,
+                "tag_used": outcome.tag,
+                "result_count": len(records),
+                "ai_fallback": used_ai_fallback,
+            },
+        )
     finally:
         conn.close()
     if not records and not hints:
