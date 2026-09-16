@@ -5,7 +5,7 @@ import pytest
 from julius.domain.models import Receipt, ReceiptItem
 from julius.parsers.df import DFReceiptParser
 from julius.repositories.prices import insert_price
-from julius.repositories.products import add_tag, product_names, resolve_product_id
+from julius.repositories.products import add_tag, product_names, resolve_product_id, set_content
 from julius.repositories.stores import ensure_store
 from julius.services.search import (
     catalog_for_matching,
@@ -132,6 +132,43 @@ def test_limit_keeps_newest_but_always_includes_extremes(conn):
     rows = search_prices(conn, "arroz", limit=2)
     assert [row.purchased_at[:10] for row in rows] == ["2026-01-05", "2026-01-04", "2026-01-01"]
     assert [row.highlight for row in rows] == [None, "highest", "lowest"]
+
+
+def test_highlight_flips_to_cheapest_per_content(conn):
+    small = _product(conn, "AGUA MINERAL 500ML", "1")
+    big = _product(conn, "AGUA MINERAL 1,5L", "2")
+    set_content(conn, small, 0.5, "L")
+    set_content(conn, big, 1.5, "L")
+    _price(conn, small, "UN", 1.49, "2026-01-01T00:00:00", "k1")
+    _price(conn, big, "UN", 3.69, "2026-01-02T00:00:00", "k2")
+
+    highlight = {row.product_id: row.highlight for row in search_prices(conn, "agua mineral")}
+
+    assert highlight == {big: "lowest", small: "highest"}
+
+
+def test_highlight_absent_when_content_missing_in_mixed_group(conn):
+    small = _product(conn, "AGUA MINERAL 500ML", "1")
+    big = _product(conn, "AGUA MINERAL 1,5L", "2")
+    _price(conn, small, "UN", 1.49, "2026-01-01T00:00:00", "k1")
+    _price(conn, big, "UN", 3.69, "2026-01-02T00:00:00", "k2")
+
+    assert {row.highlight for row in search_prices(conn, "agua mineral")} == {None}
+
+
+def test_highlight_ignores_non_participating_rows(conn):
+    small = _product(conn, "AGUA MINERAL 500ML", "1")
+    big = _product(conn, "AGUA MINERAL 1,5L", "2")
+    unknown = _product(conn, "AGUA MINERAL COPO", "3")
+    set_content(conn, small, 0.5, "L")
+    set_content(conn, big, 1.5, "L")
+    _price(conn, small, "UN", 1.49, "2026-01-01T00:00:00", "k1")
+    _price(conn, big, "UN", 3.69, "2026-01-02T00:00:00", "k2")
+    _price(conn, unknown, "UN", 0.99, "2026-01-03T00:00:00", "k3")
+
+    highlight = {row.product_id: row.highlight for row in search_prices(conn, "agua mineral")}
+
+    assert highlight == {big: "lowest", small: "highest", unknown: None}
 
 
 def test_requires_term_or_tag(conn):

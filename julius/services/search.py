@@ -6,6 +6,7 @@ from dataclasses import replace
 
 from rapidfuzz import fuzz, process
 
+from julius.domain.comparison_basis import basis_value, comparison_basis
 from julius.domain.models import PriceRecord, SearchOutcome
 from julius.domain.normalization import normalize_text
 from julius.repositories import prices, products
@@ -151,15 +152,23 @@ def _candidate_ids(conn: sqlite3.Connection, term: str | None, tag: str | None) 
 
 def _highlight_and_trim(group: list[PriceRecord], limit: int) -> list[PriceRecord]:
     group = sorted(group, key=lambda record: record.purchased_at, reverse=True)
-    lowest = min(record.unit_price for record in group)
-    highest = max(record.unit_price for record in group)
-    kept = group[:limit] + [record for record in group[limit:] if record.unit_price in (lowest, highest)]
+    basis, participants = comparison_basis(group)
+    values = {index: value for index in participants if (value := basis_value(group[index], basis)) is not None}
+    if len(values) < 2:
+        return group[:limit]
+    lowest, highest = min(values.values()), max(values.values())
+    kept = list(range(min(limit, len(group))))
+    kept += [index for index in range(limit, len(group)) if values.get(index) in (lowest, highest)]
     if lowest == highest:
-        return kept
+        return [group[index] for index in kept]
     return [
         replace(
-            record,
-            highlight="lowest" if record.unit_price == lowest else "highest" if record.unit_price == highest else None,
+            group[index],
+            highlight="lowest"
+            if values.get(index) == lowest
+            else "highest"
+            if values.get(index) == highest
+            else None,
         )
-        for record in kept
+        for index in kept
     ]
