@@ -1,0 +1,23 @@
+tests/test_infra_receipt_files.py
+  s_9897d2094c6052::t_f2aa7373f2377b 55-67
+julius/infra/receipt_files.py
+  s_9897d2094c6052::t_b1174d37dc19ed 20-24
+CLAUDE.md
+  s_9897d2094c6052::t_2e9c6b274ab011 30,544
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f577f6d1102718fe0c85f38743e0ddd554414752",
+  "prompts": {},
+  "sessions": {
+    "s_9897d2094c6052": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "864f6773-d792-4392-aff4-08e50f62bd9e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
