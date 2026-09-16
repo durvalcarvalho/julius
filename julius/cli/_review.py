@@ -113,10 +113,7 @@ def review_products(
     summary = ", ".join(f"{counts[field]} {label}" for field, label in _FIELD_LABELS if counts[field])
     if summary:
         console.print(f"Aplicado: {summary}.")
-        console.print(
-            "Desfazer: julius produtos renomear · julius produtos tag --remover · "
-            "julius produtos definir-conteudo --remover · julius produtos tipo --remover"
-        )
+        console.print("Desfazer ou auditar: julius produtos revisar --ultimas-acoes")
 
     pending = 0
     for proposal in proposals:

@@ -10,6 +10,7 @@ from julius.cli import _review
 from julius.cli._common import console, fail, open_db
 from julius.cli._hints import print_hints
 from julius.domain.models import Product
+from julius.infra import ai_log
 from julius.infra.llm_client import HttpLlmClient
 from julius.services import catalog, curation, guidance, suggestions
 
@@ -190,9 +191,16 @@ def compare_products(
 @app.command("revisar")
 def review(
     yes: Annotated[bool, typer.Option("--sim", "-y", help="Aplicar as sugestões da IA sem perguntar.")] = False,
+    last_actions: Annotated[
+        bool,
+        typer.Option("--ultimas-acoes", help="Mostra as últimas ações que a IA aplicou, com o comando para desfazer."),
+    ] = False,
 ) -> None:
-    """Pede à IA nome legível, categoria e conteúdo para produtos ainda sem tag."""
+    """Pede à IA nome legível, categoria, conteúdo e tipo para produtos ainda sem tag."""
     settings = config.load()
+    if last_actions:
+        _print_last_actions(settings.action_log_path)
+        return
     client = HttpLlmClient.from_config(settings)
     conn = open_db()
     try:
@@ -207,6 +215,25 @@ def review(
         _review.review_products(conn, settings, client, ids, assume_yes=yes, interactive=interactive)
     finally:
         conn.close()
+
+
+def _print_last_actions(path) -> None:
+    records = ai_log.tail(path)
+    if not records:
+        console.print("Nenhuma ação automática registrada ainda.")
+        return
+    table = Table("Quando", "ID", "Campo", "Antes", "Depois", "Desfazer")
+    for record in records:
+        when = str(record.get("at") or "")[:16].replace("T", " ")
+        table.add_row(
+            when,
+            str(record.get("product_id") or ""),
+            str(record.get("field") or ""),
+            str(record.get("before") or ""),
+            str(record.get("after") or ""),
+            str(record.get("undo") or ""),
+        )
+    console.print(table)
 
 
 def _name_of(conn, product_id: int) -> str:

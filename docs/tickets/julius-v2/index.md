@@ -62,7 +62,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 120 | [Prompt enrich v2 + `kind`](120-suggestions-enrich-kind.md) | 117 | M | feito | `ProductEnrichment.kind`, `PROMPT_VERSIONS["enrich"]="2"`, `known_kinds` |
 | 121 | [curation: tipo + `AppliedAction`](121-curation-kind-applied-actions.md) | 118, 120 | M | feito | `propose` com tipo (não sobrescreve humano), `apply` devolve o que mudou |
 | 122 | [review aplica + log de ações](122-review-auto-apply-action-log.md) | 118, 121 | M | feito | conteúdo e tipo automáticos, `actions.jsonl`, resumo agregado |
-| 123 | [`revisar --ultimas-acoes`](123-review-last-actions.md) | 122 | S | aberto | `ai_log.tail`, tabela de ações com comando de desfazer |
+| 123 | [`revisar --ultimas-acoes`](123-review-last-actions.md) | 122 | S | feito | `ai_log.tail`, tabela de ações com comando de desfazer |
 | 124 | [comparison: entre mercados](124-comparison-compare-stores.md) | 117, 119 | M | aberto | `compare_stores`, `KindComparison`, `StoreComparison` |
 | 125 | [CLI `mercados comparar`](125-cli-mercados-comparar.md) | 124 | M | aberto | tabela por grupo, contagem derivada, rodapé com `n` e período |
 | 126 | [comparison: extremos novos](126-comparison-new-extremes.md) | 119, 124 | M | aberto | `new_extremes`, `PriceExtreme`, escopo de grupo |

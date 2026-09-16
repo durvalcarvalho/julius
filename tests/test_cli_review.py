@@ -5,7 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 import julius.cli.products as products_cli
-from _fakes import ScriptedLlmClient
+from _fakes import RaisingLlmClient, ScriptedLlmClient
 from julius.cli import _review, app
 from julius.domain.models import AppliedAction
 from julius.infra.llm_client import LlmResponse
@@ -425,3 +425,71 @@ def test_revisar_skips_rename_for_manually_renamed_product(monkeypatch):
     assert "Nome Manual" in output
     assert "Outro Nome da IA" not in output
     assert "carnes" in output
+
+
+def test_cli_ultimas_acoes_prints_table(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich(
+                [
+                    {
+                        "id": 8,
+                        "readable_name": "Ovo Grande",
+                        "tags": ["hortifruti"],
+                        "content": {"quantity": 30, "unit": "UN"},
+                        "kind": "ovo",
+                    }
+                ]
+            )
+        }
+    )
+    _stub_client(monkeypatch, client)
+    assert _run("produtos", "revisar").exit_code == 0
+
+    result = _run("produtos", "revisar", "--ultimas-acoes")
+
+    assert result.exit_code == 0, result.output
+    assert "Desfazer" in result.output
+    assert "julius produtos tipo 8 --remover" in result.output
+    assert "conteudo" in result.output
+
+
+def test_cli_ultimas_acoes_empty_log_message():
+    result = _run("produtos", "revisar", "--ultimas-acoes")
+    assert result.exit_code == 0, result.output
+    assert "Nenhuma ação automática registrada" in result.output
+
+
+def test_cli_ultimas_acoes_does_not_call_ai(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    _stub_client(monkeypatch, RaisingLlmClient())
+
+    result = _run("produtos", "revisar", "--ultimas-acoes")
+
+    assert result.exit_code == 0, result.output
+    assert "Nenhuma ação automática registrada" in result.output
+
+
+def test_cli_ultimas_acoes_tolerates_partial_record(tmp_path):
+    (tmp_path / "actions.jsonl").write_text(json.dumps({"product_id": 7, "field": "kind"}) + "\n", encoding="utf-8")
+
+    result = _run("produtos", "revisar", "--ultimas-acoes")
+
+    assert result.exit_code == 0, result.output
+    assert "kind" in result.output
+
+
+def test_review_summary_points_to_flag(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={"enrich": _enrich([{"id": 11, "readable_name": "Linguiça", "tags": ["carnes"]}])}
+    )
+    _stub_client(monkeypatch, client)
+
+    result = _run("produtos", "revisar")
+
+    assert "julius produtos revisar --ultimas-acoes" in result.output

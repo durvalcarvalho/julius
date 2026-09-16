@@ -248,7 +248,7 @@ def test_importar_reviews_new_products_when_ai_is_configured(monkeypatch):
     assert "Aplicado:" in result.output
     listar = runner.invoke(app, ["produtos", "listar"]).output
     assert "Nome Legível" in listar and "mercearia" in listar
-    assert "produtos revisar" not in result.output
+    assert "sem categoria" not in result.output  # the pending-review hint, not the audit pointer
 
 
 def test_importar_without_ai_prints_pending_review_hint():
