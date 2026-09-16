@@ -52,7 +52,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 110 | [search/guidance/hints](110-search-guidance-hints.md) | 103 | M | feito | `records_for_products`, `catalog_for_matching`, 3 `HintKind`, `after_import(reviewed)`, textos |
 | 111 | [CLI leitura](111-cli-read-side.md) | 104, 108, 110 | M | feito | endereço em `mercados listar`/`consultar`, fallback IA, `comparar` 3 motivos, `tag --remover` |
 | 112 | [CLI review + revisar](112-cli-review-and-revisar.md) | 109, 110 | M | feito | `cli/_review.py`, `julius produtos revisar [--sim]` |
-| 113 | [CLI importar + revisão](113-cli-importar-review.md) | 112 | S | a fazer | `importar [--sim]` revisa produtos novos; `reviewed` nas dicas |
+| 113 | [CLI importar + revisão](113-cli-importar-review.md) | 112 | S | feito | `importar [--sim]` revisa produtos novos; `reviewed` nas dicas |
 | 114 | [e2e, docs, backfill](114-e2e-docs-backfill.md) | 101–113 | M | a fazer | `test_e2e.py` v2, `CLAUDE.md`, `README.md`, reimport dos HTMLs reais |
 
 Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum ticket L: o que ficaria L foi dividido (suggestions em 107/108; CLI em 111/112/113).

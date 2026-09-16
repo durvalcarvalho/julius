@@ -8,6 +8,7 @@ from rich.table import Table
 from rich.text import Text
 
 from julius import config
+from julius.cli import _review
 from julius.cli._common import console, error_console, fail, open_db
 from julius.cli._hints import print_hints
 from julius.domain.models import ImportResult, PriceRecord
@@ -20,6 +21,7 @@ _HIGHLIGHT_STYLE = {"lowest": "green", "highest": "red"}
 
 def import_receipts(
     files: Annotated[list[Path], typer.Argument(help="Arquivos HTML de NFC-e salvos da Receita/DF.")],
+    yes: Annotated[bool, typer.Option("--sim", "-y", help="Aplicar as sugestões da IA sem perguntar.")] = False,
 ) -> None:
     """Importa um ou mais recibos NFC-e para a base de preços."""
     parser = DFReceiptParser()
@@ -37,9 +39,24 @@ def import_receipts(
                 continue
             console.print(f"{path.name}: {result.new_items} itens novos, {result.existing_items} já existiam")
             results.append(result)
+
+        merged = _merge(results)
+        reviewed = False
+        if results and merged.new_product_ids:
+            settings = config.load()
+            client = HttpLlmClient.from_config(settings)
+            if client is not None:
+                try:
+                    interactive = not yes and _review._is_interactive()
+                    reviewed = _review.review_products(
+                        conn, settings, client, merged.new_product_ids, assume_yes=yes, interactive=interactive
+                    )
+                except Exception as error:
+                    error_console.print(f"IA: erro ao aplicar sugestões — {error}")
+                    reviewed = False
         if results:
             # Hints once per command, not per file: importing a folder must not repeat them.
-            print_hints(guidance.after_import(conn, _merge(results)))
+            print_hints(guidance.after_import(conn, merged, reviewed=reviewed))
     finally:
         conn.close()
     if failed:

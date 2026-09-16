@@ -54,6 +54,14 @@ def _stub_client(monkeypatch, client):
     monkeypatch.setattr(receipts_cli, "HttpLlmClient", Stub)
 
 
+def _enrich(items: list[dict], input_tokens: int = 1000, output_tokens: int = 500) -> LlmResponse:
+    return LlmResponse(json.dumps({"products": items}), input_tokens, output_tokens)
+
+
+def _merge(items: list[dict], input_tokens: int = 1000, output_tokens: int = 500) -> LlmResponse:
+    return LlmResponse(json.dumps({"pairs": items}), input_tokens, output_tokens)
+
+
 def test_importar_prints_per_file_summary():
     result = _import("qrcode.html")
     assert result.exit_code == 0, result.output
@@ -225,6 +233,118 @@ def test_importar_many_files_prints_hints_once():
     assert result.output.count("itens novos") == 3
     assert len(_hint_lines(result.output)) == 2
     assert "3 mercado(s)" in result.output
+
+
+def test_importar_reviews_new_products_when_ai_is_configured(monkeypatch):
+    _ai_env(monkeypatch)
+    fake = ScriptedLlmClient(
+        by_kind={"enrich": _enrich([{"id": 1, "readable_name": "Nome Legível", "tags": ["mercearia"], "content": None}])}
+    )
+    _stub_client(monkeypatch, fake)
+
+    result = _import("qrcode-2.html")
+
+    assert result.exit_code == 0, result.output
+    assert "Aplicado:" in result.output
+    listar = runner.invoke(app, ["produtos", "listar"]).output
+    assert "Nome Legível" in listar and "mercearia" in listar
+    assert "produtos revisar" not in result.output
+
+
+def test_importar_without_ai_prints_pending_review_hint():
+    result = _import("qrcode-2.html")
+    assert result.exit_code == 0
+    assert "Dica: 1 produto(s) novo(s) sem categoria" in result.output
+    assert "julius produtos revisar" in result.output
+
+
+def test_importar_reimport_does_not_call_ai(monkeypatch):
+    _ai_env(monkeypatch)
+    fake = ScriptedLlmClient(
+        by_kind={"enrich": _enrich([{"id": 1, "readable_name": "X", "tags": ["mercearia"], "content": None}])}
+    )
+    _stub_client(monkeypatch, fake)
+    _import("qrcode-2.html")
+    fake.calls.clear()
+
+    _import("qrcode-2.html")
+
+    assert fake.calls == []
+
+
+def test_importar_sim_applies_ambiguous_tag_without_prompt(monkeypatch):
+    _ai_env(monkeypatch)
+    fake = ScriptedLlmClient(
+        by_kind={"enrich": _enrich([{"id": 1, "readable_name": "X", "tags": ["mercearia", "bebidas"], "content": None}])}
+    )
+    _stub_client(monkeypatch, fake)
+
+    result = runner.invoke(app, ["importar", str(FIXTURES / "qrcode-2.html"), "--sim"])
+
+    assert result.exit_code == 0, result.output
+    assert "mercearia" in runner.invoke(app, ["produtos", "listar"]).output
+
+
+def test_importar_multiple_files_reviews_once_at_the_end(monkeypatch):
+    _ai_env(monkeypatch)
+    items = [{"id": i, "readable_name": f"N{i}", "tags": ["mercearia"], "content": None} for i in range(1, 21)]
+    fake = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich(items),
+            "merge": _merge([{"id": 1, "rationale": "mesma variedade", "same_product": True, "confidence": 0.9}]),
+        }
+    )
+    _stub_client(monkeypatch, fake)
+
+    result = runner.invoke(app, ["importar", str(FIXTURES / "qrcode.html"), str(FIXTURES / "qrcode-3.html")])
+
+    assert result.exit_code == 0, result.output
+    assert len(fake.calls) <= 2
+    assert result.output.count("Aplicado:") == 1
+
+
+def test_importar_ai_failure_keeps_import_and_exit_0(monkeypatch):
+    _ai_env(monkeypatch)
+    error = LlmResponse("", 0, 0, error="HTTP 500")
+    _stub_client(monkeypatch, ScriptedLlmClient(by_kind={"enrich": [error, error]}))
+
+    result = _import("qrcode-2.html")
+
+    assert result.exit_code == 0, result.output
+    assert "1 itens novos" in result.output
+    assert "IA não respondeu" in result.output
+    assert "produto(s) novo(s) sem categoria" in result.output
+
+
+def test_importar_bad_file_still_exits_1_after_review(monkeypatch, tmp_path):
+    _ai_env(monkeypatch)
+    fake = ScriptedLlmClient(
+        by_kind={"enrich": _enrich([{"id": 1, "readable_name": "X", "tags": ["mercearia"], "content": None}])}
+    )
+    _stub_client(monkeypatch, fake)
+    missing = tmp_path / "nao-existe.html"
+
+    result = runner.invoke(app, ["importar", str(missing), str(FIXTURES / "qrcode-2.html")])
+
+    assert result.exit_code == 1
+    assert "Aplicado:" in result.output
+    assert len(fake.calls) >= 1
+
+
+def test_importar_package_size_hint_only_without_review(monkeypatch, tmp_path):
+    monkeypatch.setenv("JULIUS_DB", str(tmp_path / "a.db"))
+    without_ai = _import("qrcode-5.html")
+    assert "definir-conteudo" in without_ai.output or "sem categoria" in without_ai.output
+
+    monkeypatch.setenv("JULIUS_DB", str(tmp_path / "b.db"))
+    _ai_env(monkeypatch)
+    items = [{"id": i, "readable_name": f"N{i}", "tags": ["mercearia"], "content": None} for i in range(1, 40)]
+    _stub_client(monkeypatch, ScriptedLlmClient(by_kind={"enrich": _enrich(items)}))
+
+    with_ai = _import("qrcode-5.html")
+
+    assert "definir-conteudo" not in with_ai.output
+    assert "sem categoria" not in with_ai.output
 
 
 def test_importar_missing_file_hint_in_stderr(tmp_path):
