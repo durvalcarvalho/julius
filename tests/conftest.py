@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -26,6 +27,22 @@ def _clean_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Isola os testes de credenciais reais de IA exportadas no shell do usuário."""
     for name in AI_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
+
+
+def copied_fixtures(tmp_path: Path) -> Path:
+    """`julius importar` archives the file it reads, so a CLI test must never hand it the
+    repository's own fixtures — it would move them out of the working tree."""
+    target = tmp_path / "fixtures"
+    shutil.copytree(FIXTURES_DIR, target)
+    return target
+
+
+def restore_fixture(target_dir: Path, name: str) -> Path:
+    """Puts a fresh copy back: importing archives the file, so a second import of the same
+    receipt needs the file to exist again (the idempotency guarantee is about the database)."""
+    path = target_dir / name
+    shutil.copy2(FIXTURES_DIR / name, path)
+    return path
 
 
 @pytest.fixture

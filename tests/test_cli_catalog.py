@@ -1,10 +1,12 @@
 import re
+import sys
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
 import julius.cli.products as products_cli
+from conftest import copied_fixtures, restore_fixture
 from _fakes import ScriptedLlmClient
 from julius.cli import app
 from julius.infra.llm_client import LlmResponse
@@ -17,10 +19,11 @@ runner = CliRunner()
 def isolated_db(tmp_path, monkeypatch):
     monkeypatch.setenv("JULIUS_DB", str(tmp_path / "prices.db"))
     monkeypatch.setenv("COLUMNS", "200")
+    monkeypatch.setattr(sys.modules[__name__], "FIXTURES", copied_fixtures(tmp_path))
 
 
 def _import(*names: str):
-    result = runner.invoke(app, ["importar", *(str(FIXTURES / name) for name in names)])
+    result = runner.invoke(app, ["importar", *(str(restore_fixture(FIXTURES, name)) for name in names)])
     assert result.exit_code == 0, result.output
     return result
 

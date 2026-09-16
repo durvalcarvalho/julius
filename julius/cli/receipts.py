@@ -13,7 +13,7 @@ from julius.cli import _review
 from julius.cli._common import HIGHLIGHT_STYLE, console, error_console, fail, money, open_db
 from julius.cli._hints import print_hints
 from julius.domain.models import ImportResult, PriceExtreme, PriceRecord, SearchOutcome
-from julius.infra import ai_log
+from julius.infra import ai_log, receipt_files
 from julius.infra.llm_client import HttpLlmClient
 from julius.parsers.df import DFReceiptParser
 from julius.services import (
@@ -30,10 +30,20 @@ MAX_SIGNAL_LINES = 5
 
 
 def import_receipts(
-    files: Annotated[list[Path], typer.Argument(help="Arquivos HTML de NFC-e salvos da Receita/DF.")],
+    files: Annotated[
+        Optional[list[Path]],
+        typer.Argument(
+            help="Arquivos HTML de NFC-e salvos da Receita/DF. Sem argumento, importa os HTML da pasta de entrada."
+        ),
+    ] = None,
     yes: Annotated[bool, typer.Option("--sim", "-y", help="Aplicar as sugestões da IA sem perguntar.")] = False,
 ) -> None:
     """Importa um ou mais recibos NFC-e para a base de preços."""
+    settings = config.load()
+    if not files:
+        files = _inbox_files(settings.inbox_path)
+        if files is None:
+            return
     parser = DFReceiptParser()
     failed = False
     results: list[ImportResult] = []
@@ -47,13 +57,13 @@ def import_receipts(
                 error_console.print(f"{path.name}: erro — {error}")
                 print_hints(guidance.for_import_error(error, path), to_stderr=True)
                 continue
-            console.print(f"{path.name}: {result.new_items} itens novos, {result.existing_items} já existiam")
+            filed = _archive(path, settings, result)
+            console.print(f"{path.name}: {result.new_items} itens novos, {result.existing_items} já existiam{filed}")
             results.append(result)
 
         merged = _merge(results)
         reviewed = False
         if results and merged.new_product_ids:
-            settings = config.load()
             client = HttpLlmClient.from_config(settings)
             if client is not None:
                 try:
@@ -141,6 +151,36 @@ def export(
     finally:
         conn.close()
     console.print(f"{count} linhas exportadas para {output}")
+
+
+def _inbox_files(inbox_path: Path) -> list[Path] | None:
+    """The HTML files waiting in the inbox, or None (with a message) when there is nothing to do.
+
+    `glob`, never `rglob`: it is the non-recursion that makes an archived receipt disappear from
+    the scan, so `julius importar` means "import what is new".
+    """
+    if not inbox_path.is_dir():
+        console.print("A pasta de entrada não existe. Crie com: make inbox")
+        return None
+    files = sorted(inbox_path.glob("*.html"))
+    if not files:
+        console.print(f"Nada para importar em {inbox_path}.")
+        return None
+    return files
+
+
+def _archive(path: Path, settings, result: ImportResult) -> str:
+    """Only runs after a successful import, so a file that failed stays where it is."""
+    try:
+        archived = receipt_files.archive(
+            path, settings.archive_path, purchased_at=result.purchased_at, access_key=result.access_key
+        )
+    except (OSError, ValueError) as error:
+        error_console.print(f"{path.name}: importado, mas não foi possível arquivar — {error}")
+        return ""
+    # The `<stem>_files` sidecar is left in place on purpose: deleting it is the system's only
+    # destructive step and is still pending the user's decision (receipt_files.discard_sidecar).
+    return f" · arquivado como {archived.name}"
 
 
 def _print_new_extremes(conn, access_keys: list[str]) -> None:

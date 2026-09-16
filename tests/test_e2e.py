@@ -3,6 +3,8 @@
 import csv
 import json
 import re
+import shutil
+import sys
 from pathlib import Path
 
 import pytest
@@ -10,6 +12,7 @@ from typer.testing import CliRunner
 
 import julius.cli.products as products_cli
 import julius.cli.receipts as receipts_cli
+from conftest import copied_fixtures, restore_fixture
 from _fakes import ScriptedLlmClient
 from julius.cli import app
 from julius.infra import db
@@ -26,6 +29,7 @@ runner = CliRunner()
 def isolated_env(tmp_path, monkeypatch):
     monkeypatch.setenv("JULIUS_DB", str(tmp_path / "prices.db"))
     monkeypatch.setenv("COLUMNS", "200")
+    monkeypatch.setattr(sys.modules[__name__], "FIXTURES", copied_fixtures(tmp_path))
     for name in (
         "JULIUS_AI_API_KEY",
         "JULIUS_AI_BASE_URL",
@@ -42,7 +46,7 @@ def _run(*args: str, **kwargs):
 
 
 def _import(*names: str):
-    result = _run("importar", *(str(FIXTURES / name) for name in names))
+    result = _run("importar", *(str(restore_fixture(FIXTURES, name)) for name in names))
     assert result.exit_code == 0, result.output
     return result
 
@@ -193,7 +197,7 @@ def test_v2_import_review_search_by_tag(monkeypatch):
     fake = ScriptedLlmClient(by_kind={"enrich": _enrich(enrich_payload)})
     _stub_client(monkeypatch, fake)
 
-    result = _run("importar", *(str(FIXTURES / name) for name in _ALL_FIXTURES), "--sim")
+    result = _run("importar", *(str(restore_fixture(FIXTURES, name)) for name in _ALL_FIXTURES), "--sim")
     assert result.exit_code == 0, result.output
 
     listar = _run("produtos", "listar").output
@@ -249,10 +253,10 @@ def test_v2_reimport_is_idempotent_and_silent(monkeypatch):
     _ai_env(monkeypatch)
     fake = ScriptedLlmClient(by_kind={"enrich": _enrich([{"id": 1, "readable_name": "X", "tags": ["carnes"], "content": None}])})
     _stub_client(monkeypatch, fake)
-    _run("importar", *(str(FIXTURES / name) for name in _ALL_FIXTURES), "--sim")
+    _run("importar", *(str(restore_fixture(FIXTURES, name)) for name in _ALL_FIXTURES), "--sim")
     fake.calls.clear()
 
-    result = _run("importar", *(str(FIXTURES / name) for name in _ALL_FIXTURES))
+    result = _run("importar", *(str(restore_fixture(FIXTURES, name)) for name in _ALL_FIXTURES))
 
     assert result.exit_code == 0, result.output
     assert result.output.count("0 itens novos") == 5
@@ -288,7 +292,7 @@ def test_v2_ai_log_has_one_line_per_attempt(monkeypatch, tmp_path):
         }
     )
     _stub_client(monkeypatch, fake)
-    _run("importar", str(FIXTURES / "qrcode.html"), "--sim")
+    _run("importar", str(restore_fixture(FIXTURES, "qrcode.html")), "--sim")
     _run("consultar", "carnes")
 
     log_path = tmp_path / "ai_calls.jsonl"
@@ -355,3 +359,32 @@ def test_e2e_import_twice_reports_lower_price(monkeypatch):
     signal = next(line for line in result.output.splitlines() if "↓" in line)
     assert "Tomate Italiano União" in signal and "R$ 11,89" in signal
     assert "menor preço já pago" in signal
+
+
+def test_e2e_import_from_inbox_end_to_end(tmp_path):
+    inbox = tmp_path / "entrada"
+    inbox.mkdir()
+    shutil.copy2(FIXTURES / "qrcode-3.html", inbox / "qrcode.html")
+
+    result = _run("importar")
+
+    assert result.exit_code == 0, result.output
+    assert "6 itens novos" in result.output
+    assert list(inbox.glob("*.html")) == []
+    (archived,) = list((inbox / "importados").iterdir())
+    assert archived.name.startswith("2026-09-07_")
+    assert "TOMATE" in _run("produtos", "listar").output
+
+
+def test_e2e_import_from_inbox_is_idempotent(tmp_path):
+    inbox = tmp_path / "entrada"
+    inbox.mkdir()
+    shutil.copy2(FIXTURES / "qrcode-3.html", inbox / "qrcode.html")
+    assert _run("importar").exit_code == 0
+
+    again = _run("importar")
+
+    assert again.exit_code == 0, again.output
+    assert "Nada para importar" in again.output
+    conn = db.connect(tmp_path / "prices.db")
+    assert conn.execute("SELECT count(*) FROM prices").fetchone()[0] == 6

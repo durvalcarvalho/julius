@@ -77,7 +77,15 @@ Tomate por quilo e tomate em bandeja nunca vão para a mesma tabela — e o meno
 1. Aponte a câmera para o QR code do cupom. Ele abre uma página da Receita (no DF: `ww1.receita.fazenda.df.gov.br/...`).
 2. Passe pelo captcha, se aparecer.
 3. No navegador, **Salvar página como…** → qualquer opção serve (só HTML ou página completa). Julius lê apenas o `.html`; a pasta `_files` que vem junto pode ser apagada.
-4. Guarde os arquivos onde quiser. Sugestão: `~/.local/share/julius/entrada/`. Depois: `julius importar ~/.local/share/julius/entrada/*.html`.
+4. Salve dentro de `entrada/`, na raiz do repo, e rode `julius importar` sem mais nada.
+
+```bash
+make inbox        # uma vez: cria entrada/ como atalho para ~/.local/share/julius/entrada
+# Ctrl+S do navegador salvando em entrada/
+julius importar   # importa tudo que está lá e arquiva cada arquivo importado
+```
+
+`entrada/` é um symlink para a pasta canônica em `~/.local/share/julius/entrada`, então o arquivo já cai no lugar certo — não há nada a mover depois. Cada arquivo importado com sucesso vai para `entrada/importados/<data>_<chave>.html` (renomear é obrigatório: o navegador salva toda nota como `qrcode.html`). A pasta de entrada fica limpa e a próxima varredura só vê o que é novo.
 
 Por que não baixar direto pela URL? Porque a página passa por captcha — automatizar isso seria frágil e provavelmente contra os termos do site. Salvar o HTML leva cinco segundos e funciona sempre.
 
@@ -109,12 +117,14 @@ Todos os comandos têm `--help`. Nomes em português porque são a interface; o 
 ### `importar` — trazer cupons para dentro
 
 ```bash
-julius importar cupom1.html cupom2.html          # vários de uma vez
-julius importar ~/.local/share/julius/entrada/*.html
+julius importar                                  # sem argumento: varre entrada/*.html
+julius importar cupom1.html cupom2.html          # ou vários caminhos de uma vez
 julius importar cupom.html --sim                 # aplica sugestões da IA sem perguntar
 ```
 
-- Reporta por arquivo: `cupom1.html: 20 itens novos, 0 já existiam`.
+- Sem argumento, importa os `.html` da pasta de entrada (`entrada/`, veja `make inbox` acima). A varredura não é recursiva, então `entrada/importados/` fica invisível — é isso que faz `julius importar` significar "importe o que é novo".
+- Reporta por arquivo: `cupom1.html: 20 itens novos, 0 já existiam · arquivado como 2026-09-12_5326….html`.
+- **Arquivo importado com sucesso é movido** para `entrada/importados/`, com o caminho passado na mão também. Arquivo que falhou fica onde está, para você corrigir e tentar de novo. Se o arquivamento falhar, o aviso sai em `stderr` e o import continua valendo — o dado já está no banco.
 - Se um arquivo falhar (não existe, HTML fora do formato, unidade desconhecida), imprime o erro em `stderr`, **continua os outros** e termina com código 1.
 - Um arquivo com problema nunca grava nada, nem parcialmente — o parse acontece inteiro antes de qualquer escrita.
 - Guarda também o endereço do mercado (impresso no cupom), pra aparecer depois em `mercados listar`/`consultar`.

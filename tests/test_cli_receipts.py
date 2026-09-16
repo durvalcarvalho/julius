@@ -1,12 +1,15 @@
 import json
 import os
 import re
+import shutil
+import sys
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
 import julius.cli.receipts as receipts_cli
+from conftest import copied_fixtures, restore_fixture
 from _fakes import ScriptedLlmClient
 from julius.cli import app
 from julius.domain.models import PriceExtreme
@@ -21,10 +24,11 @@ runner = CliRunner()
 def isolated_db(tmp_path, monkeypatch):
     monkeypatch.setenv("JULIUS_DB", str(tmp_path / "prices.db"))
     monkeypatch.setenv("COLUMNS", "200")
+    monkeypatch.setattr(sys.modules[__name__], "FIXTURES", copied_fixtures(tmp_path))
 
 
 def _import(*names: str):
-    return runner.invoke(app, ["importar", *(str(FIXTURES / name) for name in names)])
+    return runner.invoke(app, ["importar", *(str(restore_fixture(FIXTURES, name)) for name in names)])
 
 
 def _hint_lines(text: str) -> list[str]:
@@ -613,3 +617,112 @@ def test_search_tolerates_bad_purchased_at():
 
     assert result.exit_code == 0, result.output
     assert "PICANHA" in result.output
+
+
+def _inbox(tmp_path) -> Path:
+    path = tmp_path / "entrada"
+    path.mkdir(exist_ok=True)
+    return path
+
+
+def _into_inbox(tmp_path, *names: str) -> Path:
+    inbox = _inbox(tmp_path)
+    for name in names:
+        shutil.copy2(Path(__file__).parent / "fixtures" / name, inbox / name)
+    return inbox
+
+
+def test_import_without_args_scans_inbox(tmp_path):
+    _into_inbox(tmp_path, "qrcode-2.html", "qrcode-3.html")
+
+    result = runner.invoke(app, ["importar"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.index("qrcode-2.html") < result.output.index("qrcode-3.html")
+    assert "1 itens novos" in result.output and "6 itens novos" in result.output
+
+
+def test_import_without_args_missing_inbox_message():
+    result = runner.invoke(app, ["importar"])
+    assert result.exit_code == 0, result.output
+    assert "make inbox" in result.output
+    assert runner.invoke(app, ["produtos", "listar"]).output.startswith("Nenhum produto")
+
+
+def test_import_without_args_empty_inbox_message(tmp_path):
+    _inbox(tmp_path)
+    result = runner.invoke(app, ["importar"])
+    assert result.exit_code == 0, result.output
+    assert "Nada para importar" in result.output
+
+
+def test_import_without_args_ignores_archive_subdir(tmp_path):
+    inbox = _into_inbox(tmp_path, "qrcode-2.html")
+    archive = inbox / "importados"
+    archive.mkdir()
+    shutil.move(str(inbox / "qrcode-2.html"), archive / "2026-09-05_key.html")
+
+    result = runner.invoke(app, ["importar"])
+
+    assert result.exit_code == 0, result.output
+    assert "Nada para importar" in result.output
+
+
+def test_import_archives_on_success(tmp_path):
+    inbox = _into_inbox(tmp_path, "qrcode-2.html")
+
+    result = runner.invoke(app, ["importar"])
+
+    assert result.exit_code == 0, result.output
+    assert "arquivado como" in result.output
+    assert not (inbox / "qrcode-2.html").exists()
+    (archived,) = list((inbox / "importados").iterdir())
+    assert archived.name.startswith("2026-09-05_") and archived.name.endswith(".html")
+
+
+def test_import_failure_keeps_file_in_place(tmp_path):
+    inbox = _inbox(tmp_path)
+    (inbox / "lixo.html").write_text("<html><body>nada aqui</body></html>", encoding="utf-8")
+
+    result = runner.invoke(app, ["importar"])
+
+    assert result.exit_code == 1
+    assert (inbox / "lixo.html").exists()
+    assert not (inbox / "importados").exists()
+
+
+def test_import_batch_partial_failure_archives_the_good_ones(tmp_path):
+    inbox = _into_inbox(tmp_path, "qrcode-2.html")
+    (inbox / "lixo.html").write_text("<html><body>nada aqui</body></html>", encoding="utf-8")
+
+    result = runner.invoke(app, ["importar"])
+
+    assert result.exit_code == 1
+    assert (inbox / "lixo.html").exists()
+    assert not (inbox / "qrcode-2.html").exists()
+    assert len(list((inbox / "importados").iterdir())) == 1
+
+
+def test_import_archive_failure_does_not_fail_command(tmp_path):
+    inbox = _into_inbox(tmp_path, "qrcode-2.html")
+    (inbox / "importados").write_text("um arquivo no lugar da pasta", encoding="utf-8")
+
+    result = runner.invoke(app, ["importar"])
+
+    assert result.exit_code == 0, result.output
+    assert "não foi possível arquivar" in result.stderr
+    assert runner.invoke(app, ["consultar", "picanha"]).exit_code == 0
+    assert "1 itens novos" in result.output
+
+
+def test_import_with_explicit_paths_still_archives(tmp_path):
+    loose = tmp_path / "Downloads"
+    loose.mkdir()
+    shutil.copy2(Path(__file__).parent / "fixtures" / "qrcode-2.html", loose / "qrcode.html")
+
+    result = runner.invoke(app, ["importar", str(loose / "qrcode.html")])
+
+    assert result.exit_code == 0, result.output
+    assert "arquivado como" in result.output
+    assert not (loose / "qrcode.html").exists()
+    assert len(list((tmp_path / "entrada" / "importados").iterdir())) == 1
