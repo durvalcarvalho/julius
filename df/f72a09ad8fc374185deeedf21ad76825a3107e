@@ -1,0 +1,34 @@
+docs/requirements/import-price-signal.md
+  s_3d5b8f697b588e::t_7d7ef90af923e8 3-4
+  s_3d5b8f697b588e::t_0dbb0ba35714fe 9-10
+  s_3d5b8f697b588e::t_d917a563cdf5c1 24
+  s_3d5b8f697b588e::t_9c8ac3d27e5151 1-2,5-8,11-16,19-23,25-64
+  s_3d5b8f697b588e::t_0faadc71a7e1bd 17-18
+docs/requirements/receipt-inbox.md
+  s_3d5b8f697b588e::t_baf2e347033783 1-2,5-66
+  s_3d5b8f697b588e::t_d3a6bc4c7cb921 3-4
+docs/requirements/comparability-closure.md
+  s_3d5b8f697b588e::t_9d828237030200 1-156
+docs/requirements/auto-merge-clusters.md
+  s_3d5b8f697b588e::t_f24ef53b5f1da0 1-2,5-66
+  s_3d5b8f697b588e::t_f36c917cd251ce 3-4
+docs/requirements/cross-store-price-comparison.md
+  s_3d5b8f697b588e::t_3b7d320f4671c9 1-2,5-83
+  s_3d5b8f697b588e::t_c07a5a052c4d41 3-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dff72a09ad8fc374185deeedf21ad76825a3107e",
+  "prompts": {},
+  "sessions": {
+    "s_3d5b8f697b588e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d98fe62-062a-45a0-a424-fff1489f9973",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
