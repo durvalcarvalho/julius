@@ -69,6 +69,7 @@ class PriceRecord:
     price_per_content: float | None = None
     content_unit: ContentUnit | None = None
     highlight: Highlight | None = None
+    store_address: str | None = None
 
 
 @dataclass(frozen=True)

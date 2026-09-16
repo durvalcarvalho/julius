@@ -104,6 +104,22 @@ def test_prices_for_products_empty_ids_returns_empty(conn):
     assert prices.prices_for_products(conn, []) == []
 
 
+def test_prices_for_products_carry_store_address(conn):
+    stores.ensure_store(conn, STORE_CNPJ, "FL 3 COSTA MULTICANAL S A", "QUADRA QE 30, GUARA II, BRASILIA, DF")
+    _insert(conn, _receipt())
+    (product_id, _), = products.product_names(conn)
+
+    (record,) = prices.prices_for_products(conn, [product_id])
+
+    assert record.store_address == "QUADRA QE 30, GUARA II, BRASILIA, DF"
+
+
+def test_prices_for_products_address_is_none_for_store_without_one(conn):
+    _insert(conn, _receipt())
+    (product_id, _), = products.product_names(conn)
+    assert prices.prices_for_products(conn, [product_id])[0].store_address is None
+
+
 def test_export_rows_has_exact_columns_in_order_and_is_sorted(conn):
     _insert(conn, _receipt(KEY_B, "2026-09-12T13:09:16", STORE_CNPJ, _item(index=2), _item(index=1)))
     _insert(conn, _receipt(KEY_A, "2026-09-01T10:00:00"))

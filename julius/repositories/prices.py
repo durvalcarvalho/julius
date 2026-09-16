@@ -9,6 +9,7 @@ EXPORT_COLUMNS = (
     "purchased_at",
     "store_cnpj",
     "store_nickname",
+    "store_address",
     "product_id",
     "canonical_name",
     "product_code",
@@ -22,9 +23,9 @@ EXPORT_COLUMNS = (
 )
 
 _EXPORT_SQL = """
-SELECT p.purchased_at, p.store_cnpj, s.nickname AS store_nickname, p.product_id, pr.canonical_name,
-       p.product_code, p.description, p.quantity, p.unit, p.unit_price, p.total_price,
-       p.access_key, p.item_index
+SELECT p.purchased_at, p.store_cnpj, s.nickname AS store_nickname, s.address AS store_address,
+       p.product_id, pr.canonical_name, p.product_code, p.description, p.quantity, p.unit,
+       p.unit_price, p.total_price, p.access_key, p.item_index
 FROM prices p
 JOIN stores s ON s.cnpj = p.store_cnpj
 JOIN products pr ON pr.id = p.product_id
@@ -62,7 +63,7 @@ def prices_for_products(conn: sqlite3.Connection, product_ids: Sequence[int]) ->
     placeholders = ",".join("?" * len(product_ids))
     rows = conn.execute(
         f"""
-        SELECT p.product_id, pr.canonical_name, s.nickname, p.unit, p.unit_price, p.purchased_at,
+        SELECT p.product_id, pr.canonical_name, s.nickname, s.address, p.unit, p.unit_price, p.purchased_at,
                pr.content_quantity, pr.content_unit
         FROM prices p
         JOIN stores s ON s.cnpj = p.store_cnpj
@@ -82,6 +83,7 @@ def prices_for_products(conn: sqlite3.Connection, product_ids: Sequence[int]) ->
             purchased_at=row["purchased_at"],
             price_per_content=None if row["content_quantity"] is None else row["unit_price"] / row["content_quantity"],
             content_unit=row["content_unit"],
+            store_address=row["address"],
         )
         for row in rows
     ]
