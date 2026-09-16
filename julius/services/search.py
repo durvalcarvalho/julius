@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import replace
 
 from rapidfuzz import fuzz, process
@@ -37,9 +38,13 @@ def search_prices(
 ) -> list[PriceRecord]:
     if term is None and tag is None:
         raise ValueError("term or tag is required")
+    return records_for_products(conn, sorted(_candidate_ids(conn, term, tag)), limit)
+
+
+def records_for_products(conn: sqlite3.Connection, product_ids: Sequence[int], limit: int) -> list[PriceRecord]:
     if limit < 1:
         raise ValueError(f"limit must be at least 1, got {limit}")
-    records = prices.prices_for_products(conn, sorted(_candidate_ids(conn, term, tag)))
+    records = prices.prices_for_products(conn, product_ids)
     groups: dict[str, list[PriceRecord]] = {}
     for record in records:
         groups.setdefault(record.unit, []).append(record)
@@ -47,6 +52,11 @@ def search_prices(
     for unit in sorted(groups):
         result.extend(_highlight_and_trim(groups[unit], limit))
     return result
+
+
+def catalog_for_matching(conn: sqlite3.Connection) -> list[tuple[int, str, tuple[str, ...]]]:
+    rows = [(product.id, product.canonical_name, product.tags) for product in products.list_products(conn)]
+    return sorted(rows, key=lambda row: row[0])
 
 
 def closest_names(conn: sqlite3.Connection, term: str, limit: int = 3) -> list[tuple[str, int]]:

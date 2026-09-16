@@ -7,7 +7,7 @@ from julius.parsers.df import DFReceiptParser
 from julius.repositories.prices import insert_price
 from julius.repositories.products import add_tag, product_names, resolve_product_id
 from julius.repositories.stores import ensure_store
-from julius.services.search import closest_names, search_prices
+from julius.services.search import catalog_for_matching, closest_names, records_for_products, search_prices
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 STORE = "00000000000001"
@@ -146,3 +146,23 @@ def test_accent_and_case_insensitive(conn):
 def test_no_prices_for_matched_product_returns_empty(conn):
     _product(conn, "FEIJAO PRETO 1KG", "1")
     assert search_prices(conn, "feijao") == []
+
+
+def test_records_for_products_highlights_per_unit_and_trims_like_search_prices(conn):
+    _import(conn, "qrcode.html")
+    ids = {row.product_id for row in search_prices(conn, "picanha")}
+    assert records_for_products(conn, sorted(ids), 20) == search_prices(conn, "picanha")
+
+
+def test_records_for_products_rejects_limit_below_one(conn):
+    with pytest.raises(ValueError, match="limit"):
+        records_for_products(conn, [1], 0)
+
+
+def test_catalog_for_matching_returns_id_name_tags_sorted_by_id(conn):
+    _import(conn, "qrcode.html")
+    cebola = _id_of(conn, "CEBOLA")
+    add_tag(conn, cebola, "hortifruti")
+    catalog = catalog_for_matching(conn)
+    assert [row[0] for row in catalog] == sorted(row[0] for row in catalog)
+    assert next(row for row in catalog if row[0] == cebola)[1:] == ("CEBOLA UNIAO kg", ("hortifruti",))

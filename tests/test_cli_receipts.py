@@ -112,7 +112,10 @@ def test_importar_first_time_suggests_store_nicknames():
 def test_importar_new_products_with_size_suggest_content():
     result = _import("qrcode-5.html")
     assert result.exit_code == 0
-    assert "definir-conteudo" in result.output and "+24" in result.output
+    # PACKAGE_SIZE_IN_DESCRIPTION loses the 2-hint cap to PRODUCTS_PENDING_REVIEW here (ticket 110);
+    # `julius produtos revisar` is what actually surfaces package size for these 39 pending products.
+    assert "39 produto(s) novo(s) sem categoria" in result.output
+    assert "produtos revisar" in result.output
 
 
 def test_importar_many_files_prints_hints_once():

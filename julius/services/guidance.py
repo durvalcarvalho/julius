@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import ParamSpec
 
 from julius.config import Config
-from julius.domain.models import Hint, ImportResult, PriceRecord
+from julius.domain.models import Hint, ImportResult, PriceRecord, Store
 from julius.domain.normalization import UnknownUnitError
 from julius.parsers import ReceiptParseError
 from julius.repositories import products, stores
@@ -56,22 +56,62 @@ def after_search(conn: sqlite3.Connection, term: str | None, tag: str | None, re
 
 
 @_hint_producer
-def after_import(conn: sqlite3.Connection, result: ImportResult) -> list[Hint]:
+def after_import(conn: sqlite3.Connection, result: ImportResult, *, reviewed: bool = False) -> list[Hint]:
     hints: list[Hint] = []
+    if not reviewed:
+        pending = [
+            product
+            for product in map(functools.partial(products.get_product, conn), result.new_product_ids)
+            if product and not product.tags
+        ]
+        if pending:
+            hints.append(Hint("PRODUCTS_PENDING_REVIEW", (str(len(pending)),)))
+    same_chain = _same_chain_hint(conn)
+    if same_chain:
+        hints.append(same_chain)
     unnamed = sum(1 for store in stores.list_stores(conn) if store.nickname == store.legal_name)
     if unnamed:
         hints.append(Hint("FIRST_IMPORT_NAME_STORES", (str(unnamed),)))
-    sized = [
-        product
-        for product in map(functools.partial(products.get_product, conn), result.new_product_ids)
-        if product and product.content_quantity is None and PACKAGE_SIZE.search(product.canonical_name)
-    ]
-    if sized:
-        details = [f"{product.id} · {product.canonical_name}" for product in sized[:_MAX_NAMED_PRODUCTS]]
-        if len(sized) > _MAX_NAMED_PRODUCTS:
-            details.append(f"+{len(sized) - _MAX_NAMED_PRODUCTS}")
-        hints.append(Hint("PACKAGE_SIZE_IN_DESCRIPTION", tuple(details)))
+    if not reviewed:
+        sized = [
+            product
+            for product in map(functools.partial(products.get_product, conn), result.new_product_ids)
+            if product and product.content_quantity is None and PACKAGE_SIZE.search(product.canonical_name)
+        ]
+        if sized:
+            details = [f"{product.id} · {product.canonical_name}" for product in sized[:_MAX_NAMED_PRODUCTS]]
+            if len(sized) > _MAX_NAMED_PRODUCTS:
+                details.append(f"+{len(sized) - _MAX_NAMED_PRODUCTS}")
+            hints.append(Hint("PACKAGE_SIZE_IN_DESCRIPTION", tuple(details)))
     return hints
+
+
+def _same_chain_hint(conn: sqlite3.Connection) -> Hint | None:
+    groups: dict[str, list[Store]] = {}
+    for store in stores.list_stores(conn):
+        groups.setdefault(store.cnpj[:8], []).append(store)
+    for radical in sorted(groups):
+        group = groups[radical]
+        if len(group) >= 2 and any(store.nickname == store.legal_name for store in group):
+            ordered = sorted(group, key=lambda store: store.cnpj)[:_MAX_NAMED_PRODUCTS]
+            details = tuple(f"{store.cnpj} — {store.address or store.legal_name}" for store in ordered)
+            return Hint("SAME_CHAIN_BRANCHES", details)
+    return None
+
+
+@_hint_producer
+def after_ai_fallback(records: list[PriceRecord]) -> list[Hint]:
+    if not records:
+        return []
+    seen: list[tuple[int, str]] = []
+    for record in records:
+        pair = (record.product_id, record.canonical_name)
+        if pair not in seen:
+            seen.append(pair)
+    details = [f"{product_id} · {name}" for product_id, name in seen[:_MAX_NAMED_PRODUCTS]]
+    if len(seen) > _MAX_NAMED_PRODUCTS:
+        details.append(f"+{len(seen) - _MAX_NAMED_PRODUCTS}")
+    return [Hint("FOUND_VIA_AI", tuple(details))]
 
 
 @_hint_producer

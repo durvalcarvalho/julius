@@ -13,8 +13,14 @@ def test_print_hints_formats_details_and_prefix(capsys):
     _hints.print_hints([Hint("NO_MATCH_DID_YOU_MEAN", ("PICANHA", "FRALDINHA"))])
     out = capsys.readouterr().out
     assert out.startswith("Dica: ")
-    assert "PICANHA, FRALDINHA" in out
+    assert "PICANHA · FRALDINHA" in out
     assert out.count("Dica:") == 1
+
+
+def test_new_hint_texts_contain_their_commands():
+    assert "mercados renomear" in _hints.TEXTS["SAME_CHAIN_BRANCHES"]
+    assert "produtos revisar" in _hints.TEXTS["PRODUCTS_PENDING_REVIEW"]
+    assert "produtos renomear" in _hints.TEXTS["FOUND_VIA_AI"]
 
 
 def test_print_hints_to_stderr_and_empty_details_say_none(capsys):

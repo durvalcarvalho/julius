@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from julius.cli._common import console, error_console
 from julius.domain.models import Hint, HintKind
 
-# {details} is the hint's details joined by ", " ("nenhuma" when empty). Only source of hint wording.
+# {details} is the hint's details joined by " · " ("nenhuma" when empty). Only source of hint wording.
 TEXTS: dict[HintKind, str] = {
     "NO_RECEIPTS_IMPORTED": "Nenhum recibo importado ainda. Comece com: julius importar ARQUIVO.html",
     "NO_MATCH_DID_YOU_MEAN": "Nenhum produto bate com esse nome. Parecidos: {details}",
@@ -38,6 +38,18 @@ TEXTS: dict[HintKind, str] = {
         "Pra ter a opinião da IA, defina JULIUS_AI_API_KEY, JULIUS_AI_BASE_URL, JULIUS_AI_MODEL, "
         "JULIUS_AI_INPUT_PRICE_USD_PER_1M e JULIUS_AI_OUTPUT_PRICE_USD_PER_1M (ver README)."
     ),
+    "SAME_CHAIN_BRANCHES": (
+        "Filiais da mesma rede: {details}. Dê apelidos que digam onde fica: "
+        'julius mercados renomear CNPJ "Rede — Bairro"'
+    ),
+    "PRODUCTS_PENDING_REVIEW": (
+        "{details} produto(s) novo(s) sem categoria. Nome legível, categoria e conteúdo com ajuda da IA: "
+        "julius produtos revisar"
+    ),
+    "FOUND_VIA_AI": (
+        "Encontrado pela IA, não pelo nome: {details}. Pra achar direto na próxima, renomeie ou marque: "
+        'julius produtos renomear ID "Nome" / julius produtos tag ID TAG'
+    ),
 }
 
 
@@ -47,6 +59,6 @@ def print_hints(hints: Iterable[Hint], *, to_stderr: bool = False) -> None:
         template = TEXTS.get(hint.kind)
         if template is None:
             continue
-        line = "Dica: " + template.format(details=", ".join(hint.details) or "nenhuma")
+        line = "Dica: " + template.format(details=" · ".join(hint.details) or "nenhuma")
         # soft_wrap keeps each suggested command on one line so it can be copied as is.
         target.print(line, style="dim", markup=False, highlight=False, soft_wrap=True)
