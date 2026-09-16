@@ -1,0 +1,28 @@
+README.md
+  s_a000fccfcff12b::t_289eb9eadd24ed 238
+  s_a000fccfcff12b::t_7529373c3f3c6a 218
+  s_a000fccfcff12b::t_49ef9ab78a15f2 127-130,138,140
+CLAUDE.md
+  s_a000fccfcff12b::t_1c065ab14f9b0a 259-260
+  s_a000fccfcff12b::t_bba7beaf0d4cbb 415
+  s_a000fccfcff12b::t_2bad106d05f95e 430
+  s_a000fccfcff12b::t_51b3f56dd14d49 11
+  s_a000fccfcff12b::t_629246794e8ecb 19-20
+  s_a000fccfcff12b::t_e92aeb448937d5 492
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a26aad855f8e338a00baac950733a254a188f1c7",
+  "prompts": {},
+  "sessions": {
+    "s_a000fccfcff12b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c8cf1253-a141-481e-98ea-a0249f9da147",
+        "model": "unknown"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
