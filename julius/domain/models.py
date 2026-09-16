@@ -54,6 +54,7 @@ class Receipt:
     store_cnpj: str
     store_legal_name: str
     items: tuple[ReceiptItem, ...]
+    store_address: str | None = None
 
 
 @dataclass(frozen=True)

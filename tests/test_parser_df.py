@@ -17,6 +17,17 @@ EXPECTED = {
     "qrcode-5.html": ("SENDAS DISTRIBUIDORA S/A", "06057223052643", 47, "2026-09-04T17:51:40"),
 }
 SUMMARY_LABELS = ("Valor a pagar", "Qtd. total", "Forma de pagamento", "Tributos")
+EXPECTED_ADDRESS = {
+    "qrcode.html": "A ADE CONJUNTO 31 LOTE 01 SALA 1, S /N, LOTE 01, AGUAS CLARAS, BRASILIA, DF",
+    "qrcode-2.html": "Q. QE 15 LOTE A, 0, , GUARA II, BRASILIA, DF",
+    "qrcode-3.html": "QUADRA QE 30, 02/39, LJS 02/39, GUARA II, BRASILIA, DF",
+    "qrcode-4.html": "QUADRA QR 5, 05 MU 05, , CANDANGOLANDIA, BRASILIA, DF",
+    "qrcode-5.html": "Q SMAS Trecho 03, 0, , St Complementares, Brasilia, DF",
+}
+_ADDRESS_DIV = (
+    "QUADRA QE 30,\n              02/39,\n              LJS 02/39,\n"
+    "              GUARA II,\n              BRASILIA,\n              DF"
+)
 
 
 def _load(name: str) -> str:
@@ -115,3 +126,25 @@ def test_item_count_mismatch_raises():
     html = _load("qrcode-3.html").replace("<strong>6</strong>", "<strong>7</strong>")
     with pytest.raises(ReceiptParseError, match="declares 7"):
         DFReceiptParser().parse(html)
+
+
+@pytest.mark.parametrize("name", EXPECTED_ADDRESS)
+def test_store_address_matches_each_real_receipt(name):
+    assert _parse(name).store_address == EXPECTED_ADDRESS[name]
+
+
+def test_store_address_is_none_when_header_block_is_missing():
+    html = _load("qrcode-3.html").replace(f"<div>{_ADDRESS_DIV}</div>", "")
+    receipt = DFReceiptParser().parse(html, source="qrcode-3.html")
+    assert receipt.store_address is None
+    assert len(receipt.items) == 6
+
+
+def test_store_address_unescapes_and_collapses_whitespace():
+    html = _load("qrcode-3.html").replace(_ADDRESS_DIV, "RUA A &amp; B,\n   10")
+    receipt = DFReceiptParser().parse(html, source="qrcode-3.html")
+    assert receipt.store_address == "RUA A & B, 10"
+
+
+def test_synthetic_fixture_still_parses():
+    DFReceiptParser().parse(_load("synthetic_eggs.html"), source="synthetic_eggs.html")

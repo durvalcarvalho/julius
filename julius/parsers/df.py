@@ -19,6 +19,8 @@ _ITEM = re.compile(
 )
 _LEGAL_NAME = re.compile(r'id="heading1".*?<div class="col" style="font-weight: bold;">(.*?)</div>', re.DOTALL)
 _CNPJ = re.compile(r"CNPJ:\s*([\d./-]+)")
+# The address is display text, not a key: kept exactly as printed (mixed case, doubled commas and all).
+_ADDRESS = re.compile(r"CNPJ:\s*[\d./-]+\s*</div>\s*<div>(.*?)</div>", re.DOTALL)
 _ACCESS_KEY = re.compile(r'Chave de acesso:.*?<p class="h6">([\d ]+)</p>', re.DOTALL)
 _ISSUED_AT = re.compile(r"Emissão:\s*</strong>\s*(\d{2})/(\d{2})/(\d{4})\s+(\d{2}:\d{2}:\d{2})")
 _ITEM_TOTAL = re.compile(r"Qtd\. total de itens:.*?<strong>(\d+)</strong>", re.DOTALL)
@@ -41,6 +43,8 @@ class DFReceiptParser:
         if not issued:
             raise ReceiptParseError(f"missing issue date ({source})")
         day, month, year, time = issued.groups()
+        address_match = _ADDRESS.search(html)
+        store_address = _clean(address_match.group(1)) if address_match else ""
 
         items = tuple(self._item(index, match, source) for index, match in enumerate(_ITEM.finditer(html), start=1))
         if not items:
@@ -56,6 +60,7 @@ class DFReceiptParser:
             store_cnpj=cnpj,
             store_legal_name=legal_name,
             items=items,
+            store_address=store_address or None,
         )
 
     @staticmethod
