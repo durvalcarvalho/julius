@@ -1,0 +1,59 @@
+docs/tickets/julius-v2/index.md
+  s_c0ef054dc440b4::t_5df33590acd9ca 44
+julius/infra/migrations/0002_store_address_and_seed_tags.sql
+  s_c0ef054dc440b4::t_68e50d20c42745 1-7
+julius/services/importing.py
+  s_c0ef054dc440b4::t_c254c1328a7d36 17
+tests/test_repositories_stores.py
+  s_c0ef054dc440b4::t_5ac50843233259 52-73
+tests/test_repositories_products.py
+  s_c0ef054dc440b4::t_8d60ae9f741050 9-14
+  s_c0ef054dc440b4::t_fdb5a3b7741689 20-22
+  s_c0ef054dc440b4::t_91f604a9c06d7e 101,103
+julius/domain/models.py
+  s_c0ef054dc440b4::t_6dfd00e4f76e7d 28
+tests/test_services_guidance.py
+  s_c0ef054dc440b4::t_dd651edbbb376c 17-22
+  s_c0ef054dc440b4::t_d333df89b66299 59,65
+julius/repositories/stores.py
+  s_c0ef054dc440b4::t_437ac220e66ece 8,10-14,19,24,35
+tests/test_cli_receipts.py
+  s_c0ef054dc440b4::t_23b3ba41a16d66 84-85
+tests/test_services_importing.py
+  s_c0ef054dc440b4::t_40918a761e9b30 98-109
+tests/test_db.py
+  s_c0ef054dc440b4::t_f42851be67b911 82,86
+  s_c0ef054dc440b4::t_521a9ce90a324c 66,68,71,73,77-78,83-85,87-111
+  s_c0ef054dc440b4::t_33cc187fb9671d 49
+  s_c0ef054dc440b4::t_f9efe4d868eaba 22
+  s_c0ef054dc440b4::t_8c3f504675802d 38
+  s_c0ef054dc440b4::t_4e2a27208ba395 56
+  s_965812c685ddb6::t_f2b4a16329f63f 112-113
+tests/test_services_catalog.py
+  s_c0ef054dc440b4::t_6cb9404a92cadc 15-20
+  s_c0ef054dc440b4::t_f06dcded712d53 142,149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6a6f722cf1142c0ebf016c01764c12f8175e69b1",
+  "prompts": {},
+  "sessions": {
+    "s_965812c685ddb6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c3d9578c-face-4627-92be-b14c01cd9fd0",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    },
+    "s_c0ef054dc440b4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "98cfa69a-7548-4f8e-9894-c620fd4d7390",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
