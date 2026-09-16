@@ -18,8 +18,14 @@ SEEDED_TAGS = sorted(
         "bebidas", "limpeza", "higiene", "congelados", "temperos", "doces", "utilidades",
     ]
 )  # migration 0002
-NO_AI = Config(Path("unused"), None, None, None, 1.0, None, None)
-AI = Config(Path("unused"), "key", "https://llm.example/v1", "cheap", 1.0, 1.0, 1.0)
+@pytest.fixture
+def no_ai(db_path) -> Config:
+    return Config(db_path, None, None, None, 1.0, None, None)
+
+
+@pytest.fixture
+def ai(db_path) -> Config:
+    return Config(db_path, "key", "https://llm.example/v1", "cheap", 1.0, 1.0, 1.0)
 
 
 class FakeLlmClient:
@@ -180,43 +186,43 @@ def test_set_product_content_rejects_bad_unit_and_non_positive(conn):
     assert products.get_product(conn, product_id).content_quantity is None
 
 
-def test_compare_returns_text_similarity_without_client(conn):
+def test_compare_returns_text_similarity_without_client(conn, no_ai):
     _import(conn, "qrcode.html")
     _import(conn, "qrcode-3.html")
     id_a, id_b = _tomato_ids(conn)
-    result = catalog.compare_products(conn, NO_AI, None, id_a, id_b)
+    result = catalog.compare_products(conn, no_ai, None, id_a, id_b)
     assert result.ai_suggestion is None
     assert 0.7 < result.text_similarity <= 1
     assert _tomato_ids(conn) == [id_a, id_b]
 
 
-def test_compare_products_uses_batch_merge_and_returns_first(conn):
+def test_compare_products_uses_batch_merge_and_returns_first(conn, ai):
     id_a, id_b = _product(conn, "A", "1"), _product(conn, "B", "2")
     client = FakeLlmClient(
         '{"pairs": [{"id": 1, "rationale": "mesmo item", "same_product": true, "confidence": 0.9}]}'
     )
-    result = catalog.compare_products(conn, AI, client, id_a, id_b)
+    result = catalog.compare_products(conn, ai, client, id_a, id_b)
     assert result.ai_suggestion == MergeSuggestion(True, 0.9, "mesmo item")
     assert client.calls == 1
 
 
-def test_compare_skips_ai_when_budget_exhausted(conn):
+def test_compare_skips_ai_when_budget_exhausted(conn, ai):
     id_a, id_b = _product(conn, "A", "1"), _product(conn, "B", "2")
     with conn:
-        ai_usage.add_spent(conn, datetime.now().strftime("%Y-%m"), AI.ai_budget_usd)
+        ai_usage.add_spent(conn, datetime.now().strftime("%Y-%m"), ai.ai_budget_usd)
     client = FakeLlmClient('{"pairs": [{"id": 1, "rationale": "x", "same_product": true, "confidence": 0.9}]}')
-    result = catalog.compare_products(conn, AI, client, id_a, id_b)
+    result = catalog.compare_products(conn, ai, client, id_a, id_b)
     assert result.ai_suggestion is None
     assert client.calls == 0
 
 
-def test_compare_same_id_raises(conn):
+def test_compare_same_id_raises(conn, no_ai):
     product_id = _product(conn, "A", "1")
     with pytest.raises(ValueError):
-        catalog.compare_products(conn, NO_AI, None, product_id, product_id)
+        catalog.compare_products(conn, no_ai, None, product_id, product_id)
 
 
-def test_compare_unknown_id_raises(conn):
+def test_compare_unknown_id_raises(conn, no_ai):
     product_id = _product(conn, "A", "1")
     with pytest.raises(LookupError):
-        catalog.compare_products(conn, NO_AI, None, product_id, 9999)
+        catalog.compare_products(conn, no_ai, None, product_id, 9999)

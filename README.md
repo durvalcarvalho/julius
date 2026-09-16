@@ -15,7 +15,7 @@ Nome em homenagem ao pai do Chris em *Todo Mundo Odeia o Chris*: o cara que sabe
 4. [Guia de uso](#guia-de-uso)
 5. [Conceitos que valem a pena entender](#conceitos-que-valem-a-pena-entender)
 6. [Configuração](#configuração)
-7. [IA opcional (e o teto de US$ 1/mês)](#ia-opcional-e-o-teto-de-us-1mês)
+7. [IA opcional (orçamento mensal)](#ia-opcional-orçamento-mensal)
 8. [Arquitetura](#arquitetura)
 9. [Banco de dados](#banco-de-dados)
 10. [Desenvolvimento](#desenvolvimento)
@@ -111,11 +111,14 @@ Todos os comandos têm `--help`. Nomes em português porque são a interface; o 
 ```bash
 julius importar cupom1.html cupom2.html          # vários de uma vez
 julius importar ~/.local/share/julius/entrada/*.html
+julius importar cupom.html --sim                 # aplica sugestões da IA sem perguntar
 ```
 
 - Reporta por arquivo: `cupom1.html: 20 itens novos, 0 já existiam`.
 - Se um arquivo falhar (não existe, HTML fora do formato, unidade desconhecida), imprime o erro em `stderr`, **continua os outros** e termina com código 1.
 - Um arquivo com problema nunca grava nada, nem parcialmente — o parse acontece inteiro antes de qualquer escrita.
+- Guarda também o endereço do mercado (impresso no cupom), pra aparecer depois em `mercados listar`/`consultar`.
+- Com a IA configurada e produto novo na nota, roda a mesma revisão de `produtos revisar` (nome legível, categoria, conteúdo) uma vez, no fim — ver "IA opcional" abaixo. Sem IA, imprime só a dica de quantos produtos ficaram sem categoria.
 
 ### `consultar` — a pergunta principal
 
@@ -128,8 +131,9 @@ julius consultar arroz -n 5            # só as 5 compras mais recentes por unid
 
 - Uma tabela por unidade de venda (`KG`, `UN`).
 - Linhas mais recentes primeiro. A linha de **menor preço fica verde**, a de **maior fica vermelha** — e essas duas sempre aparecem, mesmo que sejam mais antigas que o `-n` pede.
+- A célula do mercado mostra o apelido e, embaixo em cinza, o endereço do cupom (quando já foi importado com endereço).
 - Se o produto tem embalagem definida (veja `produtos definir-conteudo`), surge a coluna **Por L / Por KG / Por UN**.
-- Sem resultado: `Nenhum resultado.` — não uma tabela vazia.
+- Sem resultado por nome (e sem `--tag`): se a IA estiver configurada, tenta achar o produto por ela antes de desistir (ver "IA opcional"). Ainda sem nada: `Nenhum resultado.` — não uma tabela vazia.
 
 ### `mercados` — dar nome aos lugares
 
@@ -140,7 +144,7 @@ julius mercados listar
 julius mercados renomear 27.289.076/0013-79 "Atacadão Águas Claras"   # CNPJ formatado ou só dígitos
 ```
 
-Filiais são CNPJs diferentes, e Julius as trata como mercados diferentes de propósito — os preços variam entre lojas da mesma rede. Vale pôr o bairro no apelido.
+`mercados listar` mostra também o **endereço** impresso no cupom (coluna própria). Filiais são CNPJs diferentes, e Julius as trata como mercados diferentes de propósito — os preços variam entre lojas da mesma rede. Vale pôr o bairro no apelido; se duas filiais da mesma rede ainda não têm apelido, o `importar` avisa com o endereço de cada uma.
 
 ### `produtos` — cuidar do catálogo
 
@@ -148,18 +152,22 @@ Filiais são CNPJs diferentes, e Julius as trata como mercados diferentes de pro
 julius produtos listar                          # id, nome, conteúdo, tags
 julius produtos renomear 14 "Suco de uva integral 1,5 L"
 julius produtos tag 14 bebidas                  # categoria livre, minúscula
+julius produtos tag 14 bebidas --remover        # desfaz a tag (nunca apaga a categoria em si)
 julius produtos definir-conteudo 14 1.5 L       # L, ML, KG, G ou UN
 julius produtos definir-conteudo 27 500 G       # gravado como 0,5 KG
 julius produtos comparar 14 31                  # "são a mesma coisa?" — só opina
 julius produtos fundir 31 14                    # 31 desaparece, 14 fica com todo o histórico
 julius produtos fundir 31 14 --sim              # sem pedir confirmação
+julius produtos revisar                         # pede à IA nome/categoria/conteúdo dos pendentes
+julius produtos revisar --sim                    # aplica sem perguntar (conteúdo nunca é automático)
 ```
 
-- **Nome**: nasce igual à descrição do primeiro cupom (`SUCO INT PARREIRAS DO SUL GF 1.5L UVA`). Renomeie quando cansar de ler abreviação.
-- **Tag**: é o único jeito de agrupar por categoria. Busca por texto não sabe que "detergente" é "limpeza"; a tag sabe.
+- **Nome**: nasce igual à descrição do primeiro cupom (`SUCO INT PARREIRAS DO SUL GF 1.5L UVA`). Renomeie quando cansar de ler abreviação, ou deixe a IA propor em `produtos revisar`.
+- **Tag**: é o único jeito de agrupar por categoria. Busca por texto não sabe que "detergente" é "limpeza"; a tag sabe. `--remover` desfaz uma marcação errada (a categoria em si continua existindo pra outros produtos).
 - **Conteúdo**: habilita a coluna de preço por litro/quilo/unidade. `G` e `ML` são convertidos para `KG` e `L` na hora de gravar, para todo o catálogo falar a mesma língua.
 - **Fundir**: irreversível — por isso pede confirmação. Use quando o mesmo produto aparece com códigos diferentes em mercados diferentes.
 - **Comparar**: dá similaridade de texto e, se a IA estiver configurada, uma opinião. Nunca funde sozinho.
+- **Revisar**: a tela de curadoria assistida por IA — nome legível e categoria com um único candidato são aplicados sem perguntar (desfazer: `renomear`/`tag --remover`); o resto pergunta (ou fica pendente, sem terminal). Ver "IA opcional".
 
 ### `exportar` — levar para a planilha
 
@@ -168,7 +176,7 @@ julius exportar                        # ./julius-export.csv
 julius exportar -o ~/precos.csv
 ```
 
-CSV com `;` como separador (o Excel em português abre direto), uma linha por item comprado, com apelido do mercado e nome do produto já resolvidos. É uma cópia para leitura — o banco continua sendo a fonte da verdade.
+CSV com `;` como separador (o Excel em português abre direto), uma linha por item comprado, com apelido do mercado (e endereço, coluna `store_address`) e nome do produto já resolvidos. É uma cópia para leitura — o banco continua sendo a fonte da verdade.
 
 ### Corrigir um preço errado
 
@@ -203,38 +211,38 @@ Tudo por variável de ambiente. Sem nenhuma, Julius funciona com os padrões.
 
 | Variável | Padrão | Para quê |
 |---|---|---|
-| `JULIUS_DB` | `~/.local/share/julius/prices.db` | Caminho do banco. Útil para experimentar com outro arquivo sem tocar no seu histórico. |
+| `JULIUS_DB` | `~/.local/share/julius/prices.db` | Caminho do banco. Útil para experimentar com outro arquivo sem tocar no seu histórico. `ai_calls.jsonl` (log de IA) mora sempre ao lado. |
 | `JULIUS_AI_API_KEY` | — | Liga a IA. Ausente = IA desligada, silenciosamente. |
 | `JULIUS_AI_BASE_URL` | — | Endpoint compatível com `/chat/completions`. |
-| `JULIUS_AI_MODEL` | — | Nome do modelo. |
+| `JULIUS_AI_MODEL` | — | Nome do modelo (testado com `deepseek-flash`). |
 | `JULIUS_AI_BUDGET_USD` | `1.0` | Teto de gasto por mês. |
-| `JULIUS_AI_INPUT_PRICE_USD_PER_1M` | — | Preço por milhão de tokens de entrada (obrigatório para a IA rodar). |
-| `JULIUS_AI_OUTPUT_PRICE_USD_PER_1M` | — | Idem, saída. |
+| `JULIUS_AI_INPUT_PRICE_USD_PER_1M` | — | Preço por milhão de tokens de entrada (obrigatório para a IA rodar). Recomendado usar o preço de **pico** do provedor, pra nunca subestimar o gasto (ex.: DeepSeek `0.30`). |
+| `JULIUS_AI_OUTPUT_PRICE_USD_PER_1M` | — | Idem, saída (ex.: DeepSeek `1.20`). |
+| `JULIUS_AI_REQUEST_EXTRAS` | `{}` | JSON mesclado no corpo do request, por cima de tudo — a válvula de escape pra peculiaridade de provedor. **DeepSeek precisa** de `'{"thinking":{"type":"disabled"}}'`: sem isso, `deepseek-flash` gasta todo o `max_tokens` "pensando" e nunca devolve o JSON pedido (medido no gate antes do primeiro ticket de IA). |
 
 O banco e a pasta são criados no primeiro comando que precisa deles. Importar a CLI (ou rodar `--help`) não toca em disco — há teste garantindo isso.
 
 ---
 
-## IA opcional (e o teto de US$ 1/mês)
+## IA opcional (orçamento mensal)
 
-Julius foi desenhado para custar zero. A IA existe para as três coisas que ele se recusa a decidir sozinho — e só **sugere**; gravar continua sendo um comando seu:
+Julius foi desenhado para custar zero. A IA existe pra fazer a curadoria que ninguém tem paciência de fazer na mão — e só grava o que dá pra desfazer com um comando; fusão de produto e preços nunca são tocados por ela:
 
-| Situação | O que a IA faz | Quem grava |
+| Situação | O que a IA faz | Quem grava / desfaz |
 |---|---|---|
-| "Esses dois produtos são iguais?" | `produtos comparar` mostra a opinião dela | você, com `produtos fundir` |
-| Tamanho de embalagem ambíguo | `suggest_content` está pronta no código | você, com `definir-conteudo` |
-| Categoria de um produto novo | `suggest_tags` está pronta no código | você, com `produtos tag` |
-
-Hoje só `comparar` chama a IA de fato; as outras duas ficaram prontas mas desligadas até se provarem úteis.
+| Produto novo sem nome legível, categoria ou conteúdo | `produtos revisar` / `importar` chamam `enrich_products`: nome e categoria com um único candidato conhecido são aplicados **sem perguntar**; o resto pergunta (ou fica pendente, sem terminal); conteúdo nunca é gravado sem confirmação | Desfazer: `produtos renomear` / `produtos tag ID TAG --remover` |
+| `consultar TERMO` não achou nada por nome (e sem `--tag`) | Tenta achar pela IA (`match_products`) antes de desistir | Nada a desfazer — é só uma tentativa a mais na mesma busca; a dica sugere renomear/marcar pra achar direto na próxima |
+| "Esses dois produtos são iguais?" | `produtos comparar` mostra a opinião dela | você, com `produtos fundir` (nunca automático) |
+| Possíveis duplicatas encontradas na revisão | Imprime o comando `produtos fundir A B` pronto pra copiar | você decide se roda |
 
 **Como o teto vira realidade, não promessa:**
 
-- A IA nunca roda em `consultar` (que você usa várias vezes ao dia). Só em ações raras e explícitas.
-- Cada chamada registra seu custo (tokens × preço configurado) na tabela `ai_usage`, por mês. Antes de qualquer chamada, se o mês já bateu o orçamento, ela simplesmente não acontece.
+- A IA só roda em `consultar` quando a busca determinística **veio vazia** — nunca quando já achou algo. Em `importar`/`produtos revisar` roda para produtos novos/pendentes, não uma vez por busca.
+- Cada *tentativa* de chamada (inclusive a que falhou ou veio truncada — pagou, conta) grava uma linha em `~/.local/share/julius/ai_calls.jsonl` (prompt, resposta crua, tokens, custo, erro) e soma o custo na tabela `ai_usage`, por mês. Antes de qualquer chamada, se o mês já bateu o orçamento, ela simplesmente não acontece.
 - Sem os preços por token configurados, a IA não roda — não dá para debitar o que não se sabe medir.
-- **Nenhuma falha de IA quebra nada.** Sem chave, sem rede, resposta malformada, orçamento estourado: tudo vira "sem sugestão" e o comando segue com o caminho determinístico.
+- **Nenhuma falha de IA quebra nada.** Sem chave, sem rede, resposta malformada, orçamento estourado: tudo vira "sem sugestão" e o comando segue com o caminho determinístico. `produtos comparar` distingue as três razões (não configurada / orçamento esgotado / chamada falhou) em vez de uma mensagem só.
 
-Qualquer provedor que fale o formato `/chat/completions` serve. A escolha de modelo é sua; modelos das camadas "mini"/"flash" costumam custar centavos por mês nesse volume.
+Testado com **DeepSeek** (`deepseek-flash`) — mas qualquer provedor que fale o formato `/chat/completions` serve, com uma ressalva real: se o modelo "raciocina" por padrão (thinking mode), configure `JULIUS_AI_REQUEST_EXTRAS` pra desligar isso, ou ele nunca converge (ver tabela de configuração acima).
 
 ---
 
@@ -372,7 +380,7 @@ Adicionar uma migração é soltar um `.sql` novo na pasta. O backup é a rede d
 ## Desenvolvimento
 
 ```bash
-make test        # cria o .venv/ na primeira vez e roda os ~220 testes (< 3 s)
+make test        # cria o .venv/ na primeira vez e roda os 374 testes (< 5 s)
 make install     # `julius` global via pipx, em modo editável: editar o código já vale
 make uninstall
 ```
@@ -395,10 +403,10 @@ Dependências: `typer`, `rich`, `rapidfuzz`. Dev: `pytest`. Nada mais — HTTP �
 | `test_architecture.py` | as setas do diagrama de camadas — inspeciona imports de todo módulo |
 | `test_cli.py` | `import julius.cli` não cria arquivo nenhum (roda em subprocesso) |
 | `test_parser_df.py` | os 5 cupons reais em `tests/fixtures/` parseiam com contagens, datas e unidades exatas |
-| `test_db.py` | FKs, `CHECK`s, PK de deduplicação e o backup antes de migrar |
-| `test_e2e.py` | os fluxos inteiros pela CLI, incluindo o caso "30 ovos por R$ 16,50 é mais barato por unidade que 20 por R$ 12,00" |
+| `test_db.py` | FKs, `CHECK`s, PK de deduplicação e o backup antes de migrar (inclusive a migração 0002, contra um banco com dado de verdade) |
+| `test_e2e.py` | os fluxos inteiros pela CLI, incluindo o caso "30 ovos por R$ 16,50 é mais barato por unidade que 20 por R$ 12,00" e os fluxos de IA (revisão, fallback de busca, endereço) com um `LlmClient` fake determinístico — nenhum teste toca a API real |
 
-Fixtures são só o `.html` — nunca a pasta `_files/` que o navegador salva junto.
+Fixtures são só o `.html` — nunca a pasta `_files/` que o navegador salva junto. Rede é sempre `tests/_fakes.py::ScriptedLlmClient`/`RaisingLlmClient`, nunca mockada teste a teste.
 
 ### Como estender
 
@@ -421,14 +429,12 @@ Fixtures são só o `.html` — nunca a pasta `_files/` que o navegador salva ju
 **Hoje**
 
 - Só o layout de NFC-e do **Distrito Federal**. Outros estados têm HTML diferente.
-- Descrições vêm abreviadas do cupom (`LING FGO RESF AURORA kg`). A busca tolera erro de digitação, mas "linguiça" por extenso não acha `LING` — renomeie os produtos que você consulta muito.
+- Descrições vêm abreviadas do cupom (`LING FGO RESF AURORA kg`). A busca tolera erro de digitação, mas "linguiça" por extenso não acha `LING` direto — `julius produtos revisar` (com IA configurada) resolve isso de vez, propondo o nome legível; sem IA, renomeie manualmente os produtos que você consulta muito.
 - Se a Receita mudar o layout da página, o parser quebra — com erro claro, não em silêncio, e os cupons reais em `tests/fixtures/` mostram exatamente o que mudou.
 - Em `consultar`, empates no menor/maior preço mantêm todas as linhas empatadas mesmo fora do `-n`.
-- A camada de IA está testada contra fakes, mas ainda não foi usada com um provedor real.
+- Sem cache de respostas de IA (de propósito — a solução durável é corrigir o dado, não lembrar a resposta antiga).
 
 **Evoluções plausíveis** (nenhuma prometida)
 
 - Parsers para outros estados, com seleção automática pelo HTML.
-- `julius produtos pendentes` para revisar produtos sem tag nem conteúdo.
-- Dica automática de conteúdo quando a descrição traz `C/30` (contém 30) — a função já existe, falta decidir se ajuda ou atrapalha.
 - Um bot (Telegram) recebendo o HTML e chamando os mesmos serviços — a CLI foi feita para ser *uma* interface, não a única.

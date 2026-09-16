@@ -8,18 +8,22 @@ Não é uma ferramenta de comparação entre mercados em geral nem de controle d
 
 ## Status
 
-Fase: **v1.1 implementada.** Os 16 tickets de `docs/tickets/julius-v1/` estão feitos, um commit por ticket, 253 testes verdes (`.venv/bin/pytest`), nenhum `NotImplementedError`, nenhum identificador em português. Todos os comandos do CLI funcionam de ponta a ponta contra os 5 recibos reais e o fixture sintético dos ovos; `tests/test_e2e.py` exercita os fluxos como o usuário usa. Camada de IA existe e está testada com fake, mas **nunca foi chamada contra um provedor real** — falta escolher provedor/modelo e configurar `JULIUS_AI_*` (ver "Camada opcional de IA").
+Fase: **v2 implementada.** Os 14 tickets de `docs/tickets/julius-v2/` estão feitos, um commit por ticket, 374 testes verdes (`.venv/bin/pytest -q`), nenhum `NotImplementedError`, nenhum identificador em português. Provedor de IA: DeepSeek, modelo `deepseek-flash`, `thinking` desligado via `JULIUS_AI_REQUEST_EXTRAS='{"thinking":{"type":"disabled"}}'` (sem isso o modelo raciocina em vez de responder — ver "Fatos e pegadinhas"). Orçamento US$5/mês.
 
 Ambiente: `make install` instala `julius` global via `pipx install --editable .` (aponta pro código do diretório — editar ou trocar de branch já vale, sem reinstalar; rode de novo só se o `pyproject.toml` mudar). `make test` cria o `.venv/` na primeira vez e roda o pytest. `make uninstall` remove.
 
-**v1.1 (módulo de dicas de uso) feita** — tickets 015 e 016. Nasceu do primeiro uso real (`consultar` num banco vazio dizia só "Nenhum resultado."). Ver "Dicas de uso (`guidance`)"; a única diferença em relação ao design original está registrada lá (`closest_names` compara palavra a palavra, não por faixa de WRatio).
+**v1.1 (módulo de dicas de uso)** — tickets 015 e 016 (v1). Nasceu do primeiro uso real (`consultar` num banco vazio dizia só "Nenhum resultado."). Ver "Dicas de uso (`guidance`)"; a única diferença em relação ao design original está registrada lá (`closest_names` compara palavra a palavra, não por faixa de WRatio).
+
+**v2 (IA na prática)** — tickets 101–114. A IA passou de "só testada com fake" para uso real: `julius produtos revisar`/`importar` aplicam nome legível e categoria automaticamente (reversível), sugerem conteúdo de embalagem e candidatos a duplicata; `consultar` cai para a IA só quando a busca determinística vem vazia; endereço do mercado aparece em `mercados listar`/`consultar`/`exportar`. Ver "Camada opcional de IA" (contrato atual) e "Dicas de uso" (3 dicas novas).
+
+Resolvido nesta fase (ver "Requisitos novos" para o texto original):
+- `julius produtos pendentes` (item 2) → virou `julius produtos revisar`.
+- Dica via padrão `C/<número>` (item 3) → coberta pela revisão assistida por IA (`enrich_products`), não só pela dica impressa.
 
 Ainda em aberto (questões de gosto, não bugs):
-- `julius produtos pendentes` (revisão periódica) — ver "Requisitos novos", item 2.
-- ~~Dica via padrão `C/<número>` no `importar`~~ → resolvido pelo módulo de dicas (`PACKAGE_SIZE_IN_DESCRIPTION`).
 - Empates de preço em `consultar`: todas as linhas com o menor/maior preço são mantidas mesmo fora de `--limite` (honesto, mas com 4 preços iguais a tabela cresce). Ajustar se incomodar.
 
-Próximo passo sugerido: usar de verdade por algumas semanas (novos recibos vão em `~/.local/share/julius/entrada/`), e só então decidir os itens acima e a v2 (outros estados, Telegram).
+Próximo passo sugerido: rodar `julius importar ~/.local/share/julius/entrada/*.html` para o backfill do endereço (idempotente) e `julius produtos revisar` para curar o catálogo acumulado; depois, usar de verdade por mais algumas semanas antes de cogitar v3 (outros estados, Telegram).
 
 ## Convenções de código (regra dura, veio de irritação real do usuário)
 
@@ -54,8 +58,9 @@ Próximo passo sugerido: usar de verdade por algumas semanas (novos recibos vão
 - **"Consumidor" às vezes traz CPF, às vezes "não identificado".** Não usado pelo schema e não deve ser guardado — é PII sem papel na lembrança de preço, o objetivo do sistema.
 - **Confirmação real do caso que `produtos fundir` existe para resolver**: `TOMATE ITALIANO kg` (Cód 7147, mercado "Dona de Casa") e `TOMATE ITALIANO UNIAO kg` (Cód 22039, mercado "FL 3 Costa") são potencialmente o mesmo tipo de produto em mercados diferentes — mas com marca (`UNIAO`) diferente, exatamente o tipo de caso onde uma sugestão automática por similaridade de texto erraria (ver seção "Identidade de produto e busca"). Fusão continua manual, a critério do usuário.
 - **Código de produto confirmado como não-global** (prova real, não hipótese): código `4134` é `DESENGORD UAU 500ML GATILHO` (desengordurante) no mercado "Dona de Casa" e `BROCOLE NINJA` (brócolis) no mercado "Sendas/Assaí" — mesmo número, produtos sem nenhuma relação. Confirma que a chave `(cnpj, produto_codigo)` é obrigatória; `produto_codigo` sozinho não significa nada entre mercados.
-- **Filiais da mesma rede são CNPJs diferentes, e isso é o comportamento certo.** "Dona de Casa" aparece com `11.832.478/0002-85` (Guará) numa nota e `11.832.478/0003-66` (Candangolândia) noutra — endereços diferentes, preços podem diferir. Tratar como dois `mercados` distintos (já é o que o schema faz por chavear em `cnpj` completo) está correto; ao definir apelido, vale incluir um hint de local (ex. "Dona de Casa — Candangolândia") pra diferenciar filiais da mesma marca.
-- **Descrições ficam mais crípticas ainda em redes maiores.** Na nota do Sendas/Assaí (47 itens, a maior do lote): `AC MASC F TER ES 1kg`, `SBT GUAPAS 1L MACA V`, `QJ T PARM PIRAC PD` — abreviação mais agressiva que nas notas menores. Reforça (não muda) a decisão já tomada de não tentar NLP/classificação automática em cima da descrição.
+- **Filiais da mesma rede são CNPJs diferentes, e isso é o comportamento certo.** "Dona de Casa" aparece com `11.832.478/0002-85` (Guará) numa nota e `11.832.478/0003-66` (Candangolândia) noutra — endereços diferentes, preços podem diferir. Tratar como dois `mercados` distintos (já é o que o schema faz por chavear em `cnpj` completo) está correto; ao definir apelido, vale incluir um hint de local (ex. "Dona de Casa — Candangolândia") pra diferenciar filiais da mesma marca. **Confirmado em v2** com o endereço de verdade extraído do cupom: `11832478000285` → `QUADRA QE 30, 02/39, LJS 02/39, GUARA II, BRASILIA, DF`; `11832478000366` → `QUADRA QR 5, 05 MU 05, , CANDANGOLANDIA, BRASILIA, DF`. A identidade de rede (pra agrupar filiais na dica `SAME_CHAIN_BRANCHES`) é `cnpj[:8]` — os 8 primeiros dígitos (raiz do CNPJ) são iguais entre as duas, só o sufixo de filial muda.
+- **Descrições ficam mais crípticas ainda em redes maiores.** Na nota do Sendas/Assaí (47 itens, a maior do lote): `AC MASC F TER ES 1kg`, `SBT GUAPAS 1L MACA V`, `QJ T PARM PIRAC PD` — abreviação mais agressiva que nas notas menores. Reforça (não muda) a decisão já tomada de não tentar NLP/classificação automática em cima da descrição — mas em v2 isso deixou de ser um beco sem saída: `enrich_products` (IA) expande essas abreviações para nome legível, com `renomear` como desfazer caso erre.
+- **`deepseek-flash` raciocina por padrão e não converge no prompt de enriquecimento** (achado do smoke test antes do primeiro ticket de v2, `claudedocs/handoff_smoke_test_deepseek_20260915.md`). Com `thinking` ligado (o padrão do modelo), ele gasta todo o `max_tokens` "pensando" — testado com 1200, 3000 e 8000 tokens, sempre `finish_reason: length` e `content` vazio, nunca converge. Com `"thinking": {"type": "disabled"}` no corpo do request, responde em ~2s com JSON correto. Por isso `JULIUS_AI_REQUEST_EXTRAS` existe (ver "Camada opcional de IA") e o cliente trata `finish_reason != "stop"` como erro cobrado (pagou tokens, não veio resposta usável).
 
 ## Requisitos novos para o sistema evoluir com segurança
 
@@ -63,9 +68,9 @@ Pergunta direta do usuário: "o que precisa ser feito para que o sistema consiga
 
 **1. Migração de schema — IMPLEMENTADO.** O schema deste projeto já mudou **quatro vezes** só nas sessões de design anteriores (CSV → SQLite; +`products`/`product_skus`/`tags`; +`content_quantity`/`content_unit`; +mapa de unidade). O banco vai guardar anos de recibos reais — não podia ficar sem mecanismo formal pra "mudar o schema não pode apagar dado". Ver seção "Migração de schema" no Design (v1): `PRAGMA user_version` + `julius/infra/db.py` lendo `julius/infra/migrations/*.sql`, backup automático do arquivo antes de qualquer migração real, sem framework tipo Alembic (desproporcional pra banco de um usuário só). Coberto por `tests/test_db.py`.
 
-**2. Revisão periódica de produtos pendentes — pergunta em aberto, não decisão.** Uma única nota do Sendas/Assaí trouxe 39 produtos novos de uma vez (nenhum com tag, nenhum com conteúdo definido). Conforme o catálogo cresce, vai acumular produtos que nunca foram revisados. Vale um comando tipo `julius produtos pendentes` (lista produtos sem tag e sem `conteudo_qtd`, pra revisar de vez em quando) — ou isso é manutenção demais pro valor que traz, e o usuário prefere só usar `produtos listar` quando lembrar? Pergunta pro usuário, não fechei isso.
+**2. Revisão periódica de produtos pendentes — RESOLVIDO em v2.** Uma única nota do Sendas/Assaí trouxe 39 produtos novos de uma vez (nenhum com tag, nenhum com conteúdo definido). A pergunta original ("vale um comando tipo `julius produtos pendentes`?") virou `julius produtos revisar`: lista `products.untagged_product_ids`, pede à IA nome legível/categoria/conteúdo, aplica o automático e pergunta o resto (ver "Camada opcional de IA" e ticket 112).
 
-**3. Dica (não automática) de conteúdo a partir do padrão `C/<número>` — proposta, não compromisso.** Achado novo: `OVO BCO GRANDE C/30` e `CHA LEAO RELAXA CX 16G C/10UN` usam `C/<dígito>` pra dizer "contém N unidades" — e em nenhuma das 5 notas isso colide com os outros usos de `C/` (`C/GAS`, `C/G`, `C/SAL`, que são sempre `C/` + letra, nunca `C/` + dígito). Isso não muda a decisão de não extrair conteúdo automaticamente (ver seção "Preço por conteúdo") — mas dá pra cogitar uma **sugestão impressa** no `importar` (algo como "💡 produto parece ter C/30 unidades — rode `julius produtos definir-conteudo <id> 30 UN` se quiser comparar por unidade"), nunca aplicada sozinha. É uma questão de gosto (ajuda ou vira ruído?) — decisão do usuário, não minha.
+**3. Dica (não automática) de conteúdo a partir do padrão `C/<número>` — RESOLVIDO em v2, coberto pela revisão.** Achado original: `OVO BCO GRANDE C/30` e `CHA LEAO RELAXA CX 16G C/10UN` usam `C/<dígito>` pra dizer "contém N unidades" — e em nenhuma das 5 notas isso colide com os outros usos de `C/` (`C/GAS`, `C/G`, `C/SAL`, sempre `C/` + letra). A dica impressa `PACKAGE_SIZE_IN_DESCRIPTION` (v1.1) continua existindo para quem não usa IA; com IA configurada, `enrich_products` já propõe o `content` durante `produtos revisar`/`importar`, sempre com confirmação humana antes de gravar (nunca automático).
 
 ## Evolução futura (não construir agora, sem prazo)
 
@@ -180,6 +185,20 @@ CREATE TABLE ai_usage (
 );
 ```
 
+**Migração 0002 (v2)** — `julius/infra/migrations/0002_store_address_and_seed_tags.sql`, primeira migração real do projeto (rodou contra o banco com dados de verdade, com backup `.bak-v1` automático):
+
+```sql
+-- Address as printed on the receipt header; NULL until a receipt of that store is (re)imported.
+ALTER TABLE stores ADD COLUMN address TEXT;
+
+-- Aisle categories the AI is asked to prefer. Users add more with `julius produtos tag`.
+INSERT OR IGNORE INTO tags (name) VALUES
+    ('hortifruti'), ('carnes'), ('frios'), ('laticinios'), ('padaria'), ('mercearia'),
+    ('bebidas'), ('limpeza'), ('higiene'), ('congelados'), ('temperos'), ('doces'), ('utilidades');
+```
+
+`stores.address` guarda o endereço impresso no cabeçalho da nota, exatamente como está (sem normalizar caixa/vírgulas — é texto de exibição). As 13 tags semeadas são o vocabulário que a IA prefere ao sugerir categoria em `enrich_products`; o usuário estende com `julius produtos tag` normalmente, sem comando especial.
+
 A `PRIMARY KEY (access_key, item_index)` já É a regra de deduplicação — `INSERT OR IGNORE` faz o import idempotente sem precisar escanear nada antes. `nickname` nasce igual a `legal_name` quando um CNPJ novo aparece (`INSERT OR IGNORE INTO stores`, que nunca sobrescreve um apelido já editado à mão). `PRAGMA foreign_keys = ON` é ligado em toda conexão por `infra.db.connect()` — sem isso o SQLite ignora as FKs silenciosamente (testado em `tests/test_db.py`).
 
 **Correção de erro** (decisão mudou aqui, ver seção Decisões): `sqlite3 ~/.local/share/julius/prices.db` no terminal e um `UPDATE`/`DELETE` — mesmo espírito de "editar direto", só que em SQL em vez de num editor de texto.
@@ -226,6 +245,10 @@ Com um catálogo pessoal de no máximo algumas centenas de produtos distintos, c
 
 **Rejeitado explicitamente: busca semântica (embeddings/`sentence-transformers`).** Resolveria "limpeza" → "DETERGENTE" (ver item 3), mas custa um modelo de ML baixado localmente pra um catálogo de possivelmente umas centenas de itens — desproporcional. Não usar a menos que o catálogo cresça ordens de grandeza e isso vire dor real.
 
+**Abreviações (`LING FGO` → "linguiça" não bate) — solução durável chegou em v2, não é mais só uma limitação anotada.** `julius produtos revisar`/`importar` pedem à IA um nome legível (`enrich_products`), aplicado automaticamente quando o produto ainda tem o nome cru do cupom (`products.has_raw_name`) — depois disso `consultar linguiça` acha o produto pelo nome de verdade, sem precisar de sinônimo nenhum embutido no buscador. `has_raw_name` é o que impede a IA de sobrescrever um nome que o usuário já editou à mão: compara `canonical_name` com as `prices.description` daquele produto; se não bater mais com nenhuma, o produto foi renomeado manualmente e a IA nunca mexe de novo ali.
+
+**3. "A busca não achou nada, nem por tag" → fallback de IA em `consultar`, só quando o determinístico veio vazio (v2).** `rapidfuzz` continua sendo a primeira tentativa sempre; a IA (`suggestions.match_products`) só é chamada quando `search_prices` devolve lista vazia, o termo não é `None` e não há `--tag` — nunca quando já existe resultado (regra de frequência do orçamento, ver "Camada opcional de IA"). Achando algo, a dica `FOUND_VIA_AI` sugere consertar o dado (`renomear`/`tag`) pra próxima busca já achar sem IA — o fallback é conforto, a correção do nome é a solução permanente.
+
 **3. "termos tipo limpeza" (categoria) → não é busca, é tag manual.**
 `rapidfuzz` (nem nenhuma métrica de string) conecta "limpeza" a "DETERGENTE" ou "SABAO EM PO" — não há sobreposição de caracteres entre essas palavras, edit-distance não ajuda aqui. Isso é conhecimento de categoria, não similaridade textual. Resolvido com `tags` + `produto_tags`: o usuário marca manualmente (`julius produtos tag ID limpeza`), sem classificação automática — evita categorizar errado silenciosamente.
 
@@ -252,38 +275,50 @@ Um regex que acerta às vezes e erra silenciosamente em casos como esses é pior
 
 ### Camada opcional de IA (assistência em ambiguidades, nunca decisão automática)
 
-**Pedido explícito do usuário nesta sessão**: projetar já a costura pra um dia acoplar uma LLM barata, que ajude nas situações não-determinísticas que este design já rejeitou resolver sozinho (fusão de produto, tag, conteúdo ambíguo) — sem gastar mais que **US$1/mês**. Escopo: só a interface/contrato, sem implementar chamada nenhuma agora.
+**Estado: implementada e em uso real desde v2** (as seções abaixo, escritas na sessão original de design v1, propunham só a costura; o que segue documenta o contrato de verdade — texto de v1 mantido e anotado onde ficou obsoleto, não apagado).
 
-**A regra que faz o orçamento de US$1/mês ser real: IA só é chamada em pontos de baixa frequência, nunca no caminho de leitura.** `consultar` roda várias vezes por dia — nunca chama IA. `importar` roda quando o usuário vai ao mercado (algumas vezes por mês) — pode chamar IA só pra itens novos/ambíguos daquela nota. Comandos que o próprio usuário aciona sob demanda (`produtos comparar`) também servem, porque a frequência é controlada por quem paga a conta. Essa regra é o que impede uma sessão futura de "melhorar a busca" plugando IA em todo `consultar` e estourando o orçamento sem querer.
+**Pedido original (v1)**: projetar já a costura pra um dia acoplar uma LLM barata, que ajude nas situações não-determinísticas que este design já rejeitou resolver sozinho (fusão de produto, tag, conteúdo ambíguo) — sem gastar mais que US$1/mês. **Orçamento revisado em v2: US$5/mês** (provedor e preços reais escolhidos, ver abaixo).
+
+**Princípio novo em v2, o que resume tudo abaixo: a IA grava o reversível, nunca o irreversível.** Nome legível (`renomear` desfaz) e categoria (`tag ID TAG --remover` desfaz) podem ser aplicados automaticamente. Fusão de produto e qualquer preço nunca são tocados por IA — `produtos fundir` continua 100% manual, mesmo quando a IA "tem certeza" de uma duplicata.
+
+**A regra que faz o orçamento ser real: IA só é chamada em pontos de baixa frequência, nunca no caminho de leitura corriqueiro.** `consultar` roda várias vezes por dia — só chama IA **quando a busca determinística vem vazia** (regra revisada em v2; antes era "nunca chama IA nenhuma", ficou "nunca quando já achou algo determinístico"). `importar`/`produtos revisar` chamam IA para produtos novos/pendentes (algumas vezes por mês, não por busca). `produtos comparar` continua opt-in por par. Essa regra é o que impede uma sessão futura de "melhorar a busca" plugando IA em todo resultado de `consultar` e estourando o orçamento sem querer.
 
 **Por que `urllib.request` da stdlib, não um SDK de provedor.** É uma chamada HTTP simples (um POST, um JSON de resposta, sem streaming) e baixíssima frequência — o caso raro em que stdlib já é menos código do que configurar e importar um SDK (o oposto do que aconteceu com Typer, onde o framework poupava trabalho real). Padronizar no formato REST `/chat/completions` (compatível com vários provedores baratos) é toda a "abstração de provedor" necessária — trocar de provedor é trocar `base_url`/`api_key`/`model` na config, sem registry nem plugins.
 
-**Não decidido aqui, de propósito: qual provedor/modelo.** Preço de API muda com frequência e não tenho como validar valor atual nesta sessão — isso é decisão de implementação, a revisitar checando preço real na hora. Candidatos conhecidos por serem historicamente baratos por token (não é recomendação fechada): camadas "mini"/"flash"/"nano" dos provedores grandes, ou provedores especializados em inferência barata. Conta de padaria: um catálogo pessoal gera no máximo algumas dezenas de chamadas curtas por mês (import-time, não toda busca) — a maioria dos modelos de camada barata deixa isso na casa de centavos de dólar, não dólares. Ainda assim o orçamento é reforçado por código, não por confiança na estimativa (próximo parágrafo).
+**Provedor/modelo — decidido em v2: DeepSeek, `deepseek-flash`.** Preço no screenshot do usuário: US$0,15/0,30 por milhão de tokens de entrada (fora de pico/pico), US$0,60/1,20 saída. `JULIUS_AI_INPUT_PRICE_USD_PER_1M`/`_OUTPUT_PRICE_USD_PER_1M` recomendados nos valores de **pico** (`0.30`/`1.20`) pra o contador de gasto nunca subestimar. Conta de padaria confirmada: um catálogo pessoal gera no máximo algumas dezenas de chamadas curtas por mês — a maioria fica na casa de centavos de dólar. Ainda assim o orçamento é reforçado por código, não por confiança na estimativa (próximo parágrafo).
 
 **Orçamento reforçado com um contador persistido, não com confiança na estimativa:** tabela `ai_usage(month TEXT PK 'YYYY-MM', spent_usd REAL)` — já faz parte do schema v1 (ver "Armazenamento"). Antes de qualquer chamada: lê `spent_usd` do mês corrente; se já bateu o orçamento configurado, **não liga pra API, retorna "sem sugestão"**. Depois de uma chamada real: soma o custo estimado (tokens de entrada/saída da resposta × preço por token configurado). Preço por token não é hardcoded (mudaria toda vez que o provedor reajustar) — vem de variável de ambiente.
 
 **Configuração — tudo por variável de ambiente, tudo opt-in** (lida uma vez por `julius/config.py` → `Config`; testado em `tests/test_config.py`):
 - `JULIUS_AI_API_KEY` — não configurada = IA inteira desligada, silenciosamente (`Config.ai_configured` exige key + base_url + model). Sem isso o sistema funciona 100% igual a hoje.
 - `JULIUS_AI_BASE_URL`, `JULIUS_AI_MODEL` — endpoint e modelo (compatível `/chat/completions`).
-- `JULIUS_AI_BUDGET_USD` — default `1.0`.
+- `JULIUS_AI_BUDGET_USD` — default `1.0` (o usuário roda com `5.0`).
 - `JULIUS_AI_INPUT_PRICE_USD_PER_1M`, `JULIUS_AI_OUTPUT_PRICE_USD_PER_1M` — preço por milhão de tokens, pra calcular o gasto real depois de cada chamada.
+- `JULIUS_AI_REQUEST_EXTRAS` **(v2)** — JSON mesclado no corpo do request, por cima de `model`/`messages`/`temperature`/`max_tokens`/`response_format` (extras podem sobrescrever qualquer chave). Existe especificamente porque `deepseek-flash` raciocina por padrão e não converge no prompt de enriquecimento (ver "Fatos e pegadinhas"): `'{"thinking":{"type":"disabled"}}'` resolve. Default `{}` — só existe pra quem precisar, não é obrigatório pra outros provedores.
 
 **Duas peças, não uma — separação que o esqueleto anterior errou.** Rede é infra; orçamento é regra de negócio + persistência. Misturar os dois obrigaria o cliente HTTP a conhecer o banco.
-- `julius/infra/llm_client.py` — `Protocol LlmClient` com `complete(system_prompt, user_prompt) -> LlmResponse | None` (`LlmResponse`: `text`, `input_tokens`, `output_tokens`). A implementação HTTP (`urllib.request`) vem num ticket próprio. É `Protocol` porque teste de serviço substitui a rede por um fake.
-- `julius/services/suggestions.py` — recebe `conn`, `Config` e um `LlmClient`; checa `ai_usage`, monta prompts, interpreta a resposta, registra o gasto.
+- `julius/infra/llm_client.py` — `Protocol LlmClient` com `complete(system_prompt, user_prompt, *, max_tokens) -> LlmResponse` (**v2**: nunca devolve `None` — toda falha vira `LlmResponse("", 0, 0, error="...")`, com `error` curto e estável: `"HTTP 429"`, `"timeout"`, `"finish_reason length"`, `"empty content"`; tokens vêm preenchidos quando o provedor já cobrou por eles). `HttpLlmClient` pede `response_format: {"type": "json_object"}` e mescla `ai_request_extras`. É `Protocol` porque teste de serviço substitui a rede por um fake (`tests/_fakes.py::ScriptedLlmClient`).
+- `julius/infra/ai_log.py` **(v2, novo)** — `append(path, record)`, uma linha JSONL por tentativa de chamada em `~/.local/share/julius/ai_calls.jsonl` (ao lado do banco, sem variável nova). Nunca lança. É o que torna visível o silêncio de "IA não sugeriu nada": orçamento estourado, erro de rede e resposta truncada geram linha própria, cada uma com `error` preenchido.
+- `julius/services/suggestions.py` — recebe `conn`, `Config` e um `LlmClient`; `_ask` (privada) checa orçamento, tenta até 2 vezes, cobra e loga cada tentativa (inclusive as que falharam ou vieram truncadas — pagou, conta), faz `json.loads` direto na resposta (JSON mode elimina extração por regex).
+- `julius/services/curation.py` **(v2, novo)** — traduz o que a IA disse em decisões determinísticas (aplicar sozinho × perguntar) e encontra candidatos a duplicata; nunca imprime, nunca funde.
 
-**Invariante mais importante — nem `LlmClient` nem `services/suggestions.py` lançam exceção.** Chave ausente, orçamento estourado, erro de rede, resposta malformada: tudo vira `None` (ou lista vazia), nunca uma exception subindo pro chamador. Todo serviço que consulta sugestões trata `None` como "sem sugestão" e cai no comportamento determinístico. É essa propriedade que garante que esquecer de configurar (ou de recarregar) a chave nunca quebra o sistema — ele só fica sem a ajuda extra.
+**Invariante mais importante — nem `LlmClient` nem `services/suggestions.py`/`curation.py` lançam exceção.** Chave ausente, orçamento estourado, erro de rede, resposta malformada: tudo vira `error` preenchido (cliente) ou `None`/lista vazia (serviços), nunca uma exception subindo pro chamador. Todo serviço que consulta sugestões trata isso como "sem sugestão" e cai no comportamento determinístico. É essa propriedade que garante que esquecer de configurar (ou de recarregar) a chave nunca quebra o sistema — ele só fica sem a ajuda extra.
 
-`services/suggestions.py` expõe (assinaturas, não implementação):
+`services/suggestions.py` expõe hoje (assinaturas reais, `julius/services/suggestions.py`):
 
-- `is_available(conn, config) -> bool` — `config.ai_configured` e orçamento do mês não estourado.
-- `suggest_merge(conn, config, client, description_a, description_b) -> MergeSuggestion | None` — `MergeSuggestion`: `same_product: bool`, `confidence: float`, `rationale: str`. Usado só por `julius produtos comparar`, sob pedido explícito do usuário (ver reconciliação na seção "Identidade de produto e busca" — isso não é a sugestão automática já rejeitada).
-- `suggest_content(conn, config, client, description) -> ContentSuggestion | None` — `ContentSuggestion`: `quantity: float`, `unit: "L"|"KG"|"UN"`, `confidence: float`. Chamado no `importar`, só para descrições que já batem um padrão ambíguo conhecido (tipo `\d+G C/\d+UN`) — resultado é impresso como sugestão, quem grava de fato continua sendo `julius produtos definir-conteudo`, chamado pelo usuário.
-- `suggest_tags(conn, config, client, description, existing_tags) -> list[str]` — lista vazia se indisponível. Sugestão mostrada junto do produto novo no fim do `importar`; gravar a tag continua exigindo `julius produtos tag`.
+- `is_available(conn, config, month=None) -> bool` — `config.ai_configured`, preços configurados e orçamento do mês não estourado.
+- `spent_this_month(conn, month=None) -> float` — pra CLI mostrar "US$ gasto de US$ teto" sem importar `repositories`.
+- `suggest_merges(conn, config, client, pairs: Sequence[tuple[str, str]]) -> list[MergeSuggestion | None]` — em lote (uma chamada pra N pares); usado por `produtos comparar` (par único) e por `curation.judge_duplicates` (candidatos pré-filtrados por `rapidfuzz`).
+- `enrich_products(conn, config, client, products, known_tags) -> dict[int, ProductEnrichment]` — nome legível, 1–3 categorias, conteúdo da embalagem; em lotes de 25 (`ENRICH_BATCH_SIZE`), um lote que falha só perde aqueles produtos. Chamado por `curation.propose`, usado em `produtos revisar`/`importar`.
+- `match_products(conn, config, client, term, catalog) -> list[int]` — dado um termo que a busca determinística não achou, devolve ids do catálogo que respondem (sinônimo/abreviação/categoria). Chamado só quando `consultar` vem vazio.
+
+As três funções antigas do design v1 (fusão par a par, conteúdo isolado, tags isoladas) foram removidas em v2 — substituídas por `suggest_merges` (lote) e `enrich_products` (nome+tags+conteúdo numa chamada só).
 
 **Cortado de propósito: classificar automaticamente um código de unidade novo (`Gf`, `PC`, etc.) via IA.** O mapa de unidade é uma constante curada no código-fonte, editada por um humano quando aparece um código novo — evento raro (surgiu 1x em 5 notas). Gastar uma chamada de rede e checagem de orçamento só pra decorar uma mensagem de erro é máquina demais pra um evento que já falha alto e claro sozinho; se quiser uma opinião da IA nesse momento, o usuário pode perguntar por fora, sem o sistema precisar saber fazer isso.
 
-**Módulo novo**: `julius produtos comparar ID_A ID_B` — chama `suggestions.suggest_merge`; se IA indisponível, cai pra mostrar só a similaridade `rapidfuzz` entre os dois nomes lado a lado (ainda útil, só menos esperto). Nunca funde sozinho — `julius produtos fundir` continua sendo o único jeito de aplicar.
+**`julius produtos comparar ID_A ID_B`** — chama `suggestions.suggest_merges(conn, config, client, [(a, b)])[0]`; sem sugestão, distingue três motivos (não é mais uma mensagem genérica): não configurada (dica `AI_NOT_CONFIGURED`), orçamento do mês esgotado (com valores em US$), ou a chamada falhou (aponta pra `ai_calls.jsonl`). Nunca funde sozinho — `julius produtos fundir` continua sendo o único jeito de aplicar.
+
+**`julius produtos revisar [--sim]` e `julius importar [--sim]` (v2, novo)** — a curadoria de verdade. `curation.propose` chama `enrich_products` pros produtos pendentes (sem tag); nome legível e categoria com um único candidato conhecido são aplicados **sem perguntar** (desfazer: `renomear`/`tag --remover`); categoria em dúvida pergunta (TTY) ou fica pendente; conteúdo de embalagem **nunca** é gravado sem confirmação explícita, mesmo com `--sim`. No fim, candidatos a duplicata (`curation.duplicate_candidates`, `rapidfuzz` corte 75) julgados pela IA (`judge_duplicates`) só imprimem o comando `fundir` pronto — nunca fundem. `importar` roda essa revisão uma vez, no fim, só para os produtos criados naquele import.
 
 ### Estrutura de pacote — camadas como DAG de dependências
 
@@ -311,6 +346,13 @@ julius/
     ├── __init__.py           #      app + callback raiz (nenhuma conexão aberta em import)
     └── receipts.py · stores.py · products.py                                          (tickets)
 ```
+
+**Adições de v1.1 e v2** (a árvore acima é a original do design v1; ficou como registro histórico em vez de reescrita):
+- `julius/services/guidance.py` + `julius/cli/_hints.py` — módulo de dicas de uso (v1.1, ver seção própria).
+- `julius/infra/ai_log.py` **(v2)** — log JSONL de chamadas de IA, um arquivo, uma função (`append`).
+- `julius/services/curation.py` **(v2)** — decide o que a IA pode aplicar sozinho e o que precisa perguntar; encontra candidatos a duplicata.
+- `julius/cli/_review.py` **(v2)** — a tela de revisão compartilhada por `produtos revisar` e `importar`.
+- `julius/infra/migrations/0002_store_address_and_seed_tags.sql` **(v2)** — `stores.address` + 13 tags semeadas.
 
 **Regras de dependência (o que faz a DAG valer)** — codificadas em `tests/test_architecture.py`, que inspeciona os imports de todo módulo e falha em qualquer atalho:
 
@@ -355,7 +397,7 @@ julius/
 | `importar` · `consultar` · `exportar_csv` | `import_receipts` · `search_prices` · `export_csv` |
 | `listar_mercados` · `renomear_mercado` · `listar_produtos` · `renomear_produto` | `list_stores` · `rename_store` · `list_products` · `rename_product` |
 | `fundir_produtos` · `marcar_tag` · `definir_conteudo` · `comparar_produtos` | `merge_products` · `tag_product` · `set_product_content` · `compare_products` |
-| `disponivel` · `sugerir_fusao` · `sugerir_conteudo` · `sugerir_tags` | `is_available` · `suggest_merge` · `suggest_content` · `suggest_tags` |
+| `disponivel` · `sugerir_fusao` | `is_available` · `suggest_merge` (v1; virou `suggest_merges` em lote na v2, ver "Camada opcional de IA") |
 | `JULIUS_IA_*` · `precos.db` | `JULIUS_AI_*` (ver "Camada opcional de IA") · `prices.db` |
 
 Path do banco: `Config.db_path` — variável de ambiente `JULIUS_DB`, default `~/.local/share/julius/prices.db` (`Path.home()`, stdlib puro — sem `platformdirs`, já que o alvo é só Linux). Sem flag `--db` em cada comando: é ferramenta de um usuário só, com um banco só; variável de ambiente já cobre testar em outro caminho se precisar.
@@ -396,7 +438,7 @@ Nomes de comando em português (são UI); cada um mapeia pra uma função em ing
 
 `pyproject.toml` com `[project.scripts] julius = "julius.cli:app"` — depois de `.venv/bin/pip install -e '.[dev]'`, o comando `.venv/bin/julius` fica disponível sem `python -m` nem caminho de script. Dependências: `typer`, `rich`, `rapidfuzz`; dev: `pytest`. `infra/llm_client.py` não adiciona dependência — chamada HTTP via `urllib.request` da stdlib. `[tool.setuptools.package-data]` inclui os `.sql` (ver "Migração de schema").
 
-### Dicas de uso (`guidance`) — v1.1
+### Dicas de uso (`guidance`) — v1.1, estendida em v2
 
 **Motivação (caso real):** `julius consultar banana` num banco recém-criado respondia `Nenhum resultado.` — verdadeiro e inútil. O usuário não tinha como saber que o problema era "nada foi importado ainda". Pedido explícito: quando algo dá vazio ou errado, o CLI **diagnostica o que aconteceu e sugere o próximo comando**, pronto pra copiar. Isso é um módulo, não um punhado de `if`s espalhados pela CLI.
 
@@ -420,26 +462,30 @@ Nomes de comando em português (são UI); cada um mapeia pra uma função em ing
 | `IMPORT_FILE_NOT_FOUND` | `FileNotFoundError` | caminho | Arquivo não encontrado. Se usou `*.html`, nenhum arquivo casou com o padrão nessa pasta |
 | `IMPORT_NOT_A_RECEIPT` | `ReceiptParseError` ou `UnicodeDecodeError` (PDF/binário no meio dos HTMLs) | nome do arquivo | Não parece a página de NFC-e da Receita/DF salva como HTML (PDF e `.har` não servem). Abra o link do QR code no navegador e "Salvar página como…" |
 | `IMPORT_UNKNOWN_UNIT` | `UnknownUnitError` | código bruto | Código de unidade novo. Adicione uma linha em `UNIT_MAP` (`julius/domain/normalization.py`) — o import inteiro desse arquivo foi ignorado, nada gravado |
-| `AI_NOT_CONFIGURED` | `produtos comparar` sem `Config.ai_configured` | — | Pra ter a opinião da IA, defina `JULIUS_AI_API_KEY`, `JULIUS_AI_BASE_URL`, `JULIUS_AI_MODEL` e os dois preços por token (ver README) |
+| `AI_NOT_CONFIGURED` | `produtos comparar`/`revisar` sem `Config.ai_configured` | — | Pra ter a opinião da IA, defina `JULIUS_AI_API_KEY`, `JULIUS_AI_BASE_URL`, `JULIUS_AI_MODEL` e os dois preços por token (ver README) |
+| `SAME_CHAIN_BRANCHES` **(v2)** | `importar` com ≥2 lojas do mesmo `cnpj[:8]` e alguma ainda sem apelido | até 3 `"cnpj — endereço"` | Filiais da mesma rede: …. Dê apelidos que digam onde fica: `julius mercados renomear CNPJ "Rede — Bairro"` |
+| `PRODUCTS_PENDING_REVIEW` **(v2)** | `importar` com produto novo sem tag e `reviewed=False` | quantidade | N produto(s) novo(s) sem categoria. Nome legível, categoria e conteúdo com ajuda da IA: `julius produtos revisar` |
+| `FOUND_VIA_AI` **(v2)** | `consultar` achou produto só pelo fallback de IA (`match_products`) | até 3 `"id · nome"` + total | Encontrado pela IA, não pelo nome: …. Pra achar direto na próxima, renomeie ou marque: `julius produtos renomear ID "Nome"` / `julius produtos tag ID TAG` |
 
-Isso **fecha a questão em aberto nº 3** ("dica via `C/<n>`"): vira `PACKAGE_SIZE_IN_DESCRIPTION`, só pra produtos novos, sem IA — a sugestão de conteúdo por LLM (`suggestions.suggest_content`) continua sem chamador.
+Isso **fecha a questão em aberto nº 3** ("dica via `C/<n>`"): vira `PACKAGE_SIZE_IN_DESCRIPTION` pra quem não usa IA, e é coberta por `enrich_products` (via `produtos revisar`) pra quem usa — ver "Camada opcional de IA".
 
 **Contratos:**
-- `domain/models.py`: `HintKind = Literal[...]` (os 10 acima) e `Hint(kind: HintKind, details: tuple[str, ...] = ())`. `ImportResult` ganha `new_product_ids: tuple[int, ...] = ()` (quem cria produto novo é `importing`; sem isso a dica de embalagem não sabe o que é novo).
-- `services/search.py`: `closest_names(conn, term, limit=3) -> list[tuple[str, int]]` — nomes que `search_prices` **não** casaria (WRatio < `MATCH_SCORE_CUTOFF`) mas cuja melhor palavra tem `fuzz.ratio >= NEAR_MISS_CUTOFF` (70) contra o termo, ordenados por score desc. **Mudou em relação ao design original (faixa WRatio 45–70) por medição nos 5 recibos reais**: WRatio de termo curto contra nome longo bate no piso 45–60 pra qualquer entrada (`xyzabc` → 45 contra "CHA LEAO RELAXA…", `leite` → 67,5 contra "PAO ZINHO … BAGUETE") enquanto o erro real `pikana` → PICANHA fica em 65,5 — a faixa era só ruído e `NO_MATCH_TRY_TAGS` nunca dispararia. Palavra a palavra separa: `pikana` → PICANHA 77 e `arros` → ARR 75 entram; `frango`, `carne`, `sabao`, `feijao` ficam abaixo de 70. Falso positivo conhecido: `queijo` → QUERO 73. Números no docstring da constante.
+- `domain/models.py`: `HintKind = Literal[...]` (13 hoje, os 10 de v1.1 + os 3 de v2 acima) e `Hint(kind: HintKind, details: tuple[str, ...] = ())`. `ImportResult` ganha `new_product_ids: tuple[int, ...] = ()` (quem cria produto novo é `importing`; sem isso a dica de embalagem não sabe o que é novo).
+- `services/search.py`: `closest_names(conn, term, limit=3) -> list[tuple[str, int]]` — nomes que `search_prices` **não** casaria (WRatio < `MATCH_SCORE_CUTOFF`) mas cuja melhor palavra tem `fuzz.ratio >= NEAR_MISS_CUTOFF` (70) contra o termo, ordenados por score desc. **Mudou em relação ao design original (faixa WRatio 45–70) por medição nos 5 recibos reais**: WRatio de termo curto contra nome longo bate no piso 45–60 pra qualquer entrada (`xyzabc` → 45 contra "CHA LEAO RELAXA…", `leite` → 67,5 contra "PAO ZINHO … BAGUETE") enquanto o erro real `pikana` → PICANHA fica em 65,5 — a faixa era só ruído e `NO_MATCH_TRY_TAGS` nunca dispararia. Palavra a palavra separa: `pikana` → PICANHA 77 e `arros` → ARR 75 entram; `frango`, `carne`, `sabao`, `feijao` ficam abaixo de 70. Falso positivo conhecido: `queijo` → QUERO 73. Números no docstring da constante. **(v2)** `records_for_products(conn, product_ids, limit)` foi extraído de `search_prices` (o highlight/trim por unidade), pra o fallback de IA reaproveitar depois de resolver ids; `catalog_for_matching(conn)` devolve `(id, nome, tags)` pro prompt de `match_products`.
 - `services/guidance.py` (só funções puras sobre `conn`/valores; nunca lança — dica que falha é dica que não aparece):
   - `after_search(conn, term, tag, records) -> list[Hint]`
-  - `after_import(conn, result: ImportResult) -> list[Hint]`
+  - `after_import(conn, result: ImportResult, *, reviewed: bool = False) -> list[Hint]` — **(v2)** `reviewed=True` (produtos revisados por `produtos revisar`/`importar`) suprime `PRODUCTS_PENDING_REVIEW` e `PACKAGE_SIZE_IN_DESCRIPTION`, já cobertos pela tela de revisão. Ordem: `PRODUCTS_PENDING_REVIEW` → `SAME_CHAIN_BRANCHES` → `FIRST_IMPORT_NAME_STORES` → `PACKAGE_SIZE_IN_DESCRIPTION`, cortando em `MAX_HINTS`.
   - `for_import_error(error: Exception, path: Path) -> list[Hint]`
   - `for_compare(config: Config) -> list[Hint]`
+  - `after_ai_fallback(records) -> list[Hint]` **(v2)** — `[Hint("FOUND_VIA_AI", ...)]` se `records` não é vazio, senão `[]`. Continua sem IA nenhuma aqui dentro (princípio 5): quem chamou a IA e achou os `records` foi a CLI, este módulo só descreve o resultado.
   - Todas cortam em `MAX_HINTS = 2`.
-- `cli/_hints.py`: `TEXTS: dict[HintKind, str]` (templates com `{details}`) e `print_hints(hints, *, to_stderr=False)`. Um teste garante que **todo** `HintKind` tem texto — esquecer um vira falha de teste, não frase em branco.
+- `cli/_hints.py`: `TEXTS: dict[HintKind, str]` (templates com `{details}`) e `print_hints(hints, *, to_stderr=False)`. Um teste garante que **todo** `HintKind` tem texto — esquecer um vira falha de teste, não frase em branco. **Separador de `{details}` mudou de `", "` pra `" · "` em v2** (endereços têm vírgula, ficaria ambíguo com o separador antigo).
 - A checagem ad hoc `has_imports` que vivia em `cli/receipts.py` sumiu: virou `NO_RECEIPTS_IMPORTED` pelo caminho normal. Em `importar` com vários arquivos, `after_import` roda **uma vez no fim** sobre os resultados somados (não por arquivo), pra respeitar o máximo de 2 dicas por comando; as dicas de erro saem por arquivo, em `stderr`.
 
-**Fora do escopo v1.1:** dicas em saída cheia, "não mostrar de novo", dicas geradas por IA, tutorial interativo, telemetria de uso.
+**Fora do escopo v1.1 (ainda de fora em v2, exceto onde marcado):** dicas em saída cheia, "não mostrar de novo", dicas geradas por IA (o texto continua determinístico; só o *dado* que alimenta `FOUND_VIA_AI` vem de uma busca que usou IA), tutorial interativo, telemetria de uso.
 
-### Fora do escopo v1 (de propósito)
-Detecção automática de estado, comando de correção para linhas de preço (usa `sqlite3` direto), veredito automático de preço, lock de concorrência, flag `--db` por comando, `platformdirs`, **sugestão automática (não pedida) de fusão de produtos** (similaridade de string erra sabor/tamanho — sugestão sob pedido explícito via `produtos comparar` é diferente, ver seção "Camada opcional de IA"), **busca semântica/embeddings** (desproporcional pro tamanho do catálogo), **auto-classificação de tags sem confirmação** (sugestão via IA é diferente — grava só quando o usuário confirma com `produtos tag`), **extração automática de conteúdo/tamanho de embalagem da descrição** (números ambíguos ou irrelevantes no texto real — sugestão via IA precisa igual de confirmação por `definir-conteudo`), **classificar código de unidade novo via IA** (evento raro, curadoria manual do mapa já resolve, não vale o custo).
+### Fora do escopo v1/v2 (de propósito)
+Detecção automática de estado, comando de correção para linhas de preço (usa `sqlite3` direto), veredito automático de preço, lock de concorrência, flag `--db` por comando, `platformdirs`, **fusão automática de produtos** (nem por texto nem pela IA — `judge_duplicates` só imprime o `fundir` pronto, quem roda é o usuário), **busca semântica/embeddings** (desproporcional pro tamanho do catálogo), **auto-classificação de tags sem confirmação** (categoria com um único candidato conhecido é aplicada automaticamente em v2, mas isso é *aplicar a sugestão da IA*, não *classificar sem a IA*; categoria em dúvida ainda pergunta), **classificar código de unidade novo via IA** (evento raro, curadoria manual do mapa já resolve, não vale o custo), **cache de respostas de IA** (o caminho durável é corrigir o dado — renomear/marcar tag — não lembrar a resposta antiga), **fallback entre provedores de IA**, **`julius ia status`** (`tail -n 5 ai_calls.jsonl` e `SELECT * FROM ai_usage` já cobrem).
 
 ## Design de testes
 
