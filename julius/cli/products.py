@@ -10,7 +10,7 @@ from julius.cli._common import console, fail, open_db
 from julius.cli._hints import print_hints
 from julius.domain.models import Product
 from julius.infra.llm_client import HttpLlmClient
-from julius.services import catalog, guidance
+from julius.services import catalog, guidance, suggestions
 
 app = typer.Typer()
 
@@ -75,16 +75,24 @@ def merge_products(
 def tag_product(
     product_id: Annotated[int, typer.Argument(help="ID do produto.")],
     tag: Annotated[str, typer.Argument(help="Categoria livre, ex.: limpeza, hortifruti.")],
+    remove: Annotated[bool, typer.Option("--remover", help="Remove a tag em vez de marcar.")] = False,
 ) -> None:
-    """Marca um produto com uma tag para filtrar depois em `consultar --tag`."""
+    """Marca ou remove a tag de um produto (filtra depois em `consultar --tag`)."""
     conn = open_db()
     try:
-        catalog.tag_product(conn, product_id, tag)
+        if remove:
+            catalog.untag_product(conn, product_id, tag)
+        else:
+            catalog.tag_product(conn, product_id, tag)
     except (ValueError, LookupError) as error:
         fail(str(error))
     finally:
         conn.close()
-    console.print(f"Produto {product_id} marcado com '{tag.strip().lower()}'.")
+    normalized = tag.strip().lower()
+    if remove:
+        console.print(f"Tag '{normalized}' removida do produto {product_id}.")
+    else:
+        console.print(f"Produto {product_id} marcado com '{normalized}'.")
 
 
 @app.command("definir-conteudo")
@@ -115,6 +123,8 @@ def compare_products(
     try:
         names = {product.id: product.canonical_name for product in catalog.list_products(conn)}
         comparison = catalog.compare_products(conn, settings, HttpLlmClient.from_config(settings), id_a, id_b)
+        budget_exhausted = settings.ai_configured and not suggestions.is_available(conn, settings)
+        spent = suggestions.spent_this_month(conn) if budget_exhausted else 0.0
     except (ValueError, LookupError) as error:
         fail(str(error))
     finally:
@@ -126,8 +136,10 @@ def compare_products(
     if suggestion is not None:
         verdict = "mesmo produto" if suggestion.same_product else "produtos diferentes"
         console.print(f"IA: {verdict} (confiança {suggestion.confidence:.1f}) — {suggestion.rationale}")
+    elif budget_exhausted:
+        console.print(f"IA indisponível: orçamento do mês esgotado (US$ {spent:.2f} de US$ {settings.ai_budget_usd:.2f}).")
     elif settings.ai_configured:
-        console.print("IA indisponível (orçamento do mês esgotado ou falha na chamada) — só similaridade de texto.")
+        console.print(f"IA indisponível: a chamada falhou — veja {settings.ai_log_path}.")
     console.print(f"Para fundir: julius produtos fundir {id_a} {id_b}")
     print_hints(guidance.for_compare(settings))
 

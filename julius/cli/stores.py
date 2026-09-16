@@ -23,9 +23,9 @@ def list_stores() -> None:
     if not stores:
         console.print("Nenhum mercado importado ainda.")
         return
-    table = Table("CNPJ", "Razão social", "Apelido")
+    table = Table("CNPJ", "Razão social", "Apelido", "Endereço")
     for store in stores:
-        table.add_row(store.cnpj, store.legal_name, store.nickname)
+        table.add_row(store.cnpj, store.legal_name, store.nickname, store.address or "")
     console.print(table)
 
 

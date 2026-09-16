@@ -1,9 +1,14 @@
+import json
+import re
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
+import julius.cli.receipts as receipts_cli
+from _fakes import ScriptedLlmClient
 from julius.cli import app
+from julius.infra.llm_client import LlmResponse
 
 FIXTURES = Path(__file__).parent / "fixtures"
 runner = CliRunner()
@@ -21,6 +26,32 @@ def _import(*names: str):
 
 def _hint_lines(text: str) -> list[str]:
     return [line for line in text.splitlines() if line.startswith("Dica:")]
+
+
+def _product_id(name_fragment: str) -> int:
+    output = runner.invoke(app, ["produtos", "listar"]).output
+    match = re.search(r"│\s*(\d+)\s*│[^│]*" + re.escape(name_fragment), output)
+    assert match, f"{name_fragment!r} not found in:\n{output}"
+    return int(match.group(1))
+
+
+def _ai_env(monkeypatch, **extra):
+    monkeypatch.setenv("JULIUS_AI_API_KEY", "k")
+    monkeypatch.setenv("JULIUS_AI_BASE_URL", "https://api.example/v1")
+    monkeypatch.setenv("JULIUS_AI_MODEL", "cheap-1")
+    monkeypatch.setenv("JULIUS_AI_INPUT_PRICE_USD_PER_1M", "1.0")
+    monkeypatch.setenv("JULIUS_AI_OUTPUT_PRICE_USD_PER_1M", "1.0")
+    for name, value in extra.items():
+        monkeypatch.setenv(name, value)
+
+
+def _stub_client(monkeypatch, client):
+    class Stub:
+        @staticmethod
+        def from_config(config):
+            return client
+
+    monkeypatch.setattr(receipts_cli, "HttpLlmClient", Stub)
 
 
 def test_importar_prints_per_file_summary():
@@ -99,6 +130,76 @@ def test_consultar_with_results_prints_no_hint():
     result = runner.invoke(app, ["consultar", "picanha"])
     assert result.exit_code == 0
     assert _hint_lines(result.output) == []
+
+
+def test_consultar_shows_store_address_under_nickname():
+    _import("qrcode-3.html")
+    result = runner.invoke(app, ["consultar", "tomate"])
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    nickname_line = next(i for i, line in enumerate(lines) if "DONA DE CASA S/A" in line)
+    assert "GUARA II" in lines[nickname_line + 1]
+
+
+def test_consultar_ai_fallback_finds_products_and_prints_hint(monkeypatch):
+    _import("qrcode.html")
+    picanha_id = _product_id("PICANHA")
+    _ai_env(monkeypatch)
+    fake = ScriptedLlmClient([LlmResponse(json.dumps({"ids": [picanha_id]}), 10, 5)])
+    _stub_client(monkeypatch, fake)
+
+    result = runner.invoke(app, ["consultar", "carnes"])
+
+    assert result.exit_code == 0, result.output
+    assert "Preços por KG" in result.output
+    assert "PICANHA" in result.output
+    assert any("Encontrado pela IA" in hint for hint in _hint_lines(result.output))
+    assert len(fake.calls) == 1
+
+
+def test_consultar_does_not_call_ai_when_there_are_results(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    fake = ScriptedLlmClient([])
+    _stub_client(monkeypatch, fake)
+
+    result = runner.invoke(app, ["consultar", "picanha"])
+
+    assert result.exit_code == 0
+    assert fake.calls == []
+
+
+def test_consultar_ai_fallback_with_no_ids_keeps_regular_hints(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    fake = ScriptedLlmClient([LlmResponse(json.dumps({"ids": []}), 10, 5)])
+    _stub_client(monkeypatch, fake)
+
+    result = runner.invoke(app, ["consultar", "carnes"])
+
+    assert result.exit_code == 0
+    (hint,) = _hint_lines(result.output)
+    assert "produtos tag" in hint
+
+
+def test_consultar_with_tag_never_calls_ai(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    fake = ScriptedLlmClient([LlmResponse(json.dumps({"ids": []}), 10, 5)])
+    _stub_client(monkeypatch, fake)
+
+    result = runner.invoke(app, ["consultar", "carnes", "--tag", "x"])
+
+    assert result.exit_code == 0
+    assert fake.calls == []
+
+
+def test_consultar_without_ai_configured_is_unchanged():
+    _import("qrcode.html")
+    result = runner.invoke(app, ["consultar", "carnes"])
+    assert result.exit_code == 0
+    (hint,) = _hint_lines(result.output)
+    assert "produtos tag" in hint
 
 
 def test_importar_first_time_suggests_store_nicknames():

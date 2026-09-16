@@ -3,7 +3,10 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+import julius.cli.products as products_cli
+from _fakes import ScriptedLlmClient
 from julius.cli import app
+from julius.infra.llm_client import LlmResponse
 
 FIXTURES = Path(__file__).parent / "fixtures"
 runner = CliRunner()
@@ -32,6 +35,14 @@ def test_mercados_listar_empty_and_after_import():
     assert result.exit_code == 0
     assert "27289076001379" in result.output
     assert "FL 3 COSTA MULTICANAL S A" in result.output
+
+
+def test_mercados_listar_shows_address_column():
+    _import("qrcode-3.html")
+    result = _run("mercados", "listar")
+    assert result.exit_code == 0
+    assert "Endereço" in result.output
+    assert "GUARA II" in result.output
 
 
 def test_mercados_renomear_accepts_formatted_cnpj_and_shows_in_listar():
@@ -131,6 +142,60 @@ def test_produtos_comparar_unknown_id_exits_1():
     result = _run("produtos", "comparar", "1", "999")
     assert result.exit_code == 1
     assert "999" in result.stderr
+
+
+def _ai_env(monkeypatch, **extra):
+    monkeypatch.setenv("JULIUS_AI_API_KEY", "k")
+    monkeypatch.setenv("JULIUS_AI_BASE_URL", "https://api.example/v1")
+    monkeypatch.setenv("JULIUS_AI_MODEL", "cheap-1")
+    monkeypatch.setenv("JULIUS_AI_INPUT_PRICE_USD_PER_1M", "1.0")
+    monkeypatch.setenv("JULIUS_AI_OUTPUT_PRICE_USD_PER_1M", "1.0")
+    for name, value in extra.items():
+        monkeypatch.setenv(name, value)
+
+
+def _stub_client(monkeypatch, client):
+    class Stub:
+        @staticmethod
+        def from_config(config):
+            return client
+
+    monkeypatch.setattr(products_cli, "HttpLlmClient", Stub)
+
+
+def test_comparar_budget_exhausted_message(monkeypatch):
+    _ai_env(monkeypatch, JULIUS_AI_BUDGET_USD="0")
+    _stub_client(monkeypatch, ScriptedLlmClient([]))
+    _import("qrcode.html")
+    result = _run("produtos", "comparar", "1", "2")
+    assert result.exit_code == 0, result.output
+    assert "orçamento do mês esgotado" in result.output
+    assert "US$ 0.00 de US$ 0.00" in result.output
+
+
+def test_comparar_call_failure_points_to_log(monkeypatch):
+    _ai_env(monkeypatch)
+    _stub_client(monkeypatch, ScriptedLlmClient([LlmResponse("", 0, 0, error="HTTP 500")]))
+    _import("qrcode.html")
+    result = _run("produtos", "comparar", "1", "2")
+    assert result.exit_code == 0, result.output
+    assert "ai_calls.jsonl" in result.output
+
+
+def test_tag_remover_removes_and_reports():
+    _import("qrcode.html")
+    _run("produtos", "tag", "1", "bebidas")
+    result = _run("produtos", "tag", "1", "bebidas", "--remover")
+    assert result.exit_code == 0, result.output
+    assert "Tag 'bebidas' removida do produto 1." in result.output
+    assert "bebidas" not in _run("produtos", "listar").output
+
+
+def test_tag_remover_missing_link_exits_1():
+    _import("qrcode.html")
+    result = _run("produtos", "tag", "1", "bebidas", "--remover")
+    assert result.exit_code == 1
+    assert "bebidas" in result.stderr
 
 
 def test_help_shows_subcommands():

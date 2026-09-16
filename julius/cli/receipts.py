@@ -5,12 +5,15 @@ from typing import Annotated, Optional
 
 import typer
 from rich.table import Table
+from rich.text import Text
 
+from julius import config
 from julius.cli._common import console, error_console, fail, open_db
 from julius.cli._hints import print_hints
 from julius.domain.models import ImportResult, PriceRecord
+from julius.infra.llm_client import HttpLlmClient
 from julius.parsers.df import DFReceiptParser
-from julius.services import export as export_service, guidance, importing, search as search_service
+from julius.services import export as export_service, guidance, importing, search as search_service, suggestions
 
 _HIGHLIGHT_STYLE = {"lowest": "green", "highest": "red"}
 
@@ -55,6 +58,10 @@ def search(
     try:
         records = search_service.search_prices(conn, term=term, tag=tag, limit=limit)
         hints = guidance.after_search(conn, term, tag, records)
+        if not records and term is not None and tag is None:
+            fallback_records, fallback_hints = _ai_fallback(conn, term, limit)
+            if fallback_records:
+                records, hints = fallback_records, fallback_hints
     finally:
         conn.close()
     if not records and not hints:
@@ -76,6 +83,19 @@ def export(
     console.print(f"{count} linhas exportadas para {output}")
 
 
+def _ai_fallback(conn, term: str, limit: int) -> tuple[list[PriceRecord], list]:
+    """consultar never calls the AI when the deterministic search already found something."""
+    settings = config.load()
+    client = HttpLlmClient.from_config(settings)
+    if client is None or not suggestions.is_available(conn, settings):
+        return [], []
+    ids = suggestions.match_products(conn, settings, client, term, search_service.catalog_for_matching(conn))
+    if not ids:
+        return [], []
+    records = search_service.records_for_products(conn, ids, limit)
+    return records, guidance.after_ai_fallback(records)
+
+
 def _merge(results: list[ImportResult]) -> ImportResult:
     return ImportResult(
         new_items=sum(result.new_items for result in results),
@@ -88,6 +108,12 @@ def _money(value: float) -> str:
     return f"R$ {value:.2f}".replace(".", ",")
 
 
+def _store_cell(record: PriceRecord) -> str | Text:
+    if not record.store_address:
+        return record.store_nickname
+    return Text.assemble(record.store_nickname, "\n", (record.store_address, "dim"))
+
+
 def _table(unit: str, records: list[PriceRecord]) -> Table:
     per_content_units = {r.content_unit for r in records if r.price_per_content is not None}
     table = Table(title=f"Preços por {unit}")
@@ -97,7 +123,7 @@ def _table(unit: str, records: list[PriceRecord]) -> Table:
         (only_unit,) = per_content_units if len(per_content_units) == 1 else (None,)
         table.add_column(f"Por {only_unit}" if only_unit else "Por conteúdo")
     for record in records:
-        row = [record.purchased_at[:10], record.canonical_name, record.store_nickname, _money(record.unit_price)]
+        row = [record.purchased_at[:10], record.canonical_name, _store_cell(record), _money(record.unit_price)]
         if per_content_units:
             row.append("" if record.price_per_content is None else _money(record.price_per_content))
         table.add_row(*row, style=_HIGHLIGHT_STYLE.get(record.highlight or ""))
