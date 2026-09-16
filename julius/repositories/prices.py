@@ -64,7 +64,7 @@ def prices_for_products(conn: sqlite3.Connection, product_ids: Sequence[int]) ->
     rows = conn.execute(
         f"""
         SELECT p.product_id, pr.canonical_name, s.nickname, s.address, p.unit, p.unit_price, p.purchased_at,
-               pr.content_quantity, pr.content_unit, pr.kind
+               pr.content_quantity, pr.content_unit, pr.kind, p.access_key
         FROM prices p
         JOIN stores s ON s.cnpj = p.store_cnpj
         JOIN products pr ON pr.id = p.product_id
@@ -85,6 +85,7 @@ def prices_for_products(conn: sqlite3.Connection, product_ids: Sequence[int]) ->
             content_unit=row["content_unit"],
             store_address=row["address"],
             kind=row["kind"],
+            access_key=row["access_key"],
         )
         for row in rows
     ]

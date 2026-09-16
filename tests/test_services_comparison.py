@@ -2,7 +2,7 @@ from julius.domain.models import Receipt, ReceiptItem
 from julius.repositories.prices import insert_price
 from julius.repositories.products import resolve_product_id, set_content, set_kind
 from julius.repositories.stores import ensure_store
-from julius.services.comparison import compare_stores
+from julius.services.comparison import compare_stores, new_extremes
 
 STORE_A = "00000000000001"
 STORE_B = "00000000000002"
@@ -154,3 +154,135 @@ def test_compare_stores_ties_keep_the_newest_observation(conn):
     (comparison,) = compare_stores(conn).comparisons
 
     assert comparison.entries[0].purchased_at == "2026-09-16T10:00:00"
+
+
+def test_new_extremes_reports_new_low_across_stores(conn):
+    old = _product(conn, "CEBOLA BRANCA kg", "1", STORE_B)
+    new = _product(conn, "CEBOLA kg", "2", STORE_A)
+    set_kind(conn, old, "cebola")
+    set_kind(conn, new, "cebola")
+    _price(conn, old, STORE_B, "KG", 9.99, "2026-09-07T10:00:00", "old")
+    _price(conn, new, STORE_A, "KG", 7.89, "2026-09-16T10:00:00", "new")
+
+    (extreme,) = new_extremes(conn, ["new"])
+
+    assert extreme.highlight == "lowest"
+    assert (extreme.price, extreme.previous_price) == (7.89, 9.99)
+    assert (extreme.previous_store, extreme.scope) == ("Loja 2", "cebola")
+    assert extreme.basis == "unit_price" and extreme.content_unit is None
+
+
+def test_new_extremes_reports_new_high(conn):
+    product = _product(conn, "MEL SILVES", "1", STORE_A)
+    set_kind(conn, product, "mel")
+    _price(conn, product, STORE_A, "UN", 29.99, "2026-09-04T10:00:00", "old")
+    _price(conn, product, STORE_A, "UN", 33.99, "2026-09-16T10:00:00", "new")
+
+    (extreme,) = new_extremes(conn, ["new"])
+
+    assert extreme.highlight == "highest"
+    assert (extreme.price, extreme.previous_price) == (33.99, 29.99)
+
+
+def test_new_extremes_silent_without_history(conn):
+    product = _product(conn, "NOVIDADE kg", "1", STORE_A)
+    set_kind(conn, product, "novidade")
+    _price(conn, product, STORE_A, "KG", 5.0, "2026-09-16T10:00:00", "new")
+
+    assert new_extremes(conn, ["new"]) == []
+
+
+def test_new_extremes_silent_when_price_in_between(conn):
+    product = _product(conn, "CEBOLA kg", "1", STORE_A)
+    _price(conn, product, STORE_A, "KG", 5.0, "2026-09-01T10:00:00", "a")
+    _price(conn, product, STORE_A, "KG", 9.0, "2026-09-02T10:00:00", "b")
+    _price(conn, product, STORE_A, "KG", 7.0, "2026-09-16T10:00:00", "new")
+
+    assert new_extremes(conn, ["new"]) == []
+
+
+def test_new_extremes_silent_when_tying_record(conn):
+    product = _product(conn, "CEBOLA kg", "1", STORE_A)
+    _price(conn, product, STORE_A, "KG", 5.0, "2026-09-01T10:00:00", "a")
+    _price(conn, product, STORE_A, "KG", 5.0, "2026-09-16T10:00:00", "new")
+
+    assert new_extremes(conn, ["new"]) == []
+
+
+def test_new_extremes_excludes_own_receipt_from_history(conn):
+    product = _product(conn, "CEBOLA kg", "1", STORE_A)
+    _price(conn, product, STORE_A, "KG", 9.0, "2026-09-01T10:00:00", "old")
+    receipt = Receipt(access_key="new", issued_at="2026-09-16T10:00:00", store_cnpj=STORE_A, store_legal_name="S", items=())
+    for index, price in ((1, 5.0), (2, 6.0)):
+        insert_price(conn, receipt, ReceiptItem(index, "c", "d", 1.0, "KG", price, price), product)
+
+    extremes = new_extremes(conn, ["new"])
+
+    # Both lines are measured against the 9.00 history, never against each other: if the 6.00 line
+    # saw its own receipt's 5.00 as "previous", it would not be an extreme at all.
+    assert sorted(extreme.price for extreme in extremes) == [5.0, 6.0]
+    assert {extreme.previous_price for extreme in extremes} == {9.0}
+
+
+def test_new_extremes_falls_back_to_product_scope_without_kind(conn):
+    a = _product(conn, "CEBOLA kg", "1", STORE_A)
+    b = _product(conn, "CEBOLA BRANCA kg", "2", STORE_B)
+    _price(conn, b, STORE_B, "KG", 4.0, "2026-09-07T10:00:00", "other")
+    _price(conn, a, STORE_A, "KG", 9.0, "2026-09-01T10:00:00", "old")
+    _price(conn, a, STORE_A, "KG", 7.0, "2026-09-16T10:00:00", "new")
+
+    (extreme,) = new_extremes(conn, ["new"])
+
+    assert extreme.scope == "CEBOLA kg"
+    assert extreme.previous_price == 9.0  # the other store's cheaper onion is out of scope
+
+
+def test_new_extremes_uses_per_content_basis(conn):
+    small = _product(conn, "AGUA 500ML", "1", STORE_A)
+    big = _product(conn, "AGUA 1,5L", "2", STORE_B)
+    set_kind(conn, small, "água")
+    set_kind(conn, big, "água")
+    set_content(conn, small, 0.5, "L")
+    set_content(conn, big, 1.5, "L")
+    _price(conn, small, STORE_A, "UN", 1.49, "2026-09-01T10:00:00", "old")
+    _price(conn, big, STORE_B, "UN", 3.69, "2026-09-16T10:00:00", "new")
+
+    (extreme,) = new_extremes(conn, ["new"])
+
+    assert extreme.basis == "price_per_content"
+    assert extreme.content_unit == "L"
+    assert extreme.highlight == "lowest"
+    assert extreme.price == 3.69 / 1.5
+
+
+def test_new_extremes_skips_non_participating_item(conn):
+    small = _product(conn, "AGUA 500ML", "1", STORE_A)
+    big = _product(conn, "AGUA 1,5L", "2", STORE_B)
+    set_kind(conn, small, "água")
+    set_kind(conn, big, "água")
+    _price(conn, big, STORE_B, "UN", 3.69, "2026-09-01T10:00:00", "old")
+    _price(conn, small, STORE_A, "UN", 1.49, "2026-09-16T10:00:00", "new")
+
+    assert new_extremes(conn, ["new"]) == []
+
+
+def test_new_extremes_orders_lowest_first_then_by_magnitude(conn):
+    small_drop = _product(conn, "ARROZ kg", "1", STORE_A)
+    big_drop = _product(conn, "FEIJAO kg", "2", STORE_A)
+    rise = _product(conn, "ACUCAR kg", "3", STORE_A)
+    for product_id, old_price, new_price in ((small_drop, 10.0, 9.0), (big_drop, 10.0, 5.0), (rise, 10.0, 20.0)):
+        _price(conn, product_id, STORE_A, "KG", old_price, "2026-09-01T10:00:00", f"old{product_id}")
+    receipt = Receipt(access_key="new", issued_at="2026-09-16T10:00:00", store_cnpj=STORE_A, store_legal_name="S", items=())
+    for index, (product_id, price) in enumerate([(small_drop, 9.0), (big_drop, 5.0), (rise, 20.0)], start=1):
+        insert_price(conn, receipt, ReceiptItem(index, "c", "d", 1.0, "KG", price, price), product_id)
+
+    extremes = new_extremes(conn, ["new"])
+
+    assert [extreme.product_name for extreme in extremes] == ["FEIJAO kg", "ARROZ kg", "ACUCAR kg"]
+
+
+def test_new_extremes_empty_access_keys(conn):
+    product = _product(conn, "CEBOLA kg", "1", STORE_A)
+    _price(conn, product, STORE_A, "KG", 5.0, "2026-09-16T10:00:00", "new")
+    assert new_extremes(conn, []) == []
+    assert new_extremes(conn, ["inexistente"]) == []

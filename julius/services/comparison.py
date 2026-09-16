@@ -8,9 +8,10 @@ FL 3 Costa ones from 12-16/09, so part of any difference can be the month, not t
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Sequence
 
 from julius.domain.comparison_basis import basis_value, comparison_basis
-from julius.domain.models import KindComparison, PriceRecord, StoreComparison, StorePrice
+from julius.domain.models import KindComparison, PriceExtreme, PriceRecord, StoreComparison, StorePrice
 from julius.repositories import prices, products
 
 
@@ -53,3 +54,66 @@ def compare_stores(conn: sqlite3.Connection) -> StoreComparison:
     if not comparisons:
         return StoreComparison((), "", "")
     return StoreComparison(tuple(comparisons), min(used_dates), max(used_dates))
+
+
+def new_extremes(conn: sqlite3.Connection, access_keys: Sequence[str]) -> list[PriceExtreme]:
+    """Items in the given receipts that set a new low or high within their comparison group.
+
+    "Previous" excludes every row of `access_keys`, so the comparison is never circular, and
+    tying your own record is not news: only a strict new extreme is reported.
+    """
+    keys = set(access_keys)
+    if not keys:
+        return []
+    all_ids = [product.id for product in products.list_products(conn)]
+    records = prices.prices_for_products(conn, all_ids)
+    extremes: list[PriceExtreme] = []
+    for record in records:
+        if record.access_key not in keys:
+            continue
+        if record.kind is not None:
+            scope_name = record.kind
+            scope_rows = [row for row in records if row.kind == record.kind and row.unit == record.unit]
+        else:
+            # Degraded scope, not a lazy fallback: it is what makes the signal work before the
+            # kind curation reaches the whole catalogue.
+            scope_name = record.canonical_name
+            scope_rows = [row for row in records if row.product_id == record.product_id and row.unit == record.unit]
+        basis, participants = comparison_basis(scope_rows)
+        own_index = next(index for index, row in enumerate(scope_rows) if row is record)
+        if own_index not in participants:
+            continue
+        value = basis_value(record, basis)
+        history = [
+            (candidate, scope_rows[index])
+            for index in participants
+            if scope_rows[index].access_key not in keys
+            and (candidate := basis_value(scope_rows[index], basis)) is not None
+        ]
+        if value is None or not history:
+            continue
+        lowest = min(history, key=lambda item: item[0])
+        highest = max(history, key=lambda item: item[0])
+        if value < lowest[0]:
+            highlight, (previous_value, previous_row) = "lowest", lowest
+        elif value > highest[0]:
+            highlight, (previous_value, previous_row) = "highest", highest
+        else:
+            continue
+        extremes.append(
+            PriceExtreme(
+                product_name=record.canonical_name,
+                store_nickname=record.store_nickname,
+                unit=record.unit,
+                price=value,
+                highlight=highlight,  # type: ignore[arg-type]
+                basis=basis,
+                content_unit=record.content_unit if basis == "price_per_content" else None,
+                previous_price=previous_value,
+                previous_store=previous_row.store_nickname,
+                previous_at=previous_row.purchased_at,
+                scope=scope_name,
+            )
+        )
+    # Lowest first, then the strongest news: the biggest relative move against the previous price.
+    return sorted(extremes, key=lambda e: (e.highlight != "lowest", -abs(e.price - e.previous_price) / e.previous_price))

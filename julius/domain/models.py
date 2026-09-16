@@ -76,6 +76,7 @@ class PriceRecord:
     highlight: Highlight | None = None
     store_address: str | None = None
     kind: str | None = None  # of the product this row belongs to
+    access_key: str = ""  # of the receipt this row came from; lets a caller tell new rows from history
 
 
 @dataclass(frozen=True)
@@ -169,6 +170,21 @@ class StoreComparison:
     comparisons: tuple[KindComparison, ...]
     first_purchase: str
     last_purchase: str
+
+
+@dataclass(frozen=True)
+class PriceExtreme:
+    product_name: str
+    store_nickname: str
+    unit: SaleUnit
+    price: float  # on the comparison basis
+    highlight: Highlight
+    basis: Basis
+    content_unit: ContentUnit | None
+    previous_price: float
+    previous_store: str
+    previous_at: str
+    scope: str  # the kind, or the product's name when it has none
 
 
 @dataclass(frozen=True)

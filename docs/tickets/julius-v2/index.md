@@ -65,7 +65,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 123 | [`revisar --ultimas-acoes`](123-review-last-actions.md) | 122 | S | feito | `ai_log.tail`, tabela de ações com comando de desfazer |
 | 124 | [comparison: entre mercados](124-comparison-compare-stores.md) | 117, 119 | M | feito | `compare_stores`, `KindComparison`, `StoreComparison` |
 | 125 | [CLI `mercados comparar`](125-cli-mercados-comparar.md) | 124 | M | feito | tabela por grupo, contagem derivada, rodapé com `n` e período |
-| 126 | [comparison: extremos novos](126-comparison-new-extremes.md) | 119, 124 | M | aberto | `new_extremes`, `PriceExtreme`, escopo de grupo |
+| 126 | [comparison: extremos novos](126-comparison-new-extremes.md) | 119, 124 | M | feito | `new_extremes`, `PriceExtreme`, escopo de grupo |
 | 127 | [CLI: sinal no importar + dia](127-cli-import-signal-weekday.md) | 122, 126 | M | aberto | "Nesta compra:" (máx. 5 linhas), coluna "Dia" no `consultar` |
 | 128 | [infra de arquivamento](128-receipt-files-infra.md) | — | M | feito | `infra/receipt_files.py`, `Config.inbox_path`/`archive_path`, `ImportResult.access_key` |
 | 129 | [CLI: entrada e arquivamento](129-cli-inbox-archive.md) | 128 | M | aberto | `importar` sem argumento, arquiva e descarta sidecar, `make inbox`, `.gitignore` |
