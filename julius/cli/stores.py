@@ -69,8 +69,9 @@ def compare_stores() -> None:
 
     appearances = Counter(entry.store_nickname for group in comparison.comparisons for entry in group.entries)
     wins = Counter(group.entries[0].store_nickname for group in comparison.comparisons)
+    width = max(len(store) for store in appearances)
     for store, total in sorted(appearances.items(), key=lambda item: (-wins[item[0]] / item[1], item[0])):
-        console.print(f"{store}\tmais barato em {wins[store]} de {total} {_plural(total)}")
+        console.print(f"{store.ljust(width)}  mais barato em {wins[store]} de {total} {_plural(total)}")
 
     first, last = comparison.first_purchase, comparison.last_purchase
     count = len(comparison.comparisons)
