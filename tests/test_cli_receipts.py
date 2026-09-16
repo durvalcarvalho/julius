@@ -334,7 +334,7 @@ def test_importar_bad_file_still_exits_1_after_review(monkeypatch, tmp_path):
 def test_importar_package_size_hint_only_without_review(monkeypatch, tmp_path):
     monkeypatch.setenv("JULIUS_DB", str(tmp_path / "a.db"))
     without_ai = _import("qrcode-5.html")
-    assert "definir-conteudo" in without_ai.output or "sem categoria" in without_ai.output
+    assert "39 produto(s) novo(s) sem categoria" in without_ai.output
 
     monkeypatch.setenv("JULIUS_DB", str(tmp_path / "b.db"))
     _ai_env(monkeypatch)

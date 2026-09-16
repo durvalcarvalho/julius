@@ -16,6 +16,11 @@ MATCH_SCORE_CUTOFF = 70
 Measured on real names: "PCANHA" vs "PICANHA BOV FAT KG PROMO" scores 75.00000000000001, so 75
 only passed by floating-point luck; unrelated words ("HORTIFRUTI", "XYZABC") score 27-38.
 70 keeps one-letter typos in with margin and unrelated words out.
+
+Known false positive (v2, different constant/function than the "queijo" one below):
+"carne" vs "PAO DE ALHO PRADELLA 400G PICANTE" scores 72 — crosses the cutoff, so `julius
+consultar carne` matches garlic bread deterministically and never reaches the AI fallback in
+`cli/receipts.py`. "carnes" (65) correctly misses instead; tests use "carnes" for this reason.
 """
 
 NEAR_MISS_CUTOFF = 70
