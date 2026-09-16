@@ -9,11 +9,10 @@ R$ 1,49 was being marked as the cheapest water when per litre (R$ 2,98/L) it is 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal
 
-from julius.domain.models import PriceRecord
+from julius.domain.models import Basis, PriceRecord
 
-Basis = Literal["unit_price", "price_per_content"]
+__all__ = ["Basis", "basis_value", "comparison_basis"]
 
 
 def comparison_basis(records: Sequence[PriceRecord]) -> tuple[Basis, tuple[int, ...]]:

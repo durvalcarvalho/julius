@@ -6,6 +6,7 @@ from typing import Literal
 SaleUnit = Literal["UN", "KG"]
 ContentUnit = Literal["L", "KG", "UN"]
 Highlight = Literal["lowest", "highest"]
+Basis = Literal["unit_price", "price_per_content"]  # see julius/domain/comparison_basis.py
 HintKind = Literal[
     "NO_RECEIPTS_IMPORTED",
     "NO_MATCH_DID_YOU_MEAN",
@@ -145,6 +146,29 @@ class ProductProposal:
     @property
     def auto_tag(self) -> str | None:
         return self.tags[0] if len(self.tags) == 1 and self.tag_is_known else None
+
+
+@dataclass(frozen=True)
+class StorePrice:
+    store_nickname: str
+    price: float  # on the comparison basis
+    purchased_at: str
+
+
+@dataclass(frozen=True)
+class KindComparison:
+    kind: str
+    unit: SaleUnit
+    basis: Basis
+    content_unit: ContentUnit | None  # set only when basis is price_per_content
+    entries: tuple[StorePrice, ...]  # one per store, cheapest first
+
+
+@dataclass(frozen=True)
+class StoreComparison:
+    comparisons: tuple[KindComparison, ...]
+    first_purchase: str
+    last_purchase: str
 
 
 @dataclass(frozen=True)
