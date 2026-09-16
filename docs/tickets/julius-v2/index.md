@@ -54,6 +54,8 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 112 | [CLI review + revisar](112-cli-review-and-revisar.md) | 109, 110 | M | feito | `cli/_review.py`, `julius produtos revisar [--sim]` |
 | 113 | [CLI importar + revisão](113-cli-importar-review.md) | 112 | S | feito | `importar [--sim]` revisa produtos novos; `reviewed` nas dicas |
 | 114 | [e2e, docs, backfill](114-e2e-docs-backfill.md) | 101–113 | M | feito (código); backfill real pendente do usuário | `test_e2e.py` v2, `CLAUDE.md`, `README.md`, reimport dos HTMLs reais |
+| 115 | [search: tag em texto livre](115-search-free-text.md) | — | M | a fazer | `domain.SearchOutcome`, `search.TAG_MATCH_CUTOFF`/`detect_tag`/`search_free_text` |
+| 116 | [CLI: consultar natural + log](116-cli-consultar-natural-query-log.md) | 115 | M | a fazer | `consultar` com várias palavras, `--sem-tag`, `Config.query_log_path`, `query_log.jsonl` |
 
 Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum ticket L: o que ficaria L foi dividido (suggestions em 107/108; CLI em 111/112/113).
 
@@ -65,13 +67,15 @@ Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum tic
 104 products-repo ─────────────────────────────┐                                       │                      │
                                                ├──► 109 curation ──► 112 review+revisar ┘──► 113 importar ──► 114 e2e/docs
 105 config+ai_log ──► 106 llm-client ──► 107 suggestions-merge ──► 108 enrich/match ──┘
+
+115 search-free-text ──► 116 cli-consultar-natural+log
 ```
 
-Paralelizável desde o início: {101, 104, 105}. Depois: 102 e 106 em paralelo; 103 e 107; 110 e 108; 109 após 108; 111 e 112 em paralelo após 110 (111 precisa de 108; 112 de 109).
+Paralelizável desde o início: {101, 104, 105}. Depois: 102 e 106 em paralelo; 103 e 107; 110 e 108; 109 após 108; 111 e 112 em paralelo após 110 (111 precisa de 108; 112 de 109). 115/116 são independentes de todo o resto (não tocam IA, endereço nem curadoria) — podem rodar em paralelo com qualquer fase.
 
 ## Caminho crítico
 
-105 → 106 → 107 → 108 → 109 → 112 → 113 → 114 (a IA de verdade fazendo curadoria no `importar`). A trilha do endereço (101 → 102 → 103 → 110 → 111) é mais curta e independente até 110.
+105 → 106 → 107 → 108 → 109 → 112 → 113 → 114 (a IA de verdade fazendo curadoria no `importar`). A trilha do endereço (101 → 102 → 103 → 110 → 111) é mais curta e independente até 110. 115 → 116 é uma trilha curta e independente, à parte.
 
 ## Fases
 
@@ -80,6 +84,7 @@ Paralelizável desde o início: {101, 104, 105}. Depois: 102 e 106 em paralelo; 
 - **C — decisão**: 109, 110 (curadoria determinística; dicas novas).
 - **D — CLI**: 111, 112, 113.
 - **E — integração**: 114.
+- **v2.1 — consultar em texto livre + log de consultas** (`docs/design/consultar-v2.1.md`): 115 → 116.
 
 Depois de **B**, vale um teste real intermediário: `julius produtos comparar 63 69` com a chave configurada — a primeira chamada de produção do projeto — e conferir `~/.local/share/julius/ai_calls.jsonl`.
 
@@ -93,6 +98,7 @@ Depois de **B**, vale um teste real intermediário: `julius produtos comparar 63
 - **Latência no `importar`** → uma passada só no fim, lotes de 25, spinner; `--sim` para scripts. Sem TTY, nada pergunta.
 - **`sys.stdin.isatty()` em teste** → encapsulado em `_review._is_interactive`, substituído por monkeypatch.
 - **Agente "conserta" arquitetura para passar** → regra 3.
+- **`TAG_MATCH_CUTOFF` colidir com uma tag futura** (115) → medido só contra as 13 tags semeadas; uma tag nova parecida com uma palavra comum de produto pode reabrir falso positivo. Mitigação: constante isolada e documentada com a medição, fácil de re-testar; não é regressão, é o mesmo compromisso que `MATCH_SCORE_CUTOFF` já aceita.
 
 ## Questões assumidas nos tickets (mudariam pouco se a resposta fosse outra)
 
@@ -102,3 +108,4 @@ Depois de **B**, vale um teste real intermediário: `julius produtos comparar 63
 - `julius ia status` **não** entra (Q8 dos requisitos): `tail -n 5 ai_calls.jsonl` e `SELECT * FROM ai_usage` cobrem; `comparar` já distingue os três motivos.
 - Cache de respostas de IA fora: o caminho durável é corrigir o dado.
 - O smoke script do scratchpad não entra no repositório; o resultado está registrado em `docs/design/ai-v2.md` §1.1.
+- **115/116**: nenhum comando de analytics sobre `query_log.jsonl` (jq/`Counter` cobrem, mesma decisão de não criar `julius ia status`); nenhuma tag multi-palavra (nenhuma das 13 tags precisa); nenhum `HintKind` novo pra "tag detectada" (auto-detecção bem-sucedida não é gatilho de dica — ver `docs/design/consultar-v2.1.md` §3). Se qualquer uma dessas premissas mudar, revisitar o design antes de estender os tickets.
