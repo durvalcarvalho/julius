@@ -125,6 +125,61 @@ def test_reassign_skus_moves_all_skus(conn_with_stores):
     assert _count(conn, "products") == 2
 
 
+def test_remove_tag_deletes_link_but_keeps_tag_row(conn_with_stores):
+    conn = conn_with_stores
+    a = products.resolve_product_id(conn, STORE_A, "1", "DETERGENTE")
+    b = products.resolve_product_id(conn, STORE_A, "2", "SABAO EM PO")
+    products.add_tag(conn, a, "limpeza")
+    products.add_tag(conn, b, "limpeza")
+
+    products.remove_tag(conn, a, "limpeza")
+
+    assert products.get_product(conn, a).tags == ()
+    assert products.get_product(conn, b).tags == ("limpeza",)
+    assert _count(conn, "tags") == 13  # seeded row stays: still used by b, and it's a category, not user data
+
+
+@pytest.mark.parametrize(
+    ("product_id", "tag_name"),
+    [(9999, "limpeza"), ("known", "nunca-usada")],
+)
+def test_remove_tag_unknown_product_or_missing_link_raises_lookup_error(conn_with_stores, product_id, tag_name):
+    conn = conn_with_stores
+    known = products.resolve_product_id(conn, STORE_A, "1", "DETERGENTE")
+    if product_id == "known":
+        product_id = known
+    with pytest.raises(LookupError):
+        products.remove_tag(conn, product_id, tag_name)
+
+
+def test_untagged_product_ids_lists_only_products_without_tags_in_id_order(conn_with_stores):
+    conn = conn_with_stores
+    a = products.resolve_product_id(conn, STORE_A, "1", "DETERGENTE")
+    b = products.resolve_product_id(conn, STORE_A, "2", "SABAO EM PO")
+    c = products.resolve_product_id(conn, STORE_A, "3", "TOMATE")
+    products.add_tag(conn, b, "limpeza")
+    assert products.untagged_product_ids(conn) == sorted([a, c])
+
+
+def test_has_raw_name_true_after_import_false_after_rename(conn_with_stores):
+    conn = conn_with_stores
+    product_id = products.resolve_product_id(conn, STORE_A, "1", "LING FGO RESF AURORA kg")
+    conn.execute(
+        "INSERT INTO prices (access_key, item_index, purchased_at, store_cnpj, product_id, product_code, "
+        "description, quantity, unit, unit_price, total_price) VALUES (?, 1, ?, ?, ?, ?, ?, 1, 'KG', 1, 1)",
+        ("k" * 44, "2026-09-12T13:09:16", STORE_A, product_id, "1", "LING FGO RESF AURORA kg"),
+    )
+    assert products.has_raw_name(conn, product_id) is True
+
+    products.rename_product(conn, product_id, "Linguiça de frango resfriada Aurora")
+    assert products.has_raw_name(conn, product_id) is False
+
+
+def test_has_raw_name_false_for_product_without_prices(conn):
+    product_id = conn.execute("INSERT INTO products (canonical_name) VALUES ('X')").lastrowid
+    assert products.has_raw_name(conn, product_id) is False
+
+
 def test_delete_product_removes_tags_and_fails_if_still_referenced(conn_with_stores):
     conn = conn_with_stores
     source = products.resolve_product_id(conn, STORE_A, "22039", "TOMATE ITALIANO UNIAO kg")

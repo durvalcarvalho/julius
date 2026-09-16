@@ -149,6 +149,21 @@ def test_tag_product_blank_raises(conn):
     assert products.all_tag_names(conn) == SEEDED_TAGS
 
 
+def test_untag_product_normalizes_and_removes(conn):
+    product_id = _product(conn, "A", "1")
+    catalog.tag_product(conn, product_id, "limpeza")
+    catalog.untag_product(conn, product_id, " Limpeza ")
+    assert products.get_product(conn, product_id).tags == ()
+
+
+def test_untag_product_blank_tag_raises_value_error(conn):
+    product_id = _product(conn, "A", "1")
+    catalog.tag_product(conn, product_id, "limpeza")
+    with pytest.raises(ValueError, match="blank"):
+        catalog.untag_product(conn, product_id, "   ")
+    assert products.get_product(conn, product_id).tags == ("limpeza",)
+
+
 def test_set_product_content_normalizes_grams_to_kilograms(conn):
     product_id = _product(conn, "A", "1")
     catalog.set_product_content(conn, product_id, 500, "G")

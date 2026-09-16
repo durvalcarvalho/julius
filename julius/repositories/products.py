@@ -73,6 +73,33 @@ def all_tag_names(conn: sqlite3.Connection) -> list[str]:
     return [row["name"] for row in conn.execute("SELECT name FROM tags ORDER BY name")]
 
 
+def remove_tag(conn: sqlite3.Connection, product_id: int, tag_name: str) -> None:
+    _require_exists(conn, product_id)
+    cursor = conn.execute(
+        "DELETE FROM product_tags WHERE product_id = ? AND tag_id = (SELECT id FROM tags WHERE name = ?)",
+        (product_id, tag_name),
+    )
+    if cursor.rowcount == 0:
+        raise LookupError(f"product {product_id} has no tag {tag_name!r}")
+
+
+def untagged_product_ids(conn: sqlite3.Connection) -> list[int]:
+    rows = conn.execute("SELECT id FROM products WHERE id NOT IN (SELECT product_id FROM product_tags) ORDER BY id")
+    return [row["id"] for row in rows]
+
+
+def has_raw_name(conn: sqlite3.Connection, product_id: int) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1 FROM prices p JOIN products pr ON pr.id = p.product_id
+        WHERE pr.id = ? AND p.description = pr.canonical_name
+        LIMIT 1
+        """,
+        (product_id,),
+    ).fetchone()
+    return row is not None
+
+
 def reassign_skus(conn: sqlite3.Connection, source_id: int, target_id: int) -> None:
     conn.execute("UPDATE product_skus SET product_id = ? WHERE product_id = ?", (target_id, source_id))
 

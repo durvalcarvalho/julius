@@ -50,6 +50,11 @@ def tag_product(conn: sqlite3.Connection, product_id: int, tag: str) -> None:
         products.add_tag(conn, product_id, _non_blank(tag, "tag").lower())
 
 
+def untag_product(conn: sqlite3.Connection, product_id: int, tag: str) -> None:
+    with conn:
+        products.remove_tag(conn, product_id, _non_blank(tag, "tag").lower())
+
+
 def set_product_content(conn: sqlite3.Connection, product_id: int, quantity: float, raw_unit: str) -> None:
     normalized_quantity, unit = normalize_content(quantity, raw_unit)
     with conn:
