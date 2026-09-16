@@ -5,7 +5,7 @@ import pytest
 
 from _fakes import ScriptedLlmClient
 from julius.config import Config
-from julius.domain.models import ContentSuggestion, Product, ProductProposal
+from julius.domain.models import AppliedAction, ContentSuggestion, Product, ProductProposal
 from julius.infra.llm_client import LlmResponse
 from julius.parsers.df import DFReceiptParser
 from julius.repositories import prices, products, stores
@@ -135,9 +135,10 @@ def test_apply_renames_tags_and_sets_content_in_one_transaction(conn):
         tags=("mercearia",),
         tag_is_known=True,
         content=ContentSuggestion(2.0, "L"),
+        kind=None,
     )
 
-    curation.apply(conn, proposal, tag="mercearia", content=True)
+    curation.apply(conn, proposal, tag="mercearia", content=True, kind=False)
 
     product = products.get_product(conn, pid)
     assert product.canonical_name == "Nome Legível"
@@ -149,9 +150,9 @@ def test_apply_renames_tags_and_sets_content_in_one_transaction(conn):
 def test_apply_with_tag_none_and_content_false_only_renames(conn):
     _import(conn, "qrcode-2.html")
     (pid, name), = products.product_names(conn)
-    proposal = ProductProposal(pid, name, "Nome Legível", ("mercearia",), True, ContentSuggestion(2.0, "L"))
+    proposal = ProductProposal(pid, name, "Nome Legível", ("mercearia",), True, ContentSuggestion(2.0, "L"), None)
 
-    curation.apply(conn, proposal, tag=None, content=False)
+    curation.apply(conn, proposal, tag=None, content=False, kind=False)
 
     product = products.get_product(conn, pid)
     assert product.canonical_name == "Nome Legível"
@@ -162,10 +163,10 @@ def test_apply_with_tag_none_and_content_false_only_renames(conn):
 def test_apply_blank_tag_raises_and_changes_nothing(conn):
     _import(conn, "qrcode-2.html")
     (pid, name), = products.product_names(conn)
-    proposal = ProductProposal(pid, name, "Nome Legível", ("mercearia",), True, None)
+    proposal = ProductProposal(pid, name, "Nome Legível", ("mercearia",), True, None, None)
 
     with pytest.raises(ValueError, match="blank"):
-        curation.apply(conn, proposal, tag="   ", content=False)
+        curation.apply(conn, proposal, tag="   ", content=False, kind=False)
 
     product = products.get_product(conn, pid)
     assert product.canonical_name == name
@@ -239,3 +240,130 @@ def test_judge_duplicates_empty_candidates_does_not_call(conn, cfg):
     client = ScriptedLlmClient(by_kind={"merge": _merge_response([])})
     assert curation.judge_duplicates(conn, cfg, client, []) == []
     assert client.calls == []
+
+
+def _one_product(conn) -> tuple[int, str]:
+    _import(conn, "qrcode-2.html")
+    (pid, name), = products.product_names(conn)
+    return pid, name
+
+
+def test_propose_fills_kind_for_product_without_one(conn, cfg):
+    pid, name = _one_product(conn)
+    client = ScriptedLlmClient(
+        by_kind={"enrich": _enrich_response([{"id": pid, "readable_name": "Tomate", "tags": ["hortifruti"], "kind": "tomate"}])}
+    )
+
+    (proposal,) = curation.propose(conn, cfg, client, [pid])
+
+    assert proposal.kind == "tomate"
+
+
+def test_propose_keeps_human_kind(conn, cfg):
+    pid, name = _one_product(conn)
+    catalog.set_product_kind(conn, pid, "tomate")
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich_response(
+                [{"id": pid, "readable_name": "Tomate", "tags": ["hortifruti"], "kind": "tomate italiano"}]
+            )
+        }
+    )
+
+    (proposal,) = curation.propose(conn, cfg, client, [pid])
+
+    assert proposal.kind is None
+
+
+def test_propose_ignores_kind_equal_to_current(conn, cfg):
+    pid, _ = _one_product(conn)
+    catalog.set_product_kind(conn, pid, "açaí")
+    client = ScriptedLlmClient(
+        by_kind={"enrich": _enrich_response([{"id": pid, "readable_name": "Açaí", "tags": ["doces"], "kind": "ACAI"}])}
+    )
+
+    (proposal,) = curation.propose(conn, cfg, client, [pid])
+
+    assert proposal.kind is None
+
+
+def test_propose_passes_known_kinds_to_ai(conn, cfg):
+    _import(conn, "qrcode.html")
+    ids = [pid for pid, _ in products.product_names(conn)][:3]
+    catalog.set_product_kind(conn, ids[0], "tomate")
+    catalog.set_product_kind(conn, ids[1], "cebola")
+    client = ScriptedLlmClient(by_kind={"enrich": _enrich_response([])})
+
+    curation.propose(conn, cfg, client, [ids[2]])
+
+    assert 'tipos: ["cebola", "tomate"]' in client.calls[0][1]
+
+
+def test_apply_kind_returns_action(conn):
+    pid, name = _one_product(conn)
+    proposal = ProductProposal(pid, name, None, ("hortifruti",), True, None, "Tomate")
+
+    actions = curation.apply(conn, proposal, tag=None, content=False, kind=True)
+
+    assert actions == [AppliedAction(pid, "kind", None, "tomate")]
+    assert products.get_product(conn, pid).kind == "tomate"
+
+
+def test_apply_kind_action_reports_stored_spelling(conn):
+    _import(conn, "qrcode.html")
+    ids = [pid for pid, _ in products.product_names(conn)][:2]
+    catalog.set_product_kind(conn, ids[0], "açaí")
+    proposal = ProductProposal(ids[1], "X", None, ("doces",), True, None, "acai")
+
+    (action,) = curation.apply(conn, proposal, tag=None, content=False, kind=True)
+
+    assert action.after == "açaí"
+
+
+def test_apply_returns_one_action_per_changed_field(conn):
+    pid, name = _one_product(conn)
+    proposal = ProductProposal(pid, name, "Picanha", ("carnes",), True, ContentSuggestion(0.5, "KG"), "picanha")
+
+    actions = curation.apply(conn, proposal, tag="carnes", content=True, kind=True)
+
+    assert [action.field for action in actions] == ["name", "tag", "content", "kind"]
+    assert actions[0].before == name
+    assert actions[1] == AppliedAction(pid, "tag", None, "carnes")
+    assert actions[2] == AppliedAction(pid, "content", None, "0.5 KG")
+    assert actions[3] == AppliedAction(pid, "kind", None, "picanha")
+
+
+def test_apply_skips_unchanged_fields(conn):
+    pid, name = _one_product(conn)
+    proposal = ProductProposal(pid, name, None, ("carnes",), True, ContentSuggestion(0.5, "KG"), "picanha")
+
+    assert curation.apply(conn, proposal, tag=None, content=False, kind=False) == []
+    product = products.get_product(conn, pid)
+    assert (product.canonical_name, product.tags, product.kind) == (name, (), None)
+
+
+def test_apply_content_action_formats_value(conn):
+    pid, name = _one_product(conn)
+    proposal = ProductProposal(pid, name, None, ("carnes",), True, ContentSuggestion(0.5, "KG"), None)
+
+    (action,) = curation.apply(conn, proposal, tag=None, content=True, kind=False)
+
+    assert action == AppliedAction(pid, "content", None, "0.5 KG")
+
+
+def test_apply_content_action_reports_previous_value(conn):
+    pid, name = _one_product(conn)
+    catalog.set_product_content(conn, pid, 2, "L")
+    proposal = ProductProposal(pid, name, None, ("bebidas",), True, ContentSuggestion(1.5, "L"), None)
+
+    (action,) = curation.apply(conn, proposal, tag=None, content=True, kind=False)
+
+    assert (action.before, action.after) == ("2 L", "1.5 L")
+
+
+def test_apply_kind_requested_but_proposal_empty(conn):
+    pid, name = _one_product(conn)
+    proposal = ProductProposal(pid, name, None, ("carnes",), True, None, None)
+
+    assert curation.apply(conn, proposal, tag=None, content=False, kind=True) == []
+    assert products.get_product(conn, pid).kind is None

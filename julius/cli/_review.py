@@ -79,7 +79,7 @@ def review_products(
     renamed = sum(1 for proposal in proposals if proposal.readable_name)
     auto_tagged = sum(1 for proposal in proposals if proposal.auto_tag)
     for proposal in proposals:
-        curation.apply(conn, proposal, tag=proposal.auto_tag, content=False)
+        curation.apply(conn, proposal, tag=proposal.auto_tag, content=False, kind=False)
     console.print(
         f"Aplicado: {renamed} nome(s), {auto_tagged} categoria(s). "
         'Desfazer: julius produtos renomear ID "Nome" · julius produtos tag ID TAG --remover'
@@ -95,7 +95,7 @@ def review_products(
         elif assume_yes:
             chosen = proposal.tags[0]
         if chosen:
-            curation.apply(conn, proposal, tag=chosen, content=False)
+            curation.apply(conn, proposal, tag=chosen, content=False, kind=False)
         else:
             pending += 1
 
@@ -106,7 +106,7 @@ def review_products(
         name = proposal.readable_name or proposal.current_name
         if interactive:
             if _confirm_pt(f"{proposal.product_id} · {name} — definir conteúdo {quantity:g} {unit}?", default=True):
-                curation.apply(conn, replace(proposal, readable_name=None), tag=None, content=True)
+                curation.apply(conn, replace(proposal, readable_name=None), tag=None, content=True, kind=False)
         else:
             console.print(f"julius produtos definir-conteudo {proposal.product_id} {quantity:g} {unit}")
 

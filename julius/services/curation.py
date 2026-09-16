@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from rapidfuzz import fuzz
 
 from julius.config import Config
-from julius.domain.models import DuplicateCandidate, Product, ProductProposal
+from julius.domain.models import AppliedAction, ContentSuggestion, DuplicateCandidate, Product, ProductProposal
 from julius.domain.normalization import normalize_text
 from julius.infra.llm_client import LlmClient
 from julius.repositories import products
@@ -30,7 +30,10 @@ def propose(
     if not found:
         return []
     known = products.all_tag_names(conn)
-    enrichment = suggestions.enrich_products(conn, config, client, [product for _, product in found], known)
+    known_kinds = products.all_kinds(conn)
+    enrichment = suggestions.enrich_products(
+        conn, config, client, [product for _, product in found], known, known_kinds
+    )
     proposals: list[ProductProposal] = []
     for product_id, product in found:
         item = enrichment.get(product_id)
@@ -49,24 +52,58 @@ def propose(
                 tags=item.tags,
                 tag_is_known=item.tags[0] in known,
                 content=content,
+                kind=_proposed_kind(product, item.kind),
             )
         )
     return proposals
 
 
-def apply(conn: sqlite3.Connection, proposal: ProductProposal, *, tag: str | None, content: bool) -> None:
+def _proposed_kind(product: Product, proposed: str | None) -> str | None:
+    """The AI never overwrites a kind already chosen — same discipline as has_raw_name for names."""
+    return None if product.kind is not None else proposed
+
+
+def apply(
+    conn: sqlite3.Connection, proposal: ProductProposal, *, tag: str | None, content: bool, kind: bool
+) -> list[AppliedAction]:
     normalized_tag = None
     if tag:
         normalized_tag = tag.strip().lower()
         if not normalized_tag:
             raise ValueError("tag must not be blank")
+    before = products.get_product(conn, proposal.product_id)
+    if before is None:
+        raise LookupError(f"product {proposal.product_id} not found")
+    product_id = proposal.product_id
+    actions: list[AppliedAction] = []
     with conn:
-        if proposal.readable_name:
-            products.rename_product(conn, proposal.product_id, proposal.readable_name)
-        if normalized_tag:
-            products.add_tag(conn, proposal.product_id, normalized_tag)
+        if proposal.readable_name and proposal.readable_name != before.canonical_name:
+            products.rename_product(conn, product_id, proposal.readable_name)
+            actions.append(AppliedAction(product_id, "name", before.canonical_name, proposal.readable_name))
+        if normalized_tag and normalized_tag not in before.tags:
+            products.add_tag(conn, product_id, normalized_tag)
+            actions.append(AppliedAction(product_id, "tag", None, normalized_tag))
         if content and proposal.content:
-            products.set_content(conn, proposal.product_id, proposal.content.quantity, proposal.content.unit)
+            after_content = _content_text(proposal.content)
+            before_content = (
+                None
+                if before.content_quantity is None
+                else _content_text(ContentSuggestion(before.content_quantity, before.content_unit))  # type: ignore[arg-type]
+            )
+            if after_content != before_content:
+                products.set_content(conn, product_id, proposal.content.quantity, proposal.content.unit)
+                actions.append(AppliedAction(product_id, "content", before_content, after_content))
+        if kind and proposal.kind:
+            products.set_kind(conn, product_id, proposal.kind)
+            # Read back: set_kind may reuse an existing spelling, and the log must say what was stored.
+            stored = products.get_product(conn, product_id)
+            if stored is not None and stored.kind != before.kind:
+                actions.append(AppliedAction(product_id, "kind", before.kind, stored.kind))
+    return actions
+
+
+def _content_text(content: ContentSuggestion) -> str:
+    return f"{content.quantity:g} {content.unit}"
 
 
 def duplicate_candidates(

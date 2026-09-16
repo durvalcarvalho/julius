@@ -60,7 +60,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 118 | [Comandos de desfazer](118-kind-content-undo-commands.md) | 117 | M | feito | `produtos tipo [--remover]`, `definir-conteudo --remover`, coluna "Tipo" |
 | 119 | [Base de comparação](119-comparison-basis.md) | — | M | feito | `domain/comparison_basis.py`, `_highlight_and_trim` corrigido |
 | 120 | [Prompt enrich v2 + `kind`](120-suggestions-enrich-kind.md) | 117 | M | feito | `ProductEnrichment.kind`, `PROMPT_VERSIONS["enrich"]="2"`, `known_kinds` |
-| 121 | [curation: tipo + `AppliedAction`](121-curation-kind-applied-actions.md) | 118, 120 | M | aberto | `propose` com tipo (não sobrescreve humano), `apply` devolve o que mudou |
+| 121 | [curation: tipo + `AppliedAction`](121-curation-kind-applied-actions.md) | 118, 120 | M | feito | `propose` com tipo (não sobrescreve humano), `apply` devolve o que mudou |
 | 122 | [review aplica + log de ações](122-review-auto-apply-action-log.md) | 118, 121 | M | aberto | conteúdo e tipo automáticos, `actions.jsonl`, resumo agregado |
 | 123 | [`revisar --ultimas-acoes`](123-review-last-actions.md) | 122 | S | aberto | `ai_log.tail`, tabela de ações com comando de desfazer |
 | 124 | [comparison: entre mercados](124-comparison-compare-stores.md) | 117, 119 | M | aberto | `compare_stores`, `KindComparison`, `StoreComparison` |

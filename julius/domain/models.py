@@ -140,10 +140,22 @@ class ProductProposal:
     tags: tuple[str, ...]
     tag_is_known: bool  # tags[0] exists in the tags table
     content: ContentSuggestion | None
+    kind: str | None  # None => nothing to apply
 
     @property
     def auto_tag(self) -> str | None:
         return self.tags[0] if len(self.tags) == 1 and self.tag_is_known else None
+
+
+@dataclass(frozen=True)
+class AppliedAction:
+    """One field the curation actually changed. Text on purpose, so the log stays readable and
+    stable; the CLI is what turns this into an undo command, since it owns the command syntax."""
+
+    product_id: int
+    field: Literal["name", "tag", "content", "kind"]
+    before: str | None
+    after: str | None
 
 
 @dataclass(frozen=True)
