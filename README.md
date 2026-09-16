@@ -124,8 +124,10 @@ julius importar cupom.html --sim                 # aplica sugestões da IA sem p
 
 ```bash
 julius consultar banana                # por nome (parcial, tolera erro de digitação)
-julius consultar --tag hortifruti      # por categoria que você marcou
-julius consultar leite --tag laticinio # os dois: interseção
+julius consultar hortifruti            # por categoria — sem precisar de --tag
+julius consultar leite laticinio       # nome + categoria na mesma frase: interseção
+julius consultar leite --tag laticinio # a forma explícita, se preferir (ou se a detecção errar)
+julius consultar carnes --sem-tag      # força tratar "carnes" como nome, não como categoria
 julius consultar arroz -n 5            # só as 5 compras mais recentes por unidade
 ```
 
@@ -133,7 +135,9 @@ julius consultar arroz -n 5            # só as 5 compras mais recentes por unid
 - Linhas mais recentes primeiro. A linha de **menor preço fica verde**, a de **maior fica vermelha** — e essas duas sempre aparecem, mesmo que sejam mais antigas que o `-n` pede.
 - A célula do mercado mostra o apelido e, embaixo em cinza, o endereço do cupom (quando já foi importado com endereço).
 - Se o produto tem embalagem definida (veja `produtos definir-conteudo`), surge a coluna **Por L / Por KG / Por UN**.
+- Uma palavra da frase que bater o nome de uma categoria (com tolerância a erro de digitação) vira filtro automaticamente, junto com o resto como nome — sem precisar de `--tag`. Se a interseção não achar nada, a busca tenta de novo pelo nome puro antes de desistir. `--sem-tag` desliga essa detecção pontualmente.
 - Sem resultado por nome (e sem `--tag`): se a IA estiver configurada, tenta achar o produto por ela antes de desistir (ver "IA opcional"). Ainda sem nada: `Nenhum resultado.` — não uma tabela vazia.
+- Toda chamada fica registrada em `~/.local/share/julius/query_log.jsonl` (uma linha por consulta) — histórico bruto pra ajustar o sistema mais pra frente, nenhum comando lê isso ainda.
 
 ### `mercados` — dar nome aos lugares
 
@@ -211,7 +215,7 @@ Tudo por variável de ambiente. Sem nenhuma, Julius funciona com os padrões.
 
 | Variável | Padrão | Para quê |
 |---|---|---|
-| `JULIUS_DB` | `~/.local/share/julius/prices.db` | Caminho do banco. Útil para experimentar com outro arquivo sem tocar no seu histórico. `ai_calls.jsonl` (log de IA) mora sempre ao lado. |
+| `JULIUS_DB` | `~/.local/share/julius/prices.db` | Caminho do banco. Útil para experimentar com outro arquivo sem tocar no seu histórico. `ai_calls.jsonl` (log de IA) e `query_log.jsonl` (log de consultas) moram sempre ao lado. |
 | `JULIUS_AI_API_KEY` | — | Liga a IA. Ausente = IA desligada, silenciosamente. |
 | `JULIUS_AI_BASE_URL` | — | Endpoint compatível com `/chat/completions`. |
 | `JULIUS_AI_MODEL` | — | Nome do modelo (testado com `deepseek-flash`). |
@@ -231,7 +235,7 @@ Julius foi desenhado para custar zero. A IA existe pra fazer a curadoria que nin
 | Situação | O que a IA faz | Quem grava / desfaz |
 |---|---|---|
 | Produto novo sem nome legível, categoria ou conteúdo | `produtos revisar` / `importar` chamam `enrich_products`: nome e categoria com um único candidato conhecido são aplicados **sem perguntar**; o resto pergunta (ou fica pendente, sem terminal); conteúdo nunca é gravado sem confirmação | Desfazer: `produtos renomear` / `produtos tag ID TAG --remover` |
-| `consultar TERMO` não achou nada por nome (e sem `--tag`) | Tenta achar pela IA (`match_products`) antes de desistir | Nada a desfazer — é só uma tentativa a mais na mesma busca; a dica sugere renomear/marcar pra achar direto na próxima |
+| `consultar` não achou nada por nome — nem puro, nem depois de descartar uma tag detectada no texto — e sem `--tag` explícito | Tenta achar pela IA (`match_products`) antes de desistir | Nada a desfazer — é só uma tentativa a mais na mesma busca; a dica sugere renomear/marcar pra achar direto na próxima |
 | "Esses dois produtos são iguais?" | `produtos comparar` mostra a opinião dela | você, com `produtos fundir` (nunca automático) |
 | Possíveis duplicatas encontradas na revisão | Imprime o comando `produtos fundir A B` pronto pra copiar | você decide se roda |
 
