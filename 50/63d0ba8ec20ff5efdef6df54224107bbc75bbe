@@ -1,0 +1,31 @@
+tests/test_services_suggestions.py
+  s_c0ef054dc440b4::t_cfe8fa025dbfee 26-29,31-32,37
+docs/tickets/julius-v2/index.md
+  s_c0ef054dc440b4::t_e78e3285605235 48
+julius/services/suggestions.py
+  s_c0ef054dc440b4::t_98042dd9d67563 43-44
+julius/infra/llm_client.py
+  s_c0ef054dc440b4::t_bf24ccefc12ce5 4,7,18,22,24-55,59-66,71,77-82,84-96,99,105-121
+tests/_fakes.py
+  s_c0ef054dc440b4::t_a2e606f017bf7d 1-58
+tests/test_services_catalog.py
+  s_c0ef054dc440b4::t_6a7eab75f59071 30
+tests/test_llm_client.py
+  s_c0ef054dc440b4::t_0ed73d11edd593 13,53,56,58,70-72,76,78-87,90-105,107,110-121,124,126,129,131,134-157,159-161,164-166,169-171,194-197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5063d0ba8ec20ff5efdef6df54224107bbc75bbe",
+  "prompts": {},
+  "sessions": {
+    "s_c0ef054dc440b4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "98cfa69a-7548-4f8e-9894-c620fd4d7390",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
