@@ -35,7 +35,7 @@ Tirar do usuário a tarefa manual de "achar a pasta certa" (hoje: `~/.local/shar
 - **N1** Diretório de queda gitignorado — nenhum HTML/`_files/` de compra real pode ser versionado por acidente (mesma motivação que already levou aos padrões `/*.html`/`/*.pdf`/`/*.har` no `.gitignore`).
 - **N2** Zero dependência nova — mover/arquivar arquivo é `shutil`/`pathlib`, stdlib.
 - **N3** Não pode interferir com `tests/fixtures/*.html`, que continuam versionados normalmente.
-- **N4** Corrige de forma independente o gap já encontrado em F3 (`qrcode_files/`-like sem padrão no `.gitignore`) — vale mesmo que a feature de mover/arquivar não saia neste ciclo, porque hoje um `git add -A` desavisado versionaria lixo binário (jQuery, CSS, SVG) sem nenhum valor.
+- **N4** ~~Corrige de forma independente o gap já encontrado em F3~~ — **já resolvido**: o padrão `/*_files/` entrou no `.gitignore` no commit `65f2fc7`, durante esta mesma sessão. F3 fica como registro de como a lacuna foi encontrada.
 
 ## 4. Decisões do usuário (Q&A do brainstorm)
 

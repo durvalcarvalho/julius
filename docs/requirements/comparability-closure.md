@@ -145,7 +145,9 @@ A linha que separa é a (2): fusão falha porque o dano é agregado e silencioso
 
 ## 7. Interação com trabalho já em andamento (não commitado)
 
-`docs/design/consultar-v2.1.md` §1 mediu `TAG_MATCH_CUTOFF = 75` contra **as 13 tags de corredor**, registrando "nenhuma das 13 tags pontua acima de 55 contra outra". Se `/sc:design` resolver RF1 reaproveitando a tabela `tags` para os grupos, entram ~75 nomes novos no mesmo espaço (`tomate`, `uva`, `banana`, `leite uht`…) e **essa medição deixa de valer** — nomes de grupo colidem entre si e com palavras de produto muito mais do que categorias de corredor colidem. Um campo próprio em `products` mantém o espaço de tags intacto e a medição válida. É a principal entrada deste fechamento para o design, e afeta os tickets 115/116 que estão no diretório de trabalho sem commit.
+`docs/design/consultar-v2.1.md` §1 mediu `TAG_MATCH_CUTOFF = 75` contra **as 13 tags de corredor**, registrando "nenhuma das 13 tags pontua acima de 55 contra outra". Se `/sc:design` resolver RF1 reaproveitando a tabela `tags` para os grupos, entram ~75 nomes novos no mesmo espaço (`tomate`, `uva`, `banana`, `leite uht`…) e **essa medição deixa de valer** — nomes de grupo colidem entre si e com palavras de produto muito mais do que categorias de corredor colidem. Um campo próprio em `products` mantém o espaço de tags intacto e a medição válida. É a principal entrada deste fechamento para o design.
+
+> **Correção factual (pós-escrita):** este parágrafo dizia que os tickets 115/116 estavam "no diretório de trabalho sem commit". Estavam quando a medição foi feita, mas foram commitados durante esta mesma sessão (`350e810`, `9843e68`), com a suíte em 394 testes verdes. O que importa para o design continua valendo: a medição de `TAG_MATCH_CUTOFF` foi calibrada contra as 13 tags de corredor e não sobrevive a ~75 nomes finos no mesmo espaço.
 
 ## 8. Ação operacional (não é código)
 

@@ -27,7 +27,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 
 ## Regras comuns a todo ticket
 
-1. Leia `CLAUDE.md` e `docs/design/ai-v2.md` antes de começar; as seções citadas em cada ticket são o mínimo.
+1. Leia `CLAUDE.md` e o design da fase do ticket antes de começar; as seções citadas em cada ticket são o mínimo. Design por fase: 101–114 → `docs/design/ai-v2.md`; 115–116 → `docs/design/consultar-v2.1.md`; 117–130 → `docs/design/comparability-v2.2.md` (e `docs/requirements/comparability-closure.md`, que tem precedência sobre os outros requisitos da mesma data).
 2. Só toque nos arquivos listados no ticket. Se precisar de algo de outra camada que não existe, **pare e anote** — não crie fora do escopo.
 3. `tests/test_architecture.py` é a fonte da verdade da DAG. Se ele falhar, o desenho está errado, não o teste.
 4. Teste de caminho feliz **e** triste para cada função pública. SQLite real em `tmp_path`; rede **sempre** substituída por `tests/_fakes.py::ScriptedLlmClient`; nenhum teste toca a API real.
@@ -56,8 +56,22 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 114 | [e2e, docs, backfill](114-e2e-docs-backfill.md) | 101–113 | M | feito (código); backfill real pendente do usuário | `test_e2e.py` v2, `CLAUDE.md`, `README.md`, reimport dos HTMLs reais |
 | 115 | [search: tag em texto livre](115-search-free-text.md) | — | M | feito | `domain.SearchOutcome`, `search.TAG_MATCH_CUTOFF`/`detect_tag`/`search_free_text` |
 | 116 | [CLI: consultar natural + log](116-cli-consultar-natural-query-log.md) | 115 | M | feito | `consultar` com várias palavras, `--sem-tag`, `Config.query_log_path`, `query_log.jsonl` |
+| 117 | [Migração 0003 + `products.kind`](117-product-kind-column.md) | — | S | aberto | coluna `kind`, `set_kind` (regra de grafia), `all_kinds`, `clear_content` |
+| 118 | [Comandos de desfazer](118-kind-content-undo-commands.md) | 117 | M | aberto | `produtos tipo [--remover]`, `definir-conteudo --remover`, coluna "Tipo" |
+| 119 | [Base de comparação](119-comparison-basis.md) | — | M | aberto | `domain/comparison_basis.py`, `_highlight_and_trim` corrigido |
+| 120 | [Prompt enrich v2 + `kind`](120-suggestions-enrich-kind.md) | 117 | M | aberto | `ProductEnrichment.kind`, `PROMPT_VERSIONS["enrich"]="2"`, `known_kinds` |
+| 121 | [curation: tipo + `AppliedAction`](121-curation-kind-applied-actions.md) | 118, 120 | M | aberto | `propose` com tipo (não sobrescreve humano), `apply` devolve o que mudou |
+| 122 | [review aplica + log de ações](122-review-auto-apply-action-log.md) | 118, 121 | M | aberto | conteúdo e tipo automáticos, `actions.jsonl`, resumo agregado |
+| 123 | [`revisar --ultimas-acoes`](123-review-last-actions.md) | 122 | S | aberto | `ai_log.tail`, tabela de ações com comando de desfazer |
+| 124 | [comparison: entre mercados](124-comparison-compare-stores.md) | 117, 119 | M | aberto | `compare_stores`, `KindComparison`, `StoreComparison` |
+| 125 | [CLI `mercados comparar`](125-cli-mercados-comparar.md) | 124 | M | aberto | tabela por grupo, contagem derivada, rodapé com `n` e período |
+| 126 | [comparison: extremos novos](126-comparison-new-extremes.md) | 119, 124 | M | aberto | `new_extremes`, `PriceExtreme`, escopo de grupo |
+| 127 | [CLI: sinal no importar + dia](127-cli-import-signal-weekday.md) | 122, 126 | M | aberto | "Nesta compra:" (máx. 5 linhas), coluna "Dia" no `consultar` |
+| 128 | [infra de arquivamento](128-receipt-files-infra.md) | — | M | aberto | `infra/receipt_files.py`, `Config.inbox_path`/`archive_path`, `ImportResult.access_key` |
+| 129 | [CLI: entrada e arquivamento](129-cli-inbox-archive.md) | 128 | M | aberto | `importar` sem argumento, arquiva e descarta sidecar, `make inbox`, `.gitignore` |
+| 130 | [e2e + docs v2.2](130-e2e-docs-sync.md) | 117–129 | M | aberto | `test_e2e` do ciclo novo, `CLAUDE.md`/`README.md` (inclui a reversão do conteúdo confirmado) |
 
-Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum ticket L: o que ficaria L foi dividido (suggestions em 107/108; CLI em 111/112/113).
+Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum ticket L: o que ficaria L foi dividido (suggestions em 107/108; CLI em 111/112/113; na v2.2, serviço e CLI sempre em tickets separados — 124/125 e 126/127 — e a infra de arquivamento separada da CLI que a usa, 128/129).
 
 ## DAG
 
@@ -69,13 +83,28 @@ Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum tic
 105 config+ai_log ──► 106 llm-client ──► 107 suggestions-merge ──► 108 enrich/match ──┘
 
 115 search-free-text ──► 116 cli-consultar-natural+log
+
+                 ┌─► 118 desfazer ──┐
+117 kind ────────┼─► 120 enrich+kind ┴─► 121 curation ──► 122 review aplica+log ─┬─► 123 --ultimas-acoes
+                 └─► 124 compare_stores ──► 125 mercados comparar                └─► 127 sinal + dia
+119 base de comparação ──┴──────────────► 126 new_extremes ──────────────────────────┘
+
+128 receipt_files ──► 129 importar sem argumento + arquivamento
+
+117–129 ──► 130 e2e + docs
 ```
 
 Paralelizável desde o início: {101, 104, 105}. Depois: 102 e 106 em paralelo; 103 e 107; 110 e 108; 109 após 108; 111 e 112 em paralelo após 110 (111 precisa de 108; 112 de 109). 115/116 são independentes de todo o resto (não tocam IA, endereço nem curadoria) — podem rodar em paralelo com qualquer fase.
 
+Na v2.2, paralelizável desde o início: **{117, 119, 128}** — 119 não depende de `kind` (a base de comparação olha unidade, produto e conteúdo) e 128 é infra de arquivo, independente de tudo. Depois: 118 e 120 em paralelo após 117; 124 após 117+119; 125 e 126 em paralelo após 124.
+
 ## Caminho crítico
 
 105 → 106 → 107 → 108 → 109 → 112 → 113 → 114 (a IA de verdade fazendo curadoria no `importar`). A trilha do endereço (101 → 102 → 103 → 110 → 111) é mais curta e independente até 110. 115 → 116 é uma trilha curta e independente, à parte.
+
+v2.2: **117 → 118 → 121 → 122 → 127 → 130** (a curadoria automática chegando até o sinal de preço no import). A trilha de comparação entre mercados (117/119 → 124 → 125) é mais curta e entrega valor sozinha; a trilha de arquivamento (128 → 129) é independente do resto e pode ser feita primeiro se a fricção de arquivo incomodar antes.
+
+**Restrição de ordem que não é técnica, é de princípio:** 118 antes de 122. A automação só pode aplicar o que já tem comando de desfazer (`docs/requirements/comparability-closure.md` §4, condição 1). Um agente que inverter isso entrega um sistema que grava sozinho algo que o usuário não consegue desfazer.
 
 ## Fases
 
@@ -85,6 +114,13 @@ Paralelizável desde o início: {101, 104, 105}. Depois: 102 e 106 em paralelo; 
 - **D — CLI**: 111, 112, 113.
 - **E — integração**: 114.
 - **v2.1 — consultar em texto livre + log de consultas** (`docs/design/consultar-v2.1.md`): 115 → 116.
+- **v2.2 — comparabilidade** (`docs/design/comparability-v2.2.md`): três trilhas que se juntam no 130.
+  - **F — grupo de comparação**: 117, 118, 120, 121, 122, 123 (a IA nomeia o tipo; tipo e conteúdo passam a ser aplicados sozinhos, com log e desfazer).
+  - **G — comparar de verdade**: 119, 124, 125, 126, 127 (a base de comparação correta, a comparação entre mercados e o sinal de preço no import).
+  - **H — arquivamento**: 128, 129 (`entrada/` como symlink, `importar` sem argumento, arquiva e limpa).
+  - **I — fechamento**: 130.
+
+  Depois de **F**, vale um teste real intermediário: `julius produtos revisar` contra uma cópia do banco, conferindo `actions.jsonl` e a coluna "Tipo" em `produtos listar` — é a primeira vez que a IA grava algo que não é nome nem categoria.
 
 Depois de **B**, vale um teste real intermediário: `julius produtos comparar 63 69` com a chave configurada — a primeira chamada de produção do projeto — e conferir `~/.local/share/julius/ai_calls.jsonl`.
 
@@ -99,6 +135,11 @@ Depois de **B**, vale um teste real intermediário: `julius produtos comparar 63
 - **`sys.stdin.isatty()` em teste** → encapsulado em `_review._is_interactive`, substituído por monkeypatch.
 - **Agente "conserta" arquitetura para passar** → regra 3.
 - **`TAG_MATCH_CUTOFF` colidir com uma tag futura** (115) → medido só contra as 13 tags semeadas; uma tag nova parecida com uma palavra comum de produto pode reabrir falso positivo. Mitigação: constante isolada e documentada com a medição, fácil de re-testar; não é regressão, é o mesmo compromisso que `MATCH_SCORE_CUTOFF` já aceita.
+- **v2.2 — a IA escolher o tipo na granularidade errada** (120) → `Leite` juntando UHT com condensado é o caso medido. Mitigação: as duas metades da instrução do prompt vêm de grupos reais; o tipo é reversível (118) e visível em `produtos listar`; tipo errado num grupo de um produto só é inerte.
+- **v2.2 — tipos fragmentarem por singular/plural** (117) → `tomate`/`tomates` viram dois grupos silenciosamente. A regra de grafia do repositório resolve caixa e acento, não plural. Mitigação deliberada: nenhum corte fuzzy novo (seria um terceiro cutoff a medir sem evidência); detecção por `SELECT kind, count(*) ... GROUP BY kind`, correção por um `UPDATE`.
+- **v2.2 — mudança de comportamento no `highlight`** (119) → o mínimo/máximo passa a sair de grupos UN heterogêneos sem conteúdo. É correção de um erro medido (500ml marcada como mais barata que 1,5L), não regressão; os dois testes existentes de highlight continuam passando pelo ramo "mesmo `product_id`".
+- **v2.2 — reversão de "conteúdo sempre confirmado"** (122) → um agente futuro pode "restaurar" a confirmação achando que foi regressão. Mitigação: o 130 exige que o `CLAUDE.md` registre o **porquê** da reversão, não só o novo comportamento.
+- **v2.2 — apagar o `_files/` é a única operação destrutiva do sistema** (128) → três guardas exigidas por teste: nome derivado exato, precisa ser diretório real, nunca symlink. Pendente de veto do usuário; vetado, a função existe e não é chamada.
 
 ## Questões assumidas nos tickets (mudariam pouco se a resposta fosse outra)
 
@@ -109,3 +150,11 @@ Depois de **B**, vale um teste real intermediário: `julius produtos comparar 63
 - Cache de respostas de IA fora: o caminho durável é corrigir o dado.
 - O smoke script do scratchpad não entra no repositório; o resultado está registrado em `docs/design/ai-v2.md` §1.1.
 - **115/116**: nenhum comando de analytics sobre `query_log.jsonl` (jq/`Counter` cobrem, mesma decisão de não criar `julius ia status`); nenhuma tag multi-palavra (nenhuma das 13 tags precisa); nenhum `HintKind` novo pra "tag detectada" (auto-detecção bem-sucedida não é gatilho de dica — ver `docs/design/consultar-v2.1.md` §3). Se qualquer uma dessas premissas mudar, revisitar o design antes de estender os tickets.
+- **117–130 (v2.2)**, todas registradas em `docs/design/comparability-v2.2.md` §9:
+  - **Grupo em coluna, não em `tags`** — um produto pertence a no máximo um grupo, e coluna faz disso regra do banco. Reaproveitar `tags` também invalidaria a medição de `TAG_MATCH_CUTOFF` (115). Se um dia um produto precisar estar em dois grupos, o desenho muda, não o ticket.
+  - **`consultar --tipo` não entra**: `rapidfuzz` já acha o grupo quando o termo é o próprio tipo (`consultar tomate` acha os dois tomates hoje).
+  - **Estreitar `duplicate_candidates` por tipo não entra**, embora mataria o falso positivo `Alho` ↔ `Pão de Alho` de graça. Nenhum requisito pediu; vira trivial depois do 117 se incomodar.
+  - **Representante da loja num grupo é o menor preço**, não a média nem o mais recente: a pergunta é "o que eu pagaria lá". Se o usuário quiser o mais recente, muda uma função em `comparison.compare_stores`.
+  - **Contagem por grupo, não índice**: nenhum número único de carestia por mercado, e nenhuma média de razões entre grupos de preços muito diferentes.
+  - **Dia da semana só como coluna**: as 6 notas reais caem em 6 dias diferentes, zero repetição — qualquer afirmação seria invenção. Gatilho para reabrir não foi definido de propósito.
+  - **Fusão automática de produto está rejeitada por medição**, não por cautela (19 pares acima do corte, no máximo 2 defensáveis, pior falso positivo com nota 1,00). Reabrir exige dado novo, e exigiria antes construir a reversibilidade que `merge_products` não tem.
