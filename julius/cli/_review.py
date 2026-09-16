@@ -1,39 +1,65 @@
 from __future__ import annotations
 
 import sys
+from collections import Counter
 from collections.abc import Sequence
-from dataclasses import replace
+from datetime import datetime, timezone
 
 import typer
 from rich.table import Table
 
 from julius.cli._common import console
 from julius.config import Config
-from julius.domain.models import ProductProposal
+from julius.domain.models import AppliedAction, ProductProposal
+from julius.infra import ai_log
 from julius.infra.llm_client import LlmClient
 from julius.services import curation, suggestions
+
+_FIELD_LABELS = (("name", "nome(s)"), ("tag", "categoria(s)"), ("content", "conteúdo(s)"), ("kind", "tipo(s)"))
 
 
 def _is_interactive() -> bool:
     return sys.stdin.isatty()
 
 
-def _confirm_pt(text: str, *, default: bool) -> bool:
-    """Portuguese yes/no: typer.confirm only understands y/n, our users type s/n."""
-    suffix = "S/n" if default else "s/N"
-    raw = typer.prompt(f"{text} [{suffix}]", default="", show_default=False).strip().lower()
-    if not raw:
-        return default
-    return raw in ("s", "sim", "y", "yes")
+def _undo_command(action: AppliedAction) -> str:
+    """The CLI owns the command syntax; AppliedAction stays pure data (see ticket 121)."""
+    product_id = action.product_id
+    if action.field == "name":
+        return f'julius produtos renomear {product_id} "{action.before}"'
+    if action.field == "tag":
+        return f"julius produtos tag {product_id} {action.after} --remover"
+    if action.field == "content":
+        if action.before is None:
+            return f"julius produtos definir-conteudo {product_id} --remover"
+        return f"julius produtos definir-conteudo {product_id} {action.before}"
+    if action.before is None:
+        return f"julius produtos tipo {product_id} --remover"
+    return f'julius produtos tipo {product_id} "{action.before}"'
+
+
+def _log_actions(settings: Config, actions: Sequence[AppliedAction]) -> None:
+    for action in actions:
+        ai_log.append(
+            settings.action_log_path,
+            {
+                "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "product_id": action.product_id,
+                "field": action.field,
+                "before": action.before,
+                "after": action.after,
+                "undo": _undo_command(action),
+            },
+        )
 
 
 def _table(proposals: Sequence[ProductProposal]) -> Table:
-    table = Table("ID", "Cupom", "Nome", "Categoria", "Conteúdo")
+    table = Table("ID", "Cupom", "Nome", "Categoria", "Tipo", "Conteúdo")
     for proposal in proposals:
         name = proposal.readable_name or proposal.current_name
         category = proposal.auto_tag or ("? " + ", ".join(proposal.tags) if proposal.tags else "")
         content = f"{proposal.content.quantity:g} {proposal.content.unit}" if proposal.content else ""
-        table.add_row(str(proposal.product_id), proposal.current_name, name, category, content)
+        table.add_row(str(proposal.product_id), proposal.current_name, name, category, proposal.kind or "", content)
     return table
 
 
@@ -76,14 +102,21 @@ def review_products(
 
     console.print(_table(proposals))
 
-    renamed = sum(1 for proposal in proposals if proposal.readable_name)
-    auto_tagged = sum(1 for proposal in proposals if proposal.auto_tag)
+    # Content and kind are applied without asking: both are reversible by a command that already
+    # exists (ticket 118) and a wrong value shows up in `produtos listar`/`consultar`. Asking is
+    # what left 32 of 79 UN products without content.
+    applied: list[AppliedAction] = []
     for proposal in proposals:
-        curation.apply(conn, proposal, tag=proposal.auto_tag, content=False, kind=False)
-    console.print(
-        f"Aplicado: {renamed} nome(s), {auto_tagged} categoria(s). "
-        'Desfazer: julius produtos renomear ID "Nome" · julius produtos tag ID TAG --remover'
-    )
+        applied += curation.apply(conn, proposal, tag=proposal.auto_tag, content=True, kind=True)
+    _log_actions(settings, applied)
+    counts = Counter(action.field for action in applied)
+    summary = ", ".join(f"{counts[field]} {label}" for field, label in _FIELD_LABELS if counts[field])
+    if summary:
+        console.print(f"Aplicado: {summary}.")
+        console.print(
+            "Desfazer: julius produtos renomear · julius produtos tag --remover · "
+            "julius produtos definir-conteudo --remover · julius produtos tipo --remover"
+        )
 
     pending = 0
     for proposal in proposals:
@@ -95,20 +128,9 @@ def review_products(
         elif assume_yes:
             chosen = proposal.tags[0]
         if chosen:
-            curation.apply(conn, proposal, tag=chosen, content=False, kind=False)
+            _log_actions(settings, curation.apply(conn, proposal, tag=chosen, content=False, kind=False))
         else:
             pending += 1
-
-    for proposal in proposals:
-        if not proposal.content:
-            continue
-        quantity, unit = proposal.content.quantity, proposal.content.unit
-        name = proposal.readable_name or proposal.current_name
-        if interactive:
-            if _confirm_pt(f"{proposal.product_id} · {name} — definir conteúdo {quantity:g} {unit}?", default=True):
-                curation.apply(conn, replace(proposal, readable_name=None), tag=None, content=True, kind=False)
-        else:
-            console.print(f"julius produtos definir-conteudo {proposal.product_id} {quantity:g} {unit}")
 
     candidates = curation.duplicate_candidates(conn, product_ids)
     duplicates = curation.judge_duplicates(conn, settings, client, candidates)

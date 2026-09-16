@@ -7,6 +7,7 @@ from typer.testing import CliRunner
 import julius.cli.products as products_cli
 from _fakes import ScriptedLlmClient
 from julius.cli import _review, app
+from julius.domain.models import AppliedAction
 from julius.infra.llm_client import LlmResponse
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -46,6 +47,11 @@ def _enrich(items: list[dict], input_tokens: int = 1000, output_tokens: int = 50
 
 def _merge(items: list[dict], input_tokens: int = 1000, output_tokens: int = 500) -> LlmResponse:
     return LlmResponse(json.dumps({"pairs": items}), input_tokens, output_tokens)
+
+
+def _actions(tmp_path) -> list[dict]:
+    path = tmp_path / "actions.jsonl"
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def _stub_client(monkeypatch, client):
@@ -135,8 +141,7 @@ def test_revisar_enter_skips_and_reports_pending(monkeypatch):
     assert "Pendentes: 1 produto(s) sem categoria." in result.output
 
 
-@pytest.mark.parametrize(("answer", "expects_content"), [("s", True), ("n", False)])
-def test_revisar_content_confirmed_or_declined(monkeypatch, answer, expects_content):
+def test_revisar_applies_content_without_asking(monkeypatch):
     _import("qrcode.html")
     _ai_env(monkeypatch)
     client = ScriptedLlmClient(
@@ -149,11 +154,145 @@ def test_revisar_content_confirmed_or_declined(monkeypatch, answer, expects_cont
     _stub_client(monkeypatch, client)
     monkeypatch.setattr(_review, "_is_interactive", lambda: True)
 
-    result = _run("produtos", "revisar", input=f"{answer}\n")
+    result = _run("produtos", "revisar")
 
     assert result.exit_code == 0, result.output
-    output = _run("produtos", "listar").output
-    assert ("30 UN" in output) is expects_content
+    assert "definir conteúdo" not in result.output
+    assert "30 UN" in _run("produtos", "listar").output
+
+
+def test_revisar_applies_kind_automatically(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich(
+                [{"id": 11, "readable_name": "Linguiça", "tags": ["carnes"], "content": None, "kind": "Linguiça"}]
+            )
+        }
+    )
+    _stub_client(monkeypatch, client)
+
+    result = _run("produtos", "revisar")
+
+    assert result.exit_code == 0, result.output
+    assert "linguiça" in _run("produtos", "listar").output
+
+
+def test_revisar_logs_one_line_per_action(monkeypatch, tmp_path):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich(
+                [
+                    {
+                        "id": 8,
+                        "readable_name": "Ovo Grande",
+                        "tags": ["hortifruti"],
+                        "content": {"quantity": 30, "unit": "UN"},
+                        "kind": "ovo",
+                    }
+                ]
+            )
+        }
+    )
+    _stub_client(monkeypatch, client)
+
+    assert _run("produtos", "revisar").exit_code == 0
+
+    records = _actions(tmp_path)
+    assert [record["field"] for record in records] == ["name", "tag", "content", "kind"]
+    assert all(record["product_id"] == 8 for record in records)
+    assert all(record["at"] and record["undo"] for record in records)
+
+
+def test_revisar_undo_command_for_kind_without_previous(monkeypatch, tmp_path):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={"enrich": _enrich([{"id": 11, "readable_name": "Linguiça", "tags": ["carnes"], "kind": "linguiça"}])}
+    )
+    _stub_client(monkeypatch, client)
+
+    assert _run("produtos", "revisar").exit_code == 0
+
+    (kind_action,) = [record for record in _actions(tmp_path) if record["field"] == "kind"]
+    assert kind_action["undo"] == "julius produtos tipo 11 --remover"
+    assert kind_action["before"] is None
+
+
+def test_undo_command_per_field():
+    # content/kind with a previous value can only come from curation.apply directly (propose never
+    # re-proposes what a product already has), so the mapping is unit-tested here.
+    assert _review._undo_command(AppliedAction(7, "name", "LING FGO", "Linguiça")) == (
+        'julius produtos renomear 7 "LING FGO"'
+    )
+    assert _review._undo_command(AppliedAction(7, "tag", None, "carnes")) == "julius produtos tag 7 carnes --remover"
+    assert _review._undo_command(AppliedAction(7, "content", None, "30 UN")) == (
+        "julius produtos definir-conteudo 7 --remover"
+    )
+    assert _review._undo_command(AppliedAction(7, "content", "2 L", "1.5 L")) == (
+        "julius produtos definir-conteudo 7 2 L"
+    )
+    assert _review._undo_command(AppliedAction(7, "kind", None, "uva")) == "julius produtos tipo 7 --remover"
+    assert _review._undo_command(AppliedAction(7, "kind", "uva", "uva verde")) == 'julius produtos tipo 7 "uva"'
+
+
+def test_revisar_summary_counts_by_field(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich(
+                [
+                    {
+                        "id": 8,
+                        "readable_name": "Ovo Grande",
+                        "tags": ["hortifruti"],
+                        "content": {"quantity": 30, "unit": "UN"},
+                        "kind": "ovo",
+                    }
+                ]
+            )
+        }
+    )
+    _stub_client(monkeypatch, client)
+
+    result = _run("produtos", "revisar")
+
+    assert "Aplicado: 1 nome(s), 1 categoria(s), 1 conteúdo(s), 1 tipo(s)." in result.output
+    assert "julius produtos definir-conteudo 8 30 UN" not in result.output
+
+
+def test_revisar_summary_omits_zero_counts(monkeypatch):
+    _import("qrcode.html")
+    assert _run("produtos", "tag", "11", "carnes").exit_code == 0
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={"enrich": _enrich([{"id": 8, "readable_name": "Chá Relaxa", "tags": ["mercearia", "bebidas"]}])}
+    )
+    _stub_client(monkeypatch, client)
+
+    result = _run("produtos", "revisar")
+
+    assert "Aplicado: 1 nome(s)." in result.output
+    assert "conteúdo" not in result.output and "tipo(s)" not in result.output
+
+
+def test_revisar_survives_unwritable_log(monkeypatch, tmp_path):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    (tmp_path / "actions.jsonl").mkdir()  # a directory where the log file should go
+    client = ScriptedLlmClient(
+        by_kind={"enrich": _enrich([{"id": 11, "readable_name": "Linguiça", "tags": ["carnes"], "kind": "linguiça"}])}
+    )
+    _stub_client(monkeypatch, client)
+
+    result = _run("produtos", "revisar")
+
+    assert result.exit_code == 0, result.output
+    assert "linguiça" in _run("produtos", "listar").output
 
 
 def test_revisar_non_interactive_without_sim_applies_only_auto_and_prints_content_commands(monkeypatch):
@@ -175,14 +314,13 @@ def test_revisar_non_interactive_without_sim_applies_only_auto_and_prints_conten
     result = _run("produtos", "revisar")
 
     assert result.exit_code == 0, result.output
-    assert "julius produtos definir-conteudo 5 30 UN" in result.output
     assert "Pendentes: 1 produto(s) sem categoria." in result.output
     output = _run("produtos", "listar").output
     assert "carnes" in output and "hortifruti" in output
-    assert "30 UN" not in output
+    assert "30 UN" in output
 
 
-def test_revisar_sim_applies_first_tag_even_if_unknown_and_never_writes_content(monkeypatch):
+def test_revisar_sim_applies_first_tag_even_if_unknown(monkeypatch):
     _import("qrcode.html")
     _ai_env(monkeypatch)
     client = ScriptedLlmClient(
@@ -200,10 +338,9 @@ def test_revisar_sim_applies_first_tag_even_if_unknown_and_never_writes_content(
     result = _run("produtos", "revisar", "--sim")
 
     assert result.exit_code == 0, result.output
-    assert "julius produtos definir-conteudo 5 30 UN" in result.output
     output = _run("produtos", "listar").output
     assert "mercearia" in output
-    assert "30 UN" not in output
+    assert "30 UN" in output
 
 
 def test_revisar_prints_fundir_command_for_confirmed_duplicate_and_does_not_merge(monkeypatch):

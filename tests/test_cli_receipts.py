@@ -343,7 +343,7 @@ def test_importar_package_size_hint_only_without_review(monkeypatch, tmp_path):
 
     with_ai = _import("qrcode-5.html")
 
-    assert "definir-conteudo" not in with_ai.output
+    assert "definir-conteudo ID QTD UNIDADE" not in with_ai.output  # the hint, not the undo line
     assert "sem categoria" not in with_ai.output
 
 

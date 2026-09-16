@@ -33,6 +33,10 @@ class Config:
         return self.db_path.parent / "query_log.jsonl"
 
     @property
+    def action_log_path(self) -> Path:
+        return self.db_path.parent / "actions.jsonl"
+
+    @property
     def inbox_path(self) -> Path:
         return self.db_path.parent / "entrada"
 
