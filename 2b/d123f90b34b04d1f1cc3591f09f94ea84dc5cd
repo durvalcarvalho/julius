@@ -1,0 +1,63 @@
+CLAUDE.md
+  s_c0ef054dc440b4::t_e289c8949741f5 295,297,300-303,305,307,309-313,319-321
+  s_c0ef054dc440b4::t_d75540ec3ecb6e 487-488
+  s_c0ef054dc440b4::t_35efcf3eb16642 71,73
+  s_c0ef054dc440b4::t_5fb81255ab87f3 315
+  s_c0ef054dc440b4::t_97c2362d128cd2 400
+  s_c0ef054dc440b4::t_9184e20918fba0 61-63
+  s_c0ef054dc440b4::t_7b7f1a28a17237 15-21,26
+  s_c0ef054dc440b4::t_3c1ab211fca338 11
+  s_c0ef054dc440b4::t_9ef6bc8eab53ac 188-201
+  s_c0ef054dc440b4::t_6eba10f16857da 278-282,284
+  s_c0ef054dc440b4::t_befd34eff8ee1e 288
+  s_c0ef054dc440b4::t_44be5cdeaaac8c 350-356
+  s_c0ef054dc440b4::t_272354b17bd269 465-468,470,473-474,477,480,482,485
+  s_c0ef054dc440b4::t_f6512ffb3c97a7 441
+  s_c0ef054dc440b4::t_3ef8d97548959a 248-251
+  s_965812c685ddb6::t_0b3b78f5250910 314
+tests/test_services_catalog.py
+  s_c0ef054dc440b4::t_149a7869b2e99f 228
+  s_c0ef054dc440b4::t_7db4b8264937b4 21-28
+  s_c0ef054dc440b4::t_5c4f18aad71cae 189,193,199,204,209,212,214,219,222,225
+tests/test_e2e.py
+  s_c0ef054dc440b4::t_051890c91c881c 63-91
+  s_c0ef054dc440b4::t_dea93a2f4dcd0d 179-216,218-301
+  s_c0ef054dc440b4::t_0fcd97ea130032 217
+  s_c0ef054dc440b4::t_86347dd0d9aebd 4,11-13,16
+README.md
+  s_c0ef054dc440b4::t_2cbb30c47eca3b 179
+  s_c0ef054dc440b4::t_6c8a2ffb987236 227
+  s_c0ef054dc440b4::t_ae0eec64b3a414 18
+  s_c0ef054dc440b4::t_4421f90de4048b 406-407,409
+  s_c0ef054dc440b4::t_4d7c1681cc33bf 229,231,233-236,240-241,243,245
+  s_c0ef054dc440b4::t_9b97d371debbb5 432,435
+  s_c0ef054dc440b4::t_7c568d5d286797 383
+  s_c0ef054dc440b4::t_859f8f548f00d9 214,217,219-221
+  s_c0ef054dc440b4::t_f792cf30d0a3a5 114,120-121,134,136,147,155,161-162,165-166,170
+docs/tickets/julius-v2/index.md
+  s_c0ef054dc440b4::t_ffd17d68d041c1 56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2bd123f90b34b04d1f1cc3591f09f94ea84dc5cd",
+  "prompts": {},
+  "sessions": {
+    "s_965812c685ddb6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c3d9578c-face-4627-92be-b14c01cd9fd0",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    },
+    "s_c0ef054dc440b4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "98cfa69a-7548-4f8e-9894-c620fd4d7390",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
