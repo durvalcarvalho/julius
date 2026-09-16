@@ -6,11 +6,12 @@ import typer
 from rich.table import Table
 
 from julius import config
+from julius.cli import _review
 from julius.cli._common import console, fail, open_db
 from julius.cli._hints import print_hints
 from julius.domain.models import Product
 from julius.infra.llm_client import HttpLlmClient
-from julius.services import catalog, guidance, suggestions
+from julius.services import catalog, curation, guidance, suggestions
 
 app = typer.Typer()
 
@@ -142,6 +143,28 @@ def compare_products(
         console.print(f"IA indisponível: a chamada falhou — veja {settings.ai_log_path}.")
     console.print(f"Para fundir: julius produtos fundir {id_a} {id_b}")
     print_hints(guidance.for_compare(settings))
+
+
+@app.command("revisar")
+def review(
+    yes: Annotated[bool, typer.Option("--sim", "-y", help="Aplicar as sugestões da IA sem perguntar.")] = False,
+) -> None:
+    """Pede à IA nome legível, categoria e conteúdo para produtos ainda sem tag."""
+    settings = config.load()
+    client = HttpLlmClient.from_config(settings)
+    conn = open_db()
+    try:
+        if client is None:
+            print_hints(guidance.for_compare(settings))
+            return
+        ids = curation.pending_product_ids(conn)
+        if not ids:
+            console.print("Nenhum produto pendente de revisão.")
+            return
+        interactive = not yes and _review._is_interactive()
+        _review.review_products(conn, settings, client, ids, assume_yes=yes, interactive=interactive)
+    finally:
+        conn.close()
 
 
 def _content(product: Product) -> str:
