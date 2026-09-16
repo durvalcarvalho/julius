@@ -1,0 +1,32 @@
+docs/tickets/julius-v2/115-search-free-text.md
+  s_a000fccfcff12b::t_d2db9f4d937f33 1-89
+docs/tickets/julius-v2/116-cli-consultar-natural-query-log.md
+  s_a000fccfcff12b::t_2063a341d9dafb 1-103
+docs/design/consultar-v2.1.md
+  s_a000fccfcff12b::t_ef78c9a07b9d2f 1-174
+claudedocs/research_v21_consultar_natural_language_20260916.md
+  s_a000fccfcff12b::t_34d6c77e287875 1-77
+docs/tickets/julius-v2/index.md
+  s_a000fccfcff12b::t_4ab8b95e604d04 70-71,74,78,87
+  s_a000fccfcff12b::t_360d5235998ab5 111
+  s_a000fccfcff12b::t_12cdd2e67118b7 57-58
+  s_a000fccfcff12b::t_2969cc0ad7d609 101
+docs/requirements/consultar-v2.1.md
+  s_a000fccfcff12b::t_f0ee41fd51ecfe 1-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "082cd9129e87d2b763cd4fdbe9c58b6239ff3856",
+  "prompts": {},
+  "sessions": {
+    "s_a000fccfcff12b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c8cf1253-a141-481e-98ea-a0249f9da147",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
