@@ -226,3 +226,48 @@ def test_compare_unknown_id_raises(conn, no_ai):
     product_id = _product(conn, "A", "1")
     with pytest.raises(LookupError):
         catalog.compare_products(conn, no_ai, None, product_id, 9999)
+
+
+def test_set_product_kind_delegates_and_normalizes(conn):
+    first = _product(conn, "TOMATE ITALIANO kg", "1")
+    second = _product(conn, "ACAI POLPA", "2")
+    catalog.set_product_kind(conn, first, "Tomate")
+    assert products.get_product(conn, first).kind == "tomate"
+
+    catalog.set_product_kind(conn, second, "açaí")
+    third = _product(conn, "ACAI ZERO", "3")
+    catalog.set_product_kind(conn, third, "ACAI")
+
+    assert products.get_product(conn, third).kind == "açaí"
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_set_product_kind_blank_raises(conn, blank):
+    product_id = _product(conn, "TOMATE", "1")
+    with pytest.raises(ValueError, match="tipo"):
+        catalog.set_product_kind(conn, product_id, blank)
+
+
+def test_set_product_kind_unknown_product_raises(conn):
+    with pytest.raises(LookupError):
+        catalog.set_product_kind(conn, 999, "tomate")
+
+
+def test_clear_product_kind(conn):
+    product_id = _product(conn, "TOMATE", "1")
+    catalog.set_product_kind(conn, product_id, "tomate")
+    catalog.clear_product_kind(conn, product_id)
+    assert products.get_product(conn, product_id).kind is None
+
+
+def test_clear_product_content_clears_both(conn):
+    product_id = _product(conn, "AGUA 500ML", "1")
+    catalog.set_product_content(conn, product_id, 500, "ML")
+    catalog.clear_product_content(conn, product_id)
+    product = products.get_product(conn, product_id)
+    assert (product.content_quantity, product.content_unit) == (None, None)
+
+
+def test_clear_product_content_unknown_product_raises(conn):
+    with pytest.raises(LookupError):
+        catalog.clear_product_content(conn, 999)

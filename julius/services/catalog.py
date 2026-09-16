@@ -55,6 +55,22 @@ def untag_product(conn: sqlite3.Connection, product_id: int, tag: str) -> None:
         products.remove_tag(conn, product_id, _non_blank(tag, "tag").lower())
 
 
+def set_product_kind(conn: sqlite3.Connection, product_id: int, kind: str) -> None:
+    # The spelling rule lives in products.set_kind so the automatic path cannot bypass it.
+    with conn:
+        products.set_kind(conn, product_id, _non_blank(kind, "tipo"))
+
+
+def clear_product_kind(conn: sqlite3.Connection, product_id: int) -> None:
+    with conn:
+        products.set_kind(conn, product_id, None)
+
+
+def clear_product_content(conn: sqlite3.Connection, product_id: int) -> None:
+    with conn:
+        products.clear_content(conn, product_id)
+
+
 def set_product_content(conn: sqlite3.Connection, product_id: int, quantity: float, raw_unit: str) -> None:
     normalized_quantity, unit = normalize_content(quantity, raw_unit)
     with conn:

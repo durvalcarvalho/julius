@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 from rich.table import Table
@@ -27,9 +27,11 @@ def list_products() -> None:
     if not products:
         console.print("Nenhum produto importado ainda.")
         return
-    table = Table("ID", "Nome", "Conteúdo", "Tags")
+    table = Table("ID", "Nome", "Tipo", "Conteúdo", "Tags")
     for product in products:
-        table.add_row(str(product.id), product.canonical_name, _content(product), ", ".join(product.tags))
+        table.add_row(
+            str(product.id), product.canonical_name, product.kind or "", _content(product), ", ".join(product.tags)
+        )
     console.print(table)
 
 
@@ -96,21 +98,61 @@ def tag_product(
         console.print(f"Produto {product_id} marcado com '{normalized}'.")
 
 
-@app.command("definir-conteudo")
-def set_content(
+@app.command("tipo")
+def set_kind(
     product_id: Annotated[int, typer.Argument(help="ID do produto.")],
-    quantity: Annotated[float, typer.Argument(help="Quantidade na embalagem, ex.: 500.")],
-    unit: Annotated[str, typer.Argument(help="L, ML, KG, G ou UN.")],
+    kind: Annotated[Optional[str], typer.Argument(help="Tipo da coisa, ex.: tomate, leite uht.")] = None,
+    remove: Annotated[bool, typer.Option("--remover", help="Remove o tipo em vez de definir.")] = False,
 ) -> None:
-    """Informa o conteúdo da embalagem para comparar preço por litro/kg/unidade."""
+    """Define o tipo do produto — o grupo usado para comparar preço entre mercados."""
+    if remove and kind is not None:
+        fail("Use `--remover` sem informar o TIPO.")
+    if not remove and kind is None:
+        fail("Informe o TIPO ou use `--remover`.")
     conn = open_db()
     try:
-        catalog.set_product_content(conn, product_id, quantity, unit)
+        if remove:
+            catalog.clear_product_kind(conn, product_id)
+        else:
+            catalog.set_product_kind(conn, product_id, kind)  # type: ignore[arg-type]
+        name = _name_of(conn, product_id)
     except (ValueError, LookupError) as error:
         fail(str(error))
     finally:
         conn.close()
-    console.print(f"Conteúdo do produto {product_id} definido.")
+    if remove:
+        console.print(f"{product_id} · {name} → tipo removido")
+    else:
+        console.print(f'{product_id} · {name} → tipo "{kind.strip().lower()}"')  # type: ignore[union-attr]
+
+
+@app.command("definir-conteudo")
+def set_content(
+    product_id: Annotated[int, typer.Argument(help="ID do produto.")],
+    quantity: Annotated[Optional[float], typer.Argument(help="Quantidade na embalagem, ex.: 500.")] = None,
+    unit: Annotated[Optional[str], typer.Argument(help="L, ML, KG, G ou UN.")] = None,
+    remove: Annotated[bool, typer.Option("--remover", help="Remove o conteúdo em vez de definir.")] = False,
+) -> None:
+    """Informa o conteúdo da embalagem para comparar preço por litro/kg/unidade."""
+    if remove and (quantity is not None or unit is not None):
+        fail("Use `--remover` sem informar QTD e UNIDADE.")
+    if not remove and (quantity is None or unit is None):
+        fail("Informe QTD e UNIDADE ou use `--remover`.")
+    conn = open_db()
+    try:
+        if remove:
+            catalog.clear_product_content(conn, product_id)
+        else:
+            catalog.set_product_content(conn, product_id, quantity, unit)  # type: ignore[arg-type]
+        name = _name_of(conn, product_id)
+    except (ValueError, LookupError) as error:
+        fail(str(error))
+    finally:
+        conn.close()
+    if remove:
+        console.print(f"{product_id} · {name} → conteúdo removido")
+    else:
+        console.print(f"Conteúdo do produto {product_id} definido.")
 
 
 @app.command("comparar")
@@ -165,6 +207,11 @@ def review(
         _review.review_products(conn, settings, client, ids, assume_yes=yes, interactive=interactive)
     finally:
         conn.close()
+
+
+def _name_of(conn, product_id: int) -> str:
+    product = next((p for p in catalog.list_products(conn) if p.id == product_id), None)
+    return f"#{product_id}" if product is None else product.canonical_name
 
 
 def _content(product: Product) -> str:

@@ -96,6 +96,70 @@ def test_produtos_definir_conteudo_bad_unit_exits_1():
     assert _run("produtos", "definir-conteudo", "1", "abc", "KG").exit_code == 2
 
 
+def test_produtos_tipo_sets_and_prints_confirmation():
+    _import("qrcode.html")
+    result = _run("produtos", "tipo", "1", "Refrigerante")
+    assert result.exit_code == 0, result.output
+    assert "REFRI PEPSI PET 2L" in result.output
+    assert 'tipo "refrigerante"' in result.output
+
+
+def test_produtos_tipo_remover_clears():
+    _import("qrcode.html")
+    assert _run("produtos", "tipo", "1", "refrigerante").exit_code == 0
+    result = _run("produtos", "tipo", "1", "--remover")
+    assert result.exit_code == 0, result.output
+    assert "tipo removido" in result.output
+    assert "refrigerante" not in _run("produtos", "listar").output
+
+
+def test_produtos_tipo_both_arg_and_remover_fails():
+    _import("qrcode.html")
+    result = _run("produtos", "tipo", "1", "refrigerante", "--remover")
+    assert result.exit_code == 1
+    assert "--remover" in result.stderr
+    assert "refrigerante" not in _run("produtos", "listar").output
+
+
+def test_produtos_tipo_neither_arg_nor_remover_fails():
+    _import("qrcode.html")
+    result = _run("produtos", "tipo", "1")
+    assert result.exit_code == 1
+    assert "TIPO" in result.stderr
+
+
+def test_produtos_tipo_unknown_product_exits_1():
+    _import("qrcode.html")
+    assert _run("produtos", "tipo", "999", "refrigerante").exit_code == 1
+    assert _run("produtos", "tipo", "1", "   ").exit_code == 1
+
+
+def test_produtos_listar_shows_kind_column():
+    _import("qrcode.html")
+    assert _run("produtos", "tipo", "1", "refrigerante").exit_code == 0
+    output = _run("produtos", "listar").output
+    assert "Tipo" in output
+    assert "refrigerante" in output
+
+
+def test_produtos_definir_conteudo_remover_clears():
+    _import("qrcode.html")
+    assert _run("produtos", "definir-conteudo", "1", "2", "L").exit_code == 0
+    assert "Por L" in _run("consultar", "pepsi").output
+    result = _run("produtos", "definir-conteudo", "1", "--remover")
+    assert result.exit_code == 0, result.output
+    assert "conteúdo removido" in result.output
+    assert "Por L" not in _run("consultar", "pepsi").output
+
+
+def test_produtos_definir_conteudo_remover_rejects_extra_arguments():
+    _import("qrcode.html")
+    assert _run("produtos", "definir-conteudo", "1", "2", "L", "--remover").exit_code == 1
+    result = _run("produtos", "definir-conteudo", "1", "2")
+    assert result.exit_code == 1
+    assert "UNIDADE" in result.stderr
+
+
 def test_produtos_fundir_asks_confirmation_and_cancels_on_no():
     _import("qrcode.html")
     before = _run("produtos", "listar").output
@@ -203,5 +267,5 @@ def test_help_shows_subcommands():
     stores_help = _run("mercados", "--help").output
     assert "listar" in stores_help and "renomear" in stores_help
     products_help = _run("produtos", "--help").output
-    for command in ("listar", "renomear", "fundir", "tag", "definir-conteudo"):
+    for command in ("listar", "renomear", "fundir", "tag", "tipo", "definir-conteudo"):
         assert command in products_help
