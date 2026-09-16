@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_DB_PATH = Path.home() / ".local" / "share" / "julius" / "prices.db"
@@ -17,10 +18,15 @@ class Config:
     ai_budget_usd: float
     ai_input_price_usd_per_1m: float | None
     ai_output_price_usd_per_1m: float | None
+    ai_request_extras: dict[str, object] = field(default_factory=dict)
 
     @property
     def ai_configured(self) -> bool:
         return bool(self.ai_api_key and self.ai_base_url and self.ai_model)
+
+    @property
+    def ai_log_path(self) -> Path:
+        return self.db_path.parent / "ai_calls.jsonl"
 
 
 def load(env: Mapping[str, str] | None = None) -> Config:
@@ -34,6 +40,7 @@ def load(env: Mapping[str, str] | None = None) -> Config:
         ai_budget_usd=1.0 if budget is None else budget,
         ai_input_price_usd_per_1m=_optional_float(env, "JULIUS_AI_INPUT_PRICE_USD_PER_1M"),
         ai_output_price_usd_per_1m=_optional_float(env, "JULIUS_AI_OUTPUT_PRICE_USD_PER_1M"),
+        ai_request_extras=_request_extras(env),
     )
 
 
@@ -45,3 +52,16 @@ def _optional_float(env: Mapping[str, str], name: str) -> float | None:
         return float(raw)
     except ValueError:
         raise ValueError(f"{name} must be a number, got {raw!r}") from None
+
+
+def _request_extras(env: Mapping[str, str]) -> dict[str, object]:
+    raw = env.get("JULIUS_AI_REQUEST_EXTRAS")
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        parsed = None
+    if not isinstance(parsed, dict):
+        raise ValueError(f"JULIUS_AI_REQUEST_EXTRAS must be a JSON object, got {raw!r}")
+    return parsed

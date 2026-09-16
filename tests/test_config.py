@@ -60,3 +60,23 @@ def test_non_numeric_budget_fails_loudly_naming_the_variable():
 def test_load_reads_the_process_environment_by_default(monkeypatch):
     monkeypatch.setenv("JULIUS_DB", "/tmp/from-env.db")
     assert config.load().db_path == Path("/tmp/from-env.db")
+
+
+def test_request_extras_default_is_empty_dict():
+    assert config.load({}).ai_request_extras == {}
+
+
+def test_request_extras_parses_json_object():
+    cfg = config.load({"JULIUS_AI_REQUEST_EXTRAS": '{"thinking":{"type":"disabled"}}'})
+    assert cfg.ai_request_extras == {"thinking": {"type": "disabled"}}
+
+
+@pytest.mark.parametrize("raw", ["[1]", "42", "{oops"])
+def test_request_extras_rejects_non_object_or_invalid_json(raw):
+    with pytest.raises(ValueError, match="JULIUS_AI_REQUEST_EXTRAS"):
+        config.load({"JULIUS_AI_REQUEST_EXTRAS": raw})
+
+
+def test_ai_log_path_sits_next_to_db():
+    cfg = config.load({"JULIUS_DB": "/x/y/prices.db"})
+    assert cfg.ai_log_path == Path("/x/y/ai_calls.jsonl")
