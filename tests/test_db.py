@@ -19,7 +19,7 @@ def _tables(conn: sqlite3.Connection) -> set[str]:
 
 def test_connect_creates_full_schema_at_latest_version(conn):
     assert _tables(conn) == EXPECTED_TABLES
-    assert db.schema_version(conn) == 2
+    assert db.schema_version(conn) == max(version for version, _ in db.available_migrations())
 
 
 def test_connect_creates_missing_parent_directories(tmp_path):
@@ -65,25 +65,52 @@ def test_pending_migration_backs_up_existing_db_then_applies_it(db_path, tmp_pat
     conn = db.connect(db_path)
     conn.execute("INSERT INTO stores (cnpj, legal_name, nickname) VALUES ('1', 'Legal', 'Nick')")
     conn.commit()
-    extra = tmp_path / "0003_add_notes.sql"
+    extra = tmp_path / "0004_add_notes.sql"
     extra.write_text("CREATE TABLE notes (id INTEGER PRIMARY KEY);", encoding="utf-8")
 
-    db.apply_migrations(conn, db_path, db.available_migrations() + [(3, extra)])
+    db.apply_migrations(conn, db_path, db.available_migrations() + [(4, extra)])
 
-    assert db.schema_version(conn) == 3
+    assert db.schema_version(conn) == 4
     assert "notes" in _tables(conn)
     assert conn.execute("SELECT count(*) FROM stores").fetchone()[0] == 1
 
-    backup = sqlite3.connect(db_path.with_name("prices.db.bak-v2"))
-    assert db.schema_version(backup) == 2
+    backup = sqlite3.connect(db_path.with_name("prices.db.bak-v3"))
+    assert db.schema_version(backup) == 3
     assert "notes" not in _tables(backup)
 
 
-def test_fresh_db_is_at_version_two_with_address_column_and_seed_tags(conn, db_path):
+def test_fresh_db_is_at_latest_version_with_address_column_and_seed_tags(conn, db_path):
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(stores)")}
     assert "address" in columns
     assert conn.execute("SELECT count(*) FROM tags").fetchone()[0] == 13
+    assert db.schema_version(conn) == max(version for version, _ in db.available_migrations())
     assert list(db_path.parent.glob("*.bak-*")) == []
+
+
+def test_migration_0003_adds_kind_column(conn):
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)")}
+    assert "kind" in columns
+
+
+def test_migration_0003_backs_up_existing_database(db_path):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    db.apply_migrations(conn, db_path, db.available_migrations()[:2])
+    conn.execute("INSERT INTO stores (cnpj, legal_name, nickname) VALUES ('1', 'Legal', 'Nick')")
+    conn.execute("INSERT INTO products (id, canonical_name) VALUES (1, 'X')")
+    conn.execute(INSERT_PRICE, ("k", 1, "2026-09-12T13:09:16", "1", 1, "c", "d", 1, "UN", 1, 1))
+    conn.commit()
+    conn.close()
+
+    upgraded = db.connect(db_path)
+
+    assert db.schema_version(upgraded) == 3
+    assert {row["name"] for row in upgraded.execute("PRAGMA table_info(products)")} >= {"kind"}
+    assert upgraded.execute("SELECT count(*) FROM products").fetchone()[0] == 1
+    assert upgraded.execute("SELECT count(*) FROM prices").fetchone()[0] == 1
+    backup = sqlite3.connect(db_path.with_name("prices.db.bak-v2"))
+    assert db.schema_version(backup) == 2
+    assert "kind" not in {row[1] for row in backup.execute("PRAGMA table_info(products)")}
 
 
 def test_upgrading_a_v1_db_backs_up_and_keeps_rows(db_path):
@@ -100,7 +127,7 @@ def test_upgrading_a_v1_db_backs_up_and_keeps_rows(db_path):
 
     upgraded = db.connect(db_path)
 
-    assert db.schema_version(upgraded) == 2
+    assert db.schema_version(upgraded) == 3
     backup_path = db_path.with_name("prices.db.bak-v1")
     assert backup_path.exists()
     backup = sqlite3.connect(backup_path)

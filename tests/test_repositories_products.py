@@ -193,3 +193,65 @@ def test_delete_product_removes_tags_and_fails_if_still_referenced(conn_with_sto
     assert conn.execute("SELECT count(*) FROM product_tags WHERE product_id = ?", (source,)).fetchone()[0] == 0
     with pytest.raises(LookupError):
         products.delete_product(conn, 999)
+
+
+def test_set_kind_and_read_back(conn_with_stores):
+    conn = conn_with_stores
+    pid = products.resolve_product_id(conn, STORE_A, "1", "TOMATE ITALIANO kg")
+    products.set_kind(conn, pid, "Tomate")
+    assert products.get_product(conn, pid).kind == "tomate"
+
+
+def test_set_kind_reuses_existing_spelling(conn_with_stores):
+    conn = conn_with_stores
+    first = products.resolve_product_id(conn, STORE_A, "1", "ACAI POLPA")
+    second = products.resolve_product_id(conn, STORE_B, "2", "ACAI ZERO")
+    products.set_kind(conn, first, "açaí")
+    products.set_kind(conn, second, "ACAI")
+    assert products.get_product(conn, second).kind == "açaí"
+
+
+def test_set_kind_none_clears(conn_with_stores):
+    conn = conn_with_stores
+    pid = products.resolve_product_id(conn, STORE_A, "1", "TOMATE")
+    products.set_kind(conn, pid, "tomate")
+    products.set_kind(conn, pid, None)
+    assert products.get_product(conn, pid).kind is None
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_set_kind_blank_raises(conn_with_stores, blank):
+    conn = conn_with_stores
+    pid = products.resolve_product_id(conn, STORE_A, "1", "TOMATE")
+    with pytest.raises(ValueError):
+        products.set_kind(conn, pid, blank)
+    assert products.get_product(conn, pid).kind is None
+
+
+def test_set_kind_unknown_product_raises(conn):
+    with pytest.raises(LookupError):
+        products.set_kind(conn, 999, "tomate")
+
+
+def test_all_kinds_distinct_and_sorted(conn_with_stores):
+    conn = conn_with_stores
+    assert products.all_kinds(conn) == []
+    ids = [products.resolve_product_id(conn, STORE_A, str(i), f"P{i}") for i in range(3)]
+    products.set_kind(conn, ids[0], "tomate")
+    products.set_kind(conn, ids[1], "cebola")
+    products.set_kind(conn, ids[2], "tomate")
+    assert products.all_kinds(conn) == ["cebola", "tomate"]
+
+
+def test_clear_content_clears_both_columns(conn_with_stores):
+    conn = conn_with_stores
+    pid = products.resolve_product_id(conn, STORE_A, "1", "AGUA 500ML")
+    products.set_content(conn, pid, 0.5, "L")
+    products.clear_content(conn, pid)
+    product = products.get_product(conn, pid)
+    assert (product.content_quantity, product.content_unit) == (None, None)
+
+
+def test_clear_content_unknown_product_raises(conn):
+    with pytest.raises(LookupError):
+        products.clear_content(conn, 999)

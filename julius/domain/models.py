@@ -38,6 +38,7 @@ class Product:
     content_quantity: float | None = None
     content_unit: ContentUnit | None = None
     tags: tuple[str, ...] = ()
+    kind: str | None = None  # comparison group; NULL until assigned
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,7 @@ class PriceRecord:
     content_unit: ContentUnit | None = None
     highlight: Highlight | None = None
     store_address: str | None = None
+    kind: str | None = None  # of the product this row belongs to
 
 
 @dataclass(frozen=True)

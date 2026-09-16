@@ -64,7 +64,7 @@ def prices_for_products(conn: sqlite3.Connection, product_ids: Sequence[int]) ->
     rows = conn.execute(
         f"""
         SELECT p.product_id, pr.canonical_name, s.nickname, s.address, p.unit, p.unit_price, p.purchased_at,
-               pr.content_quantity, pr.content_unit
+               pr.content_quantity, pr.content_unit, pr.kind
         FROM prices p
         JOIN stores s ON s.cnpj = p.store_cnpj
         JOIN products pr ON pr.id = p.product_id
@@ -84,6 +84,7 @@ def prices_for_products(conn: sqlite3.Connection, product_ids: Sequence[int]) ->
             price_per_content=None if row["content_quantity"] is None else row["unit_price"] / row["content_quantity"],
             content_unit=row["content_unit"],
             store_address=row["address"],
+            kind=row["kind"],
         )
         for row in rows
     ]

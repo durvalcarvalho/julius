@@ -56,7 +56,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 114 | [e2e, docs, backfill](114-e2e-docs-backfill.md) | 101–113 | M | feito (código); backfill real pendente do usuário | `test_e2e.py` v2, `CLAUDE.md`, `README.md`, reimport dos HTMLs reais |
 | 115 | [search: tag em texto livre](115-search-free-text.md) | — | M | feito | `domain.SearchOutcome`, `search.TAG_MATCH_CUTOFF`/`detect_tag`/`search_free_text` |
 | 116 | [CLI: consultar natural + log](116-cli-consultar-natural-query-log.md) | 115 | M | feito | `consultar` com várias palavras, `--sem-tag`, `Config.query_log_path`, `query_log.jsonl` |
-| 117 | [Migração 0003 + `products.kind`](117-product-kind-column.md) | — | S | aberto | coluna `kind`, `set_kind` (regra de grafia), `all_kinds`, `clear_content` |
+| 117 | [Migração 0003 + `products.kind`](117-product-kind-column.md) | — | S | feito | coluna `kind`, `set_kind` (regra de grafia), `all_kinds`, `clear_content` |
 | 118 | [Comandos de desfazer](118-kind-content-undo-commands.md) | 117 | M | aberto | `produtos tipo [--remover]`, `definir-conteudo --remover`, coluna "Tipo" |
 | 119 | [Base de comparação](119-comparison-basis.md) | — | M | aberto | `domain/comparison_basis.py`, `_highlight_and_trim` corrigido |
 | 120 | [Prompt enrich v2 + `kind`](120-suggestions-enrich-kind.md) | 117 | M | aberto | `ProductEnrichment.kind`, `PROMPT_VERSIONS["enrich"]="2"`, `known_kinds` |

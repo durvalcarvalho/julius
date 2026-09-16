@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 
 from julius.domain.models import ContentUnit, Product
+from julius.domain.normalization import normalize_text
 
 
 def find_product_id(conn: sqlite3.Connection, store_cnpj: str, product_code: str) -> int | None:
@@ -50,6 +51,30 @@ def set_content(conn: sqlite3.Connection, product_id: int, quantity: float, unit
         (quantity, unit, product_id),
     )
     _require_row(cursor, product_id)
+
+
+def clear_content(conn: sqlite3.Connection, product_id: int) -> None:
+    _require_exists(conn, product_id)
+    # Both columns together: half a content is an invalid state.
+    conn.execute("UPDATE products SET content_quantity = NULL, content_unit = NULL WHERE id = ?", (product_id,))
+
+
+def all_kinds(conn: sqlite3.Connection) -> list[str]:
+    rows = conn.execute("SELECT DISTINCT kind FROM products WHERE kind IS NOT NULL ORDER BY kind")
+    return [row["kind"] for row in rows]
+
+
+def set_kind(conn: sqlite3.Connection, product_id: int, kind: str | None) -> None:
+    """Writes the comparison group. The spelling rule lives here, not in the service layer:
+    `curation.apply` writes through the repositories, so a rule in `catalog` would be bypassed."""
+    _require_exists(conn, product_id)
+    if kind is not None:
+        cleaned = kind.strip().lower()
+        if not cleaned:
+            raise ValueError("kind must not be blank")
+        normalized = normalize_text(cleaned)
+        kind = next((known for known in all_kinds(conn) if normalize_text(known) == normalized), cleaned)
+    conn.execute("UPDATE products SET kind = ? WHERE id = ?", (kind, product_id))
 
 
 def add_tag(conn: sqlite3.Connection, product_id: int, tag_name: str) -> None:
@@ -121,6 +146,7 @@ def _to_product(conn: sqlite3.Connection, row: sqlite3.Row) -> Product:
         content_quantity=row["content_quantity"],
         content_unit=row["content_unit"],
         tags=tuple(tag["name"] for tag in tags),
+        kind=row["kind"],
     )
 
 
