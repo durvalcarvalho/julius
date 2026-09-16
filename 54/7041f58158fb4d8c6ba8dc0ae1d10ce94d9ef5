@@ -1,0 +1,53 @@
+julius/domain/models.py
+  s_c0ef054dc440b4::t_f4fb699b645230 20-22
+tests/test_services_search.py
+  s_c0ef054dc440b4::t_3822bda2c4461f 10
+  s_c0ef054dc440b4::t_855db7c8f07f11 149-168
+julius/cli/_hints.py
+  s_c0ef054dc440b4::t_66d2733a0b7359 62
+  s_c0ef054dc440b4::t_27155a5c9e3432 8
+  s_c0ef054dc440b4::t_55b722e1b853ff 41-52
+docs/tickets/julius-v2/index.md
+  s_c0ef054dc440b4::t_210a5954fd9243 52
+tests/test_cli_receipts.py
+  s_c0ef054dc440b4::t_1a02dd8d9c2d78 115-118
+julius/services/search.py
+  s_c0ef054dc440b4::t_4a93283563c62b 4
+  s_c0ef054dc440b4::t_56182b8df2a99f 41-44,47,57-59
+  s_965812c685ddb6::t_9f2283ae60ef46 60-61
+julius/services/guidance.py
+  s_c0ef054dc440b4::t_ef21d7a304cb39 11
+  s_c0ef054dc440b4::t_0f2bb7c1ef96f9 59,61-71,75-85,89-114
+  s_c0ef054dc440b4::t_b3975cd0e1f70d 115-116
+tests/test_cli_hints.py
+  s_c0ef054dc440b4::t_390aac67e4c9c5 16,20-23
+  s_c0ef054dc440b4::t_560d3460a22f0d 24-25
+tests/test_services_guidance.py
+  s_c0ef054dc440b4::t_504cd587e33ed6 82-84,90,100-102
+  s_c0ef054dc440b4::t_63fc8056144e83 141-199
+  s_c0ef054dc440b4::t_83dd33f2b6025b 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "547041f58158fb4d8c6ba8dc0ae1d10ce94d9ef5",
+  "prompts": {},
+  "sessions": {
+    "s_965812c685ddb6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c3d9578c-face-4627-92be-b14c01cd9fd0",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    },
+    "s_c0ef054dc440b4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "98cfa69a-7548-4f8e-9894-c620fd4d7390",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
