@@ -388,3 +388,78 @@ def test_e2e_import_from_inbox_is_idempotent(tmp_path):
     assert "Nada para importar" in again.output
     conn = db.connect(tmp_path / "prices.db")
     assert conn.execute("SELECT count(*) FROM prices").fetchone()[0] == 6
+
+
+def test_v22_full_cycle(tmp_path, monkeypatch):
+    inbox = tmp_path / "entrada"
+    inbox.mkdir()
+    for name in ("qrcode-3.html", "qrcode.html"):
+        shutil.copy2(FIXTURES / name, inbox / name)
+    _ai_env(monkeypatch)
+    _stub_client(
+        monkeypatch,
+        ScriptedLlmClient(
+            by_kind={
+                "enrich": LlmResponse(
+                    json.dumps(
+                        {
+                            "products": [
+                                {"id": 4, "readable_name": "Tomate Italiano", "tags": ["hortifruti"], "kind": "tomate"},
+                                {
+                                    "id": 19,
+                                    "readable_name": "Tomate Italiano União",
+                                    "tags": ["hortifruti"],
+                                    "kind": "tomate",
+                                },
+                                {
+                                    "id": 6,
+                                    "readable_name": "Refrigerante Pepsi 2L",
+                                    "tags": ["bebidas"],
+                                    "content": {"quantity": 2, "unit": "L"},
+                                    "kind": "refrigerante",
+                                },
+                            ]
+                        }
+                    ),
+                    10,
+                    5,
+                ),
+                "merge": LlmResponse(json.dumps({"pairs": []}), 10, 5),
+            }
+        ),
+    )
+
+    imported = _run("importar")
+
+    assert imported.exit_code == 0, imported.output
+    conn = db.connect(tmp_path / "prices.db")
+    assert conn.execute("SELECT count(*) FROM prices").fetchone()[0] == 26
+    kinds = dict(conn.execute("SELECT id, kind FROM products WHERE kind IS NOT NULL"))
+    assert kinds == {4: "tomate", 19: "tomate", 6: "refrigerante"}
+    assert conn.execute("SELECT content_quantity, content_unit FROM products WHERE id = 6").fetchone()[:] == (2.0, "L")
+    conn.close()
+
+    actions = [json.loads(line) for line in (tmp_path / "actions.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert {action["field"] for action in actions} == {"name", "tag", "content", "kind"}
+    assert list(inbox.glob("*.html")) == []
+    archived = sorted(path.name for path in (inbox / "importados").iterdir())
+    assert archived[0].startswith("2026-09-07_") and archived[1].startswith("2026-09-12_")
+
+    audit = _run("produtos", "revisar", "--ultimas-acoes")
+    assert audit.exit_code == 0, audit.output
+    assert "julius produtos tipo 19 --remover" in audit.output
+
+    consulta = _run("consultar", "tomate")
+    assert consulta.exit_code == 0, consulta.output
+    assert "Dia" in consulta.output and "seg" in consulta.output
+
+    comparar = _run("mercados", "comparar")
+    assert comparar.exit_code == 0, comparar.output
+    assert "tomate · por KG" in comparar.output
+    assert "FL 3 COSTA" in comparar.output and "DONA DE CASA" in comparar.output
+    assert "base: 1 grupo · 07/09 a 12/09" in comparar.output
+
+    assert _run("produtos", "tipo", "19", "--remover").exit_code == 0
+    after_undo = _run("mercados", "comparar")
+    assert after_undo.exit_code == 0, after_undo.output
+    assert "tomate · por KG" not in after_undo.output

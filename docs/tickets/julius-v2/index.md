@@ -69,7 +69,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 127 | [CLI: sinal no importar + dia](127-cli-import-signal-weekday.md) | 122, 126 | M | feito | "Nesta compra:" (máx. 5 linhas), coluna "Dia" no `consultar` |
 | 128 | [infra de arquivamento](128-receipt-files-infra.md) | — | M | feito | `infra/receipt_files.py`, `Config.inbox_path`/`archive_path`, `ImportResult.access_key` |
 | 129 | [CLI: entrada e arquivamento](129-cli-inbox-archive.md) | 128 | M | feito (sem `discard_sidecar` — veto pendente) | `importar` sem argumento, arquiva e descarta sidecar, `make inbox`, `.gitignore` |
-| 130 | [e2e + docs v2.2](130-e2e-docs-sync.md) | 117–129 | M | aberto | `test_e2e` do ciclo novo, `CLAUDE.md`/`README.md` (inclui a reversão do conteúdo confirmado) |
+| 130 | [e2e + docs v2.2](130-e2e-docs-sync.md) | 117–129 | M | feito | `test_e2e` do ciclo novo, `CLAUDE.md`/`README.md` (inclui a reversão do conteúdo confirmado) |
 
 Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum ticket L: o que ficaria L foi dividido (suggestions em 107/108; CLI em 111/112/113; na v2.2, serviço e CLI sempre em tickets separados — 124/125 e 126/127 — e a infra de arquivamento separada da CLI que a usa, 128/129).
 

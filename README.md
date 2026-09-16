@@ -128,7 +128,8 @@ julius importar cupom.html --sim                 # aplica sugestões da IA sem p
 - Se um arquivo falhar (não existe, HTML fora do formato, unidade desconhecida), imprime o erro em `stderr`, **continua os outros** e termina com código 1.
 - Um arquivo com problema nunca grava nada, nem parcialmente — o parse acontece inteiro antes de qualquer escrita.
 - Guarda também o endereço do mercado (impresso no cupom), pra aparecer depois em `mercados listar`/`consultar`.
-- Com a IA configurada e produto novo na nota, roda a mesma revisão de `produtos revisar` (nome legível, categoria, conteúdo) uma vez, no fim — ver "IA opcional" abaixo. Sem IA, imprime só a dica de quantos produtos ficaram sem categoria.
+- No fim, se algum item da nota bateu o menor ou o maior preço já pago do seu grupo, imprime o bloco `Nesta compra:` (no máximo 5 linhas). Nenhum recorde → não imprime nada.
+- Com a IA configurada e produto novo na nota, roda a mesma revisão de `produtos revisar` (nome legível, categoria, conteúdo, tipo) uma vez, no fim — ver "IA opcional" abaixo. Sem IA, imprime só a dica de quantos produtos ficaram sem categoria.
 
 ### `consultar` — a pergunta principal
 
@@ -141,8 +142,9 @@ julius consultar carnes --sem-tag      # força tratar "carnes" como nome, não 
 julius consultar arroz -n 5            # só as 5 compras mais recentes por unidade
 ```
 
-- Uma tabela por unidade de venda (`KG`, `UN`).
+- Uma tabela por unidade de venda (`KG`, `UN`), com a data e o **dia da semana** (`seg`…`dom`) de cada compra — só o dado, sem nenhuma afirmação sobre padrão semanal.
 - Linhas mais recentes primeiro. A linha de **menor preço fica verde**, a de **maior fica vermelha** — e essas duas sempre aparecem, mesmo que sejam mais antigas que o `-n` pede.
+- **O destaque respeita a base de comparação**: por KG, o preço por quilo já é comparável; por UN, duas embalagens de tamanhos diferentes só se comparam pelo preço por conteúdo, e quem ainda não tem conteúdo definido fica **sem** destaque em vez de ganhar um destaque errado. É por isso que preencher conteúdo (ou deixar a IA preencher) vale tanto.
 - A célula do mercado mostra o apelido e, embaixo em cinza, o endereço do cupom (quando já foi importado com endereço).
 - Se o produto tem embalagem definida (veja `produtos definir-conteudo`), surge a coluna **Por L / Por KG / Por UN**.
 - Uma palavra da frase que bater o nome de uma categoria (com tolerância a erro de digitação) vira filtro automaticamente, junto com o resto como nome — sem precisar de `--tag`. Se a interseção não achar nada, a busca tenta de novo pelo nome puro antes de desistir. `--sem-tag` desliga essa detecção pontualmente.
@@ -158,6 +160,12 @@ julius mercados listar
 julius mercados renomear 27.289.076/0013-79 "Atacadão Águas Claras"   # CNPJ formatado ou só dígitos
 ```
 
+```bash
+julius mercados comparar   # "esse mercado é mais caro?" — por grupo, com n e período
+```
+
+`mercados comparar` mostra uma tabela por grupo de comparação (veja `produtos tipo`), o mais barato em verde, depois "mais barato em 3 de 3 grupos" e sempre o rodapé com quantos grupos e de que período a resposta saiu. Esse rodapé não é enfeite: as notas de mercados diferentes podem estar a semanas de distância, e aí parte da diferença é o mês, não a loja. Nunca há um índice único de "mercado caro" — só a contagem por grupo.
+
 `mercados listar` mostra também o **endereço** impresso no cupom (coluna própria). Filiais são CNPJs diferentes, e Julius as trata como mercados diferentes de propósito — os preços variam entre lojas da mesma rede. Vale pôr o bairro no apelido; se duas filiais da mesma rede ainda não têm apelido, o `importar` avisa com o endereço de cada uma.
 
 ### `produtos` — cuidar do catálogo
@@ -169,11 +177,15 @@ julius produtos tag 14 bebidas                  # categoria livre, minúscula
 julius produtos tag 14 bebidas --remover        # desfaz a tag (nunca apaga a categoria em si)
 julius produtos definir-conteudo 14 1.5 L       # L, ML, KG, G ou UN
 julius produtos definir-conteudo 27 500 G       # gravado como 0,5 KG
+julius produtos definir-conteudo 14 --remover    # desfaz o conteúdo
+julius produtos tipo 14 suco                    # grupo de comparação entre mercados
+julius produtos tipo 14 --remover               # desfaz o tipo
 julius produtos comparar 14 31                  # "são a mesma coisa?" — só opina
 julius produtos fundir 31 14                    # 31 desaparece, 14 fica com todo o histórico
 julius produtos fundir 31 14 --sim              # sem pedir confirmação
-julius produtos revisar                         # pede à IA nome/categoria/conteúdo dos pendentes
-julius produtos revisar --sim                    # aplica sem perguntar (conteúdo nunca é automático)
+julius produtos revisar                         # pede à IA nome/categoria/conteúdo/tipo dos pendentes
+julius produtos revisar --sim                   # aplica sem perguntar também a categoria em dúvida
+julius produtos revisar --ultimas-acoes         # o que a IA aplicou, com o comando pra desfazer
 ```
 
 - **Nome**: nasce igual à descrição do primeiro cupom (`SUCO INT PARREIRAS DO SUL GF 1.5L UVA`). Renomeie quando cansar de ler abreviação, ou deixe a IA propor em `produtos revisar`.
@@ -181,7 +193,8 @@ julius produtos revisar --sim                    # aplica sem perguntar (conteú
 - **Conteúdo**: habilita a coluna de preço por litro/quilo/unidade. `G` e `ML` são convertidos para `KG` e `L` na hora de gravar, para todo o catálogo falar a mesma língua.
 - **Fundir**: irreversível — por isso pede confirmação. Use quando o mesmo produto aparece com códigos diferentes em mercados diferentes.
 - **Comparar**: dá similaridade de texto e, se a IA estiver configurada, uma opinião. Nunca funde sozinho.
-- **Revisar**: a tela de curadoria assistida por IA — nome legível e categoria com um único candidato são aplicados sem perguntar (desfazer: `renomear`/`tag --remover`); o resto pergunta (ou fica pendente, sem terminal). Ver "IA opcional".
+- **Tipo**: o grupo de comparação — "que tipo de coisa isso é" (`tomate`, `leite uht`). É o que faz `mercados comparar` e o sinal de preço do `importar` compararem entre lojas **sem fundir** produto nenhum. A IA propõe e grava sozinha; `--remover` desfaz, e a coluna "Tipo" em `produtos listar` mostra o que ela escolheu.
+- **Revisar**: a tela de curadoria assistida por IA — nome legível, categoria com um único candidato, conteúdo e tipo são aplicados sem perguntar (tudo reversível por comando); categoria em dúvida pergunta, ou fica pendente sem terminal. `--ultimas-acoes` lista o que foi aplicado, uma linha por campo, com o comando de desfazer pronto pra copiar. Ver "IA opcional".
 
 ### `exportar` — levar para a planilha
 
@@ -371,7 +384,7 @@ Um arquivo SQLite. Chaves estrangeiras ligadas em toda conexão (`PRAGMA foreign
 | Tabela | O que guarda | Chave |
 |---|---|---|
 | `stores` | mercados: CNPJ, razão social, apelido | `cnpj` |
-| `products` | catálogo: nome canônico, conteúdo da embalagem | `id` |
+| `products` | catálogo: nome canônico, conteúdo da embalagem, tipo (grupo de comparação) | `id` |
 | `product_skus` | qual código de qual mercado é qual produto | `(store_cnpj, product_code)` |
 | `tags` / `product_tags` | categorias manuais | — |
 | `prices` | **uma linha por item comprado**: data, mercado, produto, quantidade, unidade, preço | `(access_key, item_index)` |
@@ -394,7 +407,7 @@ Adicionar uma migração é soltar um `.sql` novo na pasta. O backup é a rede d
 ## Desenvolvimento
 
 ```bash
-make test        # cria o .venv/ na primeira vez e roda os 374 testes (< 5 s)
+make test        # cria o .venv/ na primeira vez e roda os 540 testes (~5 s)
 make install     # `julius` global via pipx, em modo editável: editar o código já vale
 make uninstall
 ```
@@ -446,6 +459,8 @@ Fixtures são só o `.html` — nunca a pasta `_files/` que o navegador salva ju
 - Descrições vêm abreviadas do cupom (`LING FGO RESF AURORA kg`). A busca tolera erro de digitação, mas "linguiça" por extenso não acha `LING` direto — `julius produtos revisar` (com IA configurada) resolve isso de vez, propondo o nome legível; sem IA, renomeie manualmente os produtos que você consulta muito.
 - Se a Receita mudar o layout da página, o parser quebra — com erro claro, não em silêncio, e os cupons reais em `tests/fixtures/` mostram exatamente o que mudou.
 - Em `consultar`, empates no menor/maior preço mantêm todas as linhas empatadas mesmo fora do `-n`.
+- A pasta `_files/` que o navegador salva junto do HTML ainda precisa ser apagada à mão: a função existe e está testada, mas apagar é a única operação destrutiva do sistema e está esperando decisão explícita.
+- `mercados comparar` só enxerga grupos comprados em dois mercados; sem tipo atribuído, não há o que comparar.
 - Sem cache de respostas de IA (de propósito — a solução durável é corrigir o dado, não lembrar a resposta antiga).
 
 **Evoluções plausíveis** (nenhuma prometida)

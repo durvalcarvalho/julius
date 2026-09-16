@@ -8,13 +8,15 @@ Não é uma ferramenta de comparação entre mercados em geral nem de controle d
 
 ## Status
 
-Fase: **v2.1 implementada.** Os 16 tickets de `docs/tickets/julius-v2/` estão feitos (101–114 da v2, 115–116 da v2.1), um commit por ticket, 394 testes verdes (`.venv/bin/pytest -q`), nenhum `NotImplementedError`, nenhum identificador em português. Provedor de IA: DeepSeek, modelo `deepseek-flash`, `thinking` desligado via `JULIUS_AI_REQUEST_EXTRAS='{"thinking":{"type":"disabled"}}'` (sem isso o modelo raciocina em vez de responder — ver "Fatos e pegadinhas"). Orçamento US$5/mês.
+Fase: **v2.2 implementada.** Os 30 tickets de `docs/tickets/julius-v2/` estão feitos (101–114 da v2, 115–116 da v2.1, 117–130 da v2.2), um commit por ticket, 540 testes verdes (`.venv/bin/pytest -q`), nenhum `NotImplementedError`, nenhum identificador em português. Provedor de IA: DeepSeek, modelo `deepseek-flash`, `thinking` desligado via `JULIUS_AI_REQUEST_EXTRAS='{"thinking":{"type":"disabled"}}'` (sem isso o modelo raciocina em vez de responder — ver "Fatos e pegadinhas"). Orçamento US$5/mês.
 
 Ambiente: `make install` instala `julius` global via `pipx install --editable .` (aponta pro código do diretório — editar ou trocar de branch já vale, sem reinstalar; rode de novo só se o `pyproject.toml` mudar). `make test` cria o `.venv/` na primeira vez e roda o pytest. `make uninstall` remove.
 
 **v1.1 (módulo de dicas de uso)** — tickets 015 e 016 (v1). Nasceu do primeiro uso real (`consultar` num banco vazio dizia só "Nenhum resultado."). Ver "Dicas de uso (`guidance`)"; a única diferença em relação ao design original está registrada lá (`closest_names` compara palavra a palavra, não por faixa de WRatio).
 
 **v2 (IA na prática)** — tickets 101–114. A IA passou de "só testada com fake" para uso real: `julius produtos revisar`/`importar` aplicam nome legível e categoria automaticamente (reversível), sugerem conteúdo de embalagem e candidatos a duplicata; `consultar` cai para a IA só quando a busca determinística vem vazia; endereço do mercado aparece em `mercados listar`/`consultar`/`exportar`. Ver "Camada opcional de IA" (contrato atual) e "Dicas de uso" (3 dicas novas).
+
+**v2.2 (comparabilidade: comparar antes de opinar)** — tickets 117–130, migração 0003. Três trilhas que se juntam: (1) **grupo de comparação** — `products.kind` ("que tipo de coisa isso é": `tomate`, `leite uht`), proposto pela IA e aplicado automaticamente, com `julius produtos tipo ID [--remover]` pra corrigir e a coluna "Tipo" em `produtos listar` pra ver o erro; (2) **comparar de verdade** — `domain/comparison_basis.py` corrige a base do mínimo/máximo (ver "Preço por conteúdo"), `julius mercados comparar` responde "esse mercado é mais caro?" por grupo com `n` e período, e `importar` termina com o sinal "Nesta compra:" dos itens que bateram recorde; (3) **arquivamento** — `julius importar` sem argumento varre `entrada/` e move cada nota importada pra `entrada/importados/<data>_<chave>.html`. Toda gravação automática vira uma linha em `~/.local/share/julius/actions.jsonl`, com o comando de desfazer, lida por `julius produtos revisar --ultimas-acoes`. Contrato completo em `docs/design/comparability-v2.2.md`.
 
 **v2.1 (consultar em linguagem natural)** — tickets 115–116, sem IA nova nenhuma. `julius consultar` passou a reconhecer uma tag dentro do texto livre: `julius consultar hortifruti` e `julius consultar leite laticinio` funcionam sem `--tag` (interseção quando dá match, retry como termo puro quando a interseção fica vazia), com a mesma tolerância a erro de digitação (`rapidfuzz`) que o nome de produto já tinha — corte próprio (`TAG_MATCH_CUTOFF = 75`), medido contra as 13 tags semeadas, não reaproveitado dos cortes de nome de produto. `--tag` explícito continua funcionando exatamente como antes; `--sem-tag` desliga a detecção quando ela atrapalha. Toda chamada de `consultar` grava uma linha em `~/.local/share/julius/query_log.jsonl` (mesmo `infra/ai_log.py::append` que já gravava `ai_calls.jsonl`, reaproveitado sem mudança), pra recalibrar cortes com dado real de uso no futuro — sem comando de leitura ainda, é `jq`/`Counter` por conta do usuário, mesma lógica de não existir `julius ia status`. Contrato completo com a medição do corte em `docs/design/consultar-v2.1.md`.
 
@@ -199,6 +201,17 @@ INSERT OR IGNORE INTO tags (name) VALUES
     ('bebidas'), ('limpeza'), ('higiene'), ('congelados'), ('temperos'), ('doces'), ('utilidades');
 ```
 
+**Migração 0003 (v2.2)** — `julius/infra/migrations/0003_product_kind.sql`, o grupo de comparação:
+
+```sql
+-- Comparison group: "what kind of thing is this", so prices of the same kind can be compared
+-- across stores. One column, not a table: a product belongs to at most one group, and a single
+-- column makes that the database's rule instead of the application's.
+ALTER TABLE products ADD COLUMN kind TEXT;
+```
+
+Sem índice (catálogo de centenas de linhas) e sem `CHECK` — não-vazio é garantido na escrita, como já é feito para `tags.name`. Rodou contra o banco real (105 produtos, 132 preços) com backup `.bak-v2` automático.
+
 `stores.address` guarda o endereço impresso no cabeçalho da nota, exatamente como está (sem normalizar caixa/vírgulas — é texto de exibição). As 13 tags semeadas são o vocabulário que a IA prefere ao sugerir categoria em `enrich_products`; o usuário estende com `julius produtos tag` normalmente, sem comando especial.
 
 A `PRIMARY KEY (access_key, item_index)` já É a regra de deduplicação — `INSERT OR IGNORE` faz o import idempotente sem precisar escanear nada antes. `nickname` nasce igual a `legal_name` quando um CNPJ novo aparece (`INSERT OR IGNORE INTO stores`, que nunca sobrescreve um apelido já editado à mão). `PRAGMA foreign_keys = ON` é ligado em toda conexão por `infra.db.connect()` — sem isso o SQLite ignora as FKs silenciosamente (testado em `tests/test_db.py`).
@@ -238,6 +251,12 @@ Problema real: a mesma coisa aparece com descrições diferentes em mercados dif
 **1. "É o mesmo produto, mesmo com nome diferente" → resolvido sob demanda, nunca no import.**
 Toda combinação nova de `(cnpj, produto_codigo)` cria automaticamente uma linha em `produtos` (nome inicial = a própria `produto_descricao`) — o import continua 100% não-interativo, sem perguntar nada. Recomprar o mesmo item no mesmo mercado sempre reaproveita o `produto_id` já existente (é o que faz o histórico de preço por produto funcionar sem esforço). Quando o usuário perceber, olhando os resultados de `consultar`, que dois produtos são a mesma coisa (comprada em mercados diferentes, ou com descrição que mudou), ele funde manualmente com `julius produtos fundir ORIGEM DESTINO` — reatribui `produto_skus` e `precos` do id de origem pro destino, numa transação só, e apaga a linha vazia.
 
+**Comparar entre lojas sem fundir: `products.kind` (v2.2).** Fundir dois produtos junta o histórico para sempre; agrupar não. `products.kind` é o grupo de comparação — "que tipo de coisa isso é" (`tomate`, `leite uht`, `refrigerante`), um por produto, coluna anulável em vez de tabela ou tag (um produto pertence a no máximo um grupo, e coluna faz disso regra do banco; reaproveitar `tags` também invalidaria a medição de `TAG_MATCH_CUTOFF` da v2.1, calibrada só contra as 13 tags de corredor). A IA propõe o tipo em `produtos revisar`/`importar` e ele é gravado automaticamente; `julius produtos tipo ID [--remover]` corrige. Quem consome: `mercados comparar` e o sinal de extremos do `importar` — `search_prices` **não** mudou, a seleção continua por `rapidfuzz` sobre `canonical_name` e por `--tag`.
+
+Fragmentação por grafia (`tomate`/`Tomate`/`TOMATE`) é resolvida em `products.set_kind`, que minúsculo o valor e reaproveita a grafia já existente quando `normalize_text` coincide (então `açaí` não vira `acai`). Singular/plural fica de fora de propósito: seria um terceiro corte fuzzy a medir sem evidência de que o problema existe. Detecção quando existir, sem código novo: `SELECT kind, count(*) FROM products WHERE kind IS NOT NULL GROUP BY kind ORDER BY kind` — dois tipos vizinhos na ordem alfabética com contagens pequenas é a assinatura; um `UPDATE` resolve.
+
+**Fusão automática foi rejeitada por medição, não por cautela — registre isto antes de propor de novo.** Rodando `duplicate_candidates` + julgamento da IA contra o catálogo real: **19 pares acima do corte, no máximo 2 defensáveis**, e o pior falso positivo foi `Alho` ↔ `Pão de Alho`, que a IA classificou como o mesmo produto com **confiança 1,00**. Precisão medida na casa de 5%. Reabrir exige dado novo — e exigiria antes construir a reversibilidade que `merge_products` não tem (ele apaga a linha de origem; não há desfazer). O grupo de comparação existe justamente porque responde à mesma necessidade sem o risco.
+
 **Rejeitado explicitamente: sugestão automática de fusão via similaridade de string.** `rapidfuzz` compara strings, não produtos — ele vai dar nota alta tanto pra `PICANHA BOV FAT kg PROMO` ≈ `PICANHA BOV FAT kg` (provavelmente o mesmo item, ok) quanto pra `SUCO ... 1.5L UVA` ≈ `SUCO ... 1.5L LARANJA` ou `REFRI PEPSI PET 2L` ≈ `REFRI PEPSI PET 1L` (produtos diferentes, sabor/tamanho mudam e são exatamente o que importa pro preço). Uma sugestão que erra sabor e tamanho ensina o usuário a ignorá-la. Fusão fica manual, disparada pelo usuário quando ele reconhece o caso — nunca automática.
 
 **Isso não contradiz o `produtos comparar` assistido por IA da seção "Camada opcional de IA" abaixo** — a diferença é *quando* a sugestão aparece. O que foi rejeitado aqui é sugestão **automática e não pedida**, embutida em todo `consultar` (ensinaria o usuário a ignorá-la, e custaria uma chamada de IA por busca — inviável no orçamento de $1/mês). `produtos comparar ID_A ID_B` é **o usuário pedindo, uma vez, por um par específico** — baixa frequência, opt-in, cabe no orçamento, e nunca funde sozinho (só imprime uma opinião; `fundir` continua sendo um comando separado e manual).
@@ -273,6 +292,18 @@ Um regex que acerta às vezes e erra silenciosamente em casos como esses é pior
 **Schema**: `produtos.conteudo_qtd` + `produtos.conteudo_unidade`, os dois `NULL` até o usuário definir. `conteudo_unidade` normalizado pra uma base única por dimensão no momento de gravar — `G`/`ML` digitados pelo usuário viram `KG`/`L` na gravação (ex.: "500 G" grava `0.5, 'KG'`) — pra nunca ter parte do catálogo em `G` e parte em `KG` (que geraria preço-por-grama vs preço-por-quilo, números que ninguém compara de cabeça). Mesma disciplina do `UN1`→`UN` no parser: normalizar na borda, manter o interior burro.
 
 - `julius produtos definir-conteudo ID QTD UNIDADE` — aceita `L`/`ML`/`KG`/`G`/`UN` como `UNIDADE` de entrada, converte e grava só `L`/`KG`/`UN`. Chama `core.definir_conteudo(produto_id, quantidade, unidade) -> None`.
+**Regra de base de comparação (v2.2, `julius/domain/comparison_basis.py`).** O princípio fundador "nunca comparar preços de bases diferentes" estava sendo violado pelo próprio `highlight`: ele comparava `unit_price` dentro do grupo de mesma `unit`, e para item vendido por UN `unit_price` é o preço da *embalagem*. Medido no banco real: a garrafa de água de 500ml a R$ 1,49 era marcada como a mais barata do grupo quando por litro (R$ 2,98/L) ela é a **mais cara** (contra R$ 2,46/L da de 1,5L). A regra que substituiu a escolha da base, um ramo por caso observado:
+
+| Situação do grupo (já agrupado por `unit`) | Base | Por quê |
+|---|---|---|
+| `unit == "KG"` | `unit_price` | R$/kg **já é** preço por conteúdo |
+| `unit == "UN"`, todas as linhas do mesmo `product_id` | `unit_price` | mesma embalagem em datas diferentes: série temporal legítima |
+| `unit == "UN"`, vários produtos, todos com conteúdo e `content_unit` único | `price_per_content` | é o caso da água, que inverte quem é o mais barato |
+| `unit == "UN"`, conteúdo parcial | `price_per_content` **só no subconjunto** com conteúdo (se tiver ≥ 2 linhas) | quem não tem conteúdo não participa e fica sem destaque |
+| subconjunto com < 2 linhas comparáveis | nenhum destaque no grupo | não há duas linhas comparáveis; silêncio é a resposta honesta |
+
+Consequência que **não** é bug: enquanto o conteúdo de um produto-UN não estiver definido, ele deixa de receber marcação de mínimo/máximo em grupos heterogêneos. É o que transforma "preencher conteúdo" na ação de maior valor do sistema — e a razão de a v2.2 ter passado a aplicar o conteúdo sugerido pela IA automaticamente (ver "Camada opcional de IA"). A mesma função é usada por `services/comparison.py`; por isso ela mora em `domain/`, não em `services/` (a DAG proíbe `services → services`).
+
 - `consultar`, quando `conteudo_qtd` não é `NULL`, mostra uma coluna extra "preço por `conteudo_unidade`" (`valor_unitario / conteudo_qtd`) ao lado do preço cru — nunca substitui o preço cru, só complementa. Quando `conteudo_qtd` é `NULL` (a maioria dos produtos, no começo), a coluna simplesmente não aparece — sem tentar adivinhar.
 
 **Achado real vs. caso ilustrativo — não confundir os dois.** Nos 3 recibos reais, `REFRI PEPSI PET 2L` (R$6,99 → R$3,50/L) e `REFRI ANT GUARANA PET 1.5L` (R$4,99 → R$3,33/L) têm tamanhos diferentes, mas nesse caso específico o Guaraná já é mais barato tanto no preço cru quanto no preço por litro — **não existe, nos dados reais, um caso onde a ordem muda** entre "mais barato no total" e "mais barato por conteúdo". O caso que realmente demonstra por que a funcionalidade importa é o do usuário (hipotético, não vem dos 3 arquivos): 20 ovos por R$12,00 (R$0,60/ovo) vs. 30 ovos por R$16,50 (R$0,55/ovo) — o pacote maior parece mais caro no total e é mais barato por unidade. Isso vira um fixture sintético nos testes (seção abaixo), não um fixture real.
@@ -283,7 +314,9 @@ Um regex que acerta às vezes e erra silenciosamente em casos como esses é pior
 
 **Pedido original (v1)**: projetar já a costura pra um dia acoplar uma LLM barata, que ajude nas situações não-determinísticas que este design já rejeitou resolver sozinho (fusão de produto, tag, conteúdo ambíguo) — sem gastar mais que US$1/mês. **Orçamento revisado em v2: US$5/mês** (provedor e preços reais escolhidos, ver abaixo).
 
-**Princípio novo em v2, o que resume tudo abaixo: a IA grava o reversível, nunca o irreversível.** Nome legível (`renomear` desfaz) e categoria (`tag ID TAG --remover` desfaz) podem ser aplicados automaticamente. Fusão de produto e qualquer preço nunca são tocados por IA — `produtos fundir` continua 100% manual, mesmo quando a IA "tem certeza" de uma duplicata.
+**Princípio novo em v2, o que resume tudo abaixo: a IA grava o reversível, nunca o irreversível.** Nome legível (`renomear` desfaz), categoria (`tag ID TAG --remover`), conteúdo (`definir-conteudo ID --remover`, v2.2) e tipo (`tipo ID --remover`, v2.2) podem ser aplicados automaticamente. Fusão de produto e qualquer preço nunca são tocados por IA — `produtos fundir` continua 100% manual, mesmo quando a IA "tem certeza" de uma duplicata.
+
+**Reversão deliberada em v2.2 — não é regressão, não "restaure" a confirmação.** Até a v2.1 este documento afirmava que conteúdo de embalagem *nunca* era gravado sem confirmação explícita, nem com `--sim`. A v2.2 reverteu isso de propósito, por dois motivos medidos: (1) conteúdo passa o teste de duas condições de `docs/requirements/comparability-closure.md` §4 — existe comando de desfazer desde o ticket 118, e um valor errado aparece na coluna "Por L/KG/UN" de `consultar` e na tabela de `produtos listar`; (2) a confirmação virou fricção pura — **32 dos 79 produtos vendidos por UN estavam sem conteúdo**, e o import de 16/09 imprimiu 26 comandos `definir-conteudo` que ninguém rodou. Como conteúdo é justamente o que habilita comparar embalagens de tamanhos diferentes (ver "Preço por conteúdo"), a fricção estava derrubando a funcionalidade principal. A linha vermelha que **não** mudou: fusão continua manual.
 
 **A regra que faz o orçamento ser real: IA só é chamada em pontos de baixa frequência, nunca no caminho de leitura corriqueiro.** `consultar` roda várias vezes por dia — só chama IA **quando a busca determinística vem vazia** (regra revisada em v2; antes era "nunca chama IA nenhuma", ficou "nunca quando já achou algo determinístico"). `importar`/`produtos revisar` chamam IA para produtos novos/pendentes (algumas vezes por mês, não por busca). `produtos comparar` continua opt-in por par. Essa regra é o que impede uma sessão futura de "melhorar a busca" plugando IA em todo resultado de `consultar` e estourando o orçamento sem querer.
 
@@ -322,7 +355,7 @@ As três funções antigas do design v1 (fusão par a par, conteúdo isolado, ta
 
 **`julius produtos comparar ID_A ID_B`** — chama `suggestions.suggest_merges(conn, config, client, [(a, b)])[0]`; sem sugestão, distingue três motivos (não é mais uma mensagem genérica): não configurada (dica `AI_NOT_CONFIGURED`), orçamento do mês esgotado (com valores em US$), ou a chamada falhou (aponta pra `ai_calls.jsonl`). Nunca funde sozinho — `julius produtos fundir` continua sendo o único jeito de aplicar.
 
-**`julius produtos revisar [--sim]` e `julius importar [--sim]` (v2, novo)** — a curadoria de verdade. `curation.propose` chama `enrich_products` pros produtos pendentes (sem tag); nome legível e categoria com um único candidato conhecido são aplicados **sem perguntar** (desfazer: `renomear`/`tag --remover`); categoria em dúvida pergunta (TTY) ou fica pendente; conteúdo de embalagem **nunca** é gravado sem confirmação explícita, mesmo com `--sim`. No fim, candidatos a duplicata (`curation.duplicate_candidates`, `rapidfuzz` corte 75) julgados pela IA (`judge_duplicates`) só imprimem o comando `fundir` pronto — nunca fundem. `importar` roda essa revisão uma vez, no fim, só para os produtos criados naquele import.
+**`julius produtos revisar [--sim]` e `julius importar [--sim]` (v2, novo)** — a curadoria de verdade. `curation.propose` chama `enrich_products` pros produtos pendentes (sem tag); nome legível e categoria com um único candidato conhecido são aplicados **sem perguntar** (desfazer: `renomear`/`tag --remover`); categoria em dúvida pergunta (TTY) ou fica pendente; conteúdo de embalagem e tipo são aplicados **sem perguntar** desde a v2.2 (desfazer: `definir-conteudo ID --remover` / `tipo ID --remover`). No fim, candidatos a duplicata (`curation.duplicate_candidates`, `rapidfuzz` corte 75) julgados pela IA (`judge_duplicates`) só imprimem o comando `fundir` pronto — nunca fundem. `importar` roda essa revisão uma vez, no fim, só para os produtos criados naquele import.
 
 ### Estrutura de pacote — camadas como DAG de dependências
 
@@ -357,6 +390,11 @@ julius/
 - `julius/services/curation.py` **(v2)** — decide o que a IA pode aplicar sozinho e o que precisa perguntar; encontra candidatos a duplicata.
 - `julius/cli/_review.py` **(v2)** — a tela de revisão compartilhada por `produtos revisar` e `importar`.
 - `julius/infra/migrations/0002_store_address_and_seed_tags.sql` **(v2)** — `stores.address` + 13 tags semeadas.
+- `julius/domain/comparison_basis.py` **(v2.2)** — a regra de base de comparação, função pura sobre `PriceRecord`; vive em `domain` porque `services/search.py` **e** `services/comparison.py` a consomem e a DAG proíbe `services → services`.
+- `julius/services/comparison.py` **(v2.2)** — `compare_stores` (preço por grupo entre mercados) e `new_extremes` (o que bateu recorde numa nota recém-importada).
+- `julius/infra/receipt_files.py` **(v2.2)** — `archive` (move a nota importada pra `entrada/importados/<data>_<chave>.html`) e `discard_sidecar` (apaga a pasta `_files/`; **existe mas não é chamada**, pendente de decisão do usuário — é a única operação destrutiva do sistema).
+- `julius/infra/migrations/0003_product_kind.sql` **(v2.2)** — `products.kind`.
+- `~/.local/share/julius/actions.jsonl` **(v2.2)** — uma linha por gravação automática (campo, antes, depois, comando de desfazer), pelo mesmo `infra/ai_log.py`; lida por `ai_log.tail` em `produtos revisar --ultimas-acoes`.
 
 **Regras de dependência (o que faz a DAG valer)** — codificadas em `tests/test_architecture.py`, que inspeciona os imports de todo módulo e falha em qualquer atalho:
 
@@ -411,17 +449,20 @@ Path do banco: `Config.db_path` — variável de ambiente `JULIUS_DB`, default `
 (nome escolhido pelo usuário: referência ao pai do Chris, em *Todo Mundo Odeia o Chris* — o cara que nunca deixa passar um preço.)
 
 ```
-julius importar ARQUIVO...
+julius importar [ARQUIVO...]
 julius consultar [PALAVRA...] [--tag TAG] [--sem-tag] [--limite/-n INT = 20]
 julius exportar [--saida/-o PATH = ./julius-export.csv]
 julius mercados listar
 julius mercados renomear CNPJ APELIDO
+julius mercados comparar
 julius produtos listar
 julius produtos renomear ID NOME
 julius produtos fundir ORIGEM DESTINO
-julius produtos tag ID TAG
-julius produtos definir-conteudo ID QTD UNIDADE
+julius produtos tag ID TAG [--remover]
+julius produtos tipo ID [TIPO] [--remover]
+julius produtos definir-conteudo ID [QTD UNIDADE] [--remover]
 julius produtos comparar ID_A ID_B
+julius produtos revisar [--sim] [--ultimas-acoes]
 ```
 
 Nomes de comando em português (são UI); cada um mapeia pra uma função em inglês em `julius/cli/*.py` via `@app.command("importar")`. Todo comando abre a conexão com `infra.db.connect(config.load().db_path)` **dentro do handler** — nunca em import. Um comando só é registrado quando o serviço que ele chama existe (sem stub `NotImplementedError` exposto).
@@ -436,6 +477,11 @@ Nomes de comando em português (são UI); cada um mapeia pra uma função em ing
 - **`julius produtos fundir ORIGEM DESTINO`** — `catalog.merge_products`. É a correção manual de "isso é o mesmo produto" (nunca sugerida automaticamente — ver seção "Identidade de produto e busca").
 - **`julius produtos tag ID TAG`** — `catalog.tag_product`. Categorização manual (ex.: `limpeza`, `hortifruti`); não tem relação com a busca por texto, é outro mecanismo.
 - **`julius produtos definir-conteudo ID QTD UNIDADE`** — `catalog.set_product_content`. Ver seção "Preço por conteúdo". Sem esse comando, `consultar` mostra só o preço cru — nunca adivinha o conteúdo pela descrição.
+- **`julius produtos tipo ID [TIPO] [--remover]`** (v2.2) — `catalog.set_product_kind`/`clear_product_kind`. Define ou remove o grupo de comparação. É o comando de desfazer que autoriza a IA a gravar tipo sozinha; existe **antes** da automação de propósito.
+- **`julius produtos definir-conteudo ID --remover`** (v2.2) — `catalog.clear_product_content`, pelo mesmo motivo.
+- **`julius produtos revisar --ultimas-acoes`** (v2.2) — lê o fim de `actions.jsonl` (`ai_log.tail`) e imprime a tabela `Quando · ID · Campo · Antes · Depois · Desfazer`. Não chama IA, não aplica nada. É a metade "detalhe sob demanda" do resumo agregado que a revisão imprime.
+- **`julius mercados comparar`** (v2.2) — `comparison.compare_stores`. Uma tabela por grupo (mercado · preço · data, mais barato em verde), depois a contagem derivada ("mais barato em 3 de 3 grupos", contando só os grupos em que aquela loja aparece) e sempre o rodapé com número de grupos e intervalo de datas. O aviso do rodapé sobre período largo é medido, não defensivo: as notas de lojas diferentes estão a até 12 dias de distância, então parte da diferença pode ser o mês, não a loja. Sem grupo comparável, mensagem explícita em vez de tabela vazia.
+- **`julius importar` sem argumento** (v2.2) — varre `entrada/*.html` (não recursivo, então `entrada/importados/` fica invisível: é isso que faz o comando significar "importe o que é novo") e arquiva cada nota importada com sucesso. A ordem dentro do comando é obrigatória: importar → revisar (é onde o tipo é atribuído) → sinal de extremos → dicas. Invertida, o sinal roda com `kind IS NULL` em todo produto novo e perde a comparação entre lojas.
 - **`julius produtos comparar ID_A ID_B`** — `catalog.compare_products`. Pede uma opinião (IA se configurada, senão `rapidfuzz`) sobre se dois produtos são a mesma coisa — só informa, quem funde é `julius produtos fundir`, comando separado. Único ponto do sistema com custo de IA opt-in por chamada explícita do usuário (ver seção "Camada opcional de IA").
 
 ### Empacotamento
@@ -488,12 +534,14 @@ Isso **fecha a questão em aberto nº 3** ("dica via `C/<n>`"): vira `PACKAGE_SI
 
 **Fora do escopo v1.1 (ainda de fora em v2, exceto onde marcado):** dicas em saída cheia, "não mostrar de novo", dicas geradas por IA (o texto continua determinístico; só o *dado* que alimenta `FOUND_VIA_AI` vem de uma busca que usou IA), tutorial interativo, telemetria de uso.
 
-### Fora do escopo v1/v2 (de propósito)
-Detecção automática de estado, comando de correção para linhas de preço (usa `sqlite3` direto), veredito automático de preço, lock de concorrência, flag `--db` por comando, `platformdirs`, **fusão automática de produtos** (nem por texto nem pela IA — `judge_duplicates` só imprime o `fundir` pronto, quem roda é o usuário), **busca semântica/embeddings** (desproporcional pro tamanho do catálogo), **auto-classificação de tags sem confirmação** (categoria com um único candidato conhecido é aplicada automaticamente em v2, mas isso é *aplicar a sugestão da IA*, não *classificar sem a IA*; categoria em dúvida ainda pergunta), **classificar código de unidade novo via IA** (evento raro, curadoria manual do mapa já resolve, não vale o custo), **cache de respostas de IA** (o caminho durável é corrigir o dado — renomear/marcar tag — não lembrar a resposta antiga), **fallback entre provedores de IA**, **`julius ia status`** (`tail -n 5 ai_calls.jsonl` e `SELECT * FROM ai_usage` já cobrem), **comando de analytics sobre `query_log.jsonl`** (v2.1 — `jq`/`Counter` do usuário sobre o arquivo já respondem "quais buscas falham"/"o que mais consulto", mesma lógica de não criar `julius ia status`), **tag multi-palavra na detecção de texto livre** (v2.1 — nenhuma das 13 tags semeadas precisa disso hoje).
+### Fora do escopo v1/v2/v2.2 (de propósito)
+Detecção automática de estado, comando de correção para linhas de preço (usa `sqlite3` direto), veredito automático de preço, lock de concorrência, flag `--db` por comando, `platformdirs`, **fusão automática de produtos** (nem por texto nem pela IA — `judge_duplicates` só imprime o `fundir` pronto, quem roda é o usuário), **busca semântica/embeddings** (desproporcional pro tamanho do catálogo), **auto-classificação de tags sem confirmação** (categoria com um único candidato conhecido é aplicada automaticamente em v2, mas isso é *aplicar a sugestão da IA*, não *classificar sem a IA*; categoria em dúvida ainda pergunta), **classificar código de unidade novo via IA** (evento raro, curadoria manual do mapa já resolve, não vale o custo), **cache de respostas de IA** (o caminho durável é corrigir o dado — renomear/marcar tag — não lembrar a resposta antiga), **fallback entre provedores de IA**, **`julius ia status`** (`tail -n 5 ai_calls.jsonl` e `SELECT * FROM ai_usage` já cobrem), **comando de analytics sobre `query_log.jsonl`** (v2.1 — `jq`/`Counter` do usuário sobre o arquivo já respondem "quais buscas falham"/"o que mais consulto", mesma lógica de não criar `julius ia status`), **tag multi-palavra na detecção de texto livre** (v2.1 — nenhuma das 13 tags semeadas precisa disso hoje), **fusão automática de produto em qualquer confiança** (v2.2 — rejeitada por medição, não por cautela: 19 pares acima do corte, no máximo 2 defensáveis, pior falso positivo `Alho` ↔ `Pão de Alho` com confiança 1,00; ver "Identidade de produto e busca"), **índice único de carestia por mercado** (v2.2 — a resposta é contagem por grupo com `n` e período, nunca uma média de razões entre grupos de preços muito diferentes), **qualquer estatística de dia da semana** (v2.2 — as 6 notas reais caem em 6 dias diferentes, zero repetição; a coluna "Dia" mostra o dado e cala), **`consultar --tipo`** (v2.2 — `rapidfuzz` já acha o grupo quando o termo é o próprio tipo), **corte fuzzy pra snapping de tipo** (v2.2 — terceiro cutoff a medir sem evidência de que o problema existe), **comando de analytics sobre `actions.jsonl`** (v2.2 — `--ultimas-acoes` já é a leitura; o resto é `jq`).
 
 ## Design de testes
 
 Framework: **pytest** (mesma lógica do Typer — código pronto em vez de escrever mais, `unittest` da stdlib exige mais boilerplate pra fixture/parametrização). Fixtures: os **3 arquivos HTML reais** em `tests/fixtures/` (`qrcode.html`, `qrcode-2.html`, `qrcode-3.html`) + **1 fixture sintético** pro caso de embalagem (não existe nos dados reais, ver seção "Preço por conteúdo"; ainda por criar). Nenhum teste bate na internet — tudo roda em cima de arquivo local + SQLite em `tmp_path` (fixtures `db_path`/`conn` em `tests/conftest.py`).
+
+**Nota de teste que a v2.2 tornou obrigatória:** `importar` **move** o arquivo que leu (arquivamento), então nenhum teste de CLI pode entregar os fixtures do repositório como entrada — eles sumiriam da árvore de trabalho. `tests/conftest.py` tem `copied_fixtures`/`restore_fixture`: cada teste de CLI importa uma cópia em `tmp_path`.
 
 **Já existentes e verdes:** `test_normalization.py`, `test_config.py`, `test_db.py` (schema, FKs, CHECK, PK, backup+migração), `test_architecture.py` (regras da DAG), `test_cli.py` (`--help`, sem efeito colateral em import). **As tabelas abaixo** usam o vocabulário antigo em português (`core.importar`, `mercados`, `ImportResultado(novos=...)`); leia pelo mapa de nomes em "Estrutura de pacote" — ex.: `core.importar` → `services.importing.import_receipts`, `ImportResultado(novos=20, existentes=0)` → `ImportResult(new_items=20, existing_items=0)`, `precos` → `prices`.
 
@@ -588,10 +636,16 @@ precos-dos-mercados/                  # repo git — só código
 **Dado do usuário mora fora do repo, nunca versionado** — mesma área XDG já decidida pro banco:
 ```
 ~/.local/share/julius/
-├── prices.db      # Config.db_path (JULIUS_DB)
-└── entrada/        # convenção, não obrigatória — onde salvar HTMLs baixados antes de importar
+├── prices.db        # Config.db_path (JULIUS_DB)
+├── ai_calls.jsonl · query_log.jsonl · actions.jsonl
+└── entrada/          # pasta de entrada; `entrada` na raiz do repo é um symlink pra cá (make inbox)
+    └── importados/   # notas já importadas, renomeadas <data>_<chave>.html
 ```
-Não existe (nem precisa existir) uma variável tipo `JULIUS_ENTRADA` ou flag `--pasta`: `julius importar ARQUIVO...` já é variádico, então `julius importar ~/.local/share/julius/entrada/*.html` já funciona hoje — quem expande o `*` é o shell, não o Python. Adicionar uma segunda forma de apontar "de onde importar" seria dizer a mesma coisa duas vezes.
+Não existe (nem precisa existir) uma variável tipo `JULIUS_ENTRADA` ou flag `--pasta`: `Config.inbox_path`/`archive_path` derivam de `JULIUS_DB` de graça.
+
+**O symlink é o que dissolveu a fricção (v2.2).** O pedido original era "uma pasta no repo, porque `~/.local/share/julius/entrada` é fundo demais pra achar". `make inbox` cria `entrada -> ~/.local/share/julius/entrada`: o Ctrl+S do navegador cai em `precos-dos-mercados/entrada/` e o arquivo **já está** fisicamente no lugar canônico — não existe passo de mover, nem a pergunta "mover antes ou depois de ler". `/entrada` está no `.gitignore`. Depois de importar, a nota vai pra `entrada/importados/` (renomear é obrigatório: o navegador salva toda nota como `qrcode.html`, um destino plano colidiria no segundo import). Arquivo que falhou fica onde está.
+
+**A pasta `_files/` que vem junto do Ctrl+S ainda não é apagada.** `infra/receipt_files.py::discard_sidecar` existe e está testada (nome derivado exato, precisa ser diretório real, nunca symlink), mas **não é chamada** — apagar é a única operação destrutiva do sistema e está pendente de decisão do usuário. Ligar é uma linha em `cli/receipts.py::_archive`, onde há um comentário marcando o lugar.
 
 **`.gitignore`** (raiz do repo):
 ```
