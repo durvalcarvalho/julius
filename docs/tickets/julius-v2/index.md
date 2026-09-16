@@ -45,7 +45,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 103 | [Endereço em prices/CSV](103-prices-export-store-address.md) | 102 | S | feito | `PriceRecord.store_address`, coluna `store_address` no export |
 | 104 | [products: untag/pendentes/nome cru](104-products-repo-untag-pending.md) | — | S | feito | `remove_tag`, `untagged_product_ids`, `has_raw_name`, `catalog.untag_product` |
 | 105 | [Config + ai_log](105-config-ai-log.md) | — | S | feito | `ai_log_path`, `JULIUS_AI_REQUEST_EXTRAS`, `infra/ai_log.py` |
-| 106 | [Cliente LLM JSON mode](106-llm-client-json-mode.md) | 105 | M | a fazer | `LlmResponse.error`, `max_tokens`, `response_format`, extras, `tests/_fakes.py` |
+| 106 | [Cliente LLM JSON mode](106-llm-client-json-mode.md) | 105 | M | feito | `LlmResponse.error`, `max_tokens`, `response_format`, extras, `tests/_fakes.py` |
 | 107 | [suggestions núcleo + merges](107-suggestions-core-merge.md) | 105, 106 | M | a fazer | `_ask` (retry, custo, log), `suggest_merges`, `spent_this_month`; remove funções antigas |
 | 108 | [suggestions enrich + match](108-suggestions-enrich-match.md) | 107 | M | a fazer | `enrich_products` (lotes de 25), `match_products`, `ProductEnrichment` |
 | 109 | [Serviço curation](109-service-curation.md) | 104, 108 | M | a fazer | `propose`, `apply`, `duplicate_candidates`, `judge_duplicates` |

@@ -40,8 +40,8 @@ def _ask(conn: sqlite3.Connection, config: Config, client: LlmClient, user_promp
     """Returns the parsed JSON payload, or None. Cost is recorded before parsing: we paid either way."""
     if not is_available(conn, config, month):
         return None
-    response = client.complete(_SYSTEM_PROMPT, user_prompt)
-    if response is None:
+    response = client.complete(_SYSTEM_PROMPT, user_prompt, max_tokens=300)
+    if response.error:
         return None
     cost = (
         response.input_tokens / 1e6 * config.ai_input_price_usd_per_1m  # type: ignore[operator]

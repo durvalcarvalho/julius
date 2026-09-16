@@ -27,7 +27,7 @@ class FakeLlmClient:
         self.text = text
         self.calls = 0
 
-    def complete(self, system_prompt: str, user_prompt: str) -> LlmResponse:
+    def complete(self, system_prompt: str, user_prompt: str, *, max_tokens: int) -> LlmResponse:
         self.calls += 1
         return LlmResponse(self.text, 100, 50)
 

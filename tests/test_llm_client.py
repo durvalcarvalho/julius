@@ -10,7 +10,7 @@ from julius.infra import llm_client
 from julius.infra.llm_client import HttpLlmClient, LlmResponse
 
 GOOD_PAYLOAD = {
-    "choices": [{"message": {"role": "assistant", "content": "hello"}}],
+    "choices": [{"message": {"role": "assistant", "content": "hello"}, "finish_reason": "stop"}],
     "usage": {"prompt_tokens": 12, "completion_tokens": 3},
 }
 
@@ -50,12 +50,12 @@ def _fake_urlopen(monkeypatch, response=None, error=None):
 
 def test_complete_parses_text_and_token_counts(client, monkeypatch):
     _fake_urlopen(monkeypatch, FakeResponse(GOOD_PAYLOAD))
-    assert client.complete("sys", "usr") == LlmResponse("hello", 12, 3)
+    assert client.complete("sys", "usr", max_tokens=100) == LlmResponse("hello", 12, 3)
 
 
-def test_complete_sends_expected_url_headers_and_body(client, monkeypatch):
+def test_body_has_json_mode_max_tokens_temperature_and_messages(client, monkeypatch):
     calls = _fake_urlopen(monkeypatch, FakeResponse(GOOD_PAYLOAD))
-    client.complete("be terse", "is 12 expensive?")
+    client.complete("be terse", "is 12 expensive?", max_tokens=250)
     request, timeout = calls[0]
     assert request.full_url == "https://api.example/v1/chat/completions"
     assert request.get_method() == "POST"
@@ -67,49 +67,108 @@ def test_complete_sends_expected_url_headers_and_body(client, monkeypatch):
         {"role": "system", "content": "be terse"},
         {"role": "user", "content": "is 12 expensive?"},
     ]
+    assert body["temperature"] == 0
+    assert body["max_tokens"] == 250
+    assert body["response_format"] == {"type": "json_object"}
     assert timeout == 7
 
 
-def test_base_url_without_trailing_slash_gives_same_url(monkeypatch):
+def test_request_extras_are_merged_into_body_and_can_override(monkeypatch):
     calls = _fake_urlopen(monkeypatch, FakeResponse(GOOD_PAYLOAD))
-    HttpLlmClient("https://api.example/v1", "k", "m").complete("a", "b")
-    assert calls[0][0].full_url == "https://api.example/v1/chat/completions"
+    client = HttpLlmClient(
+        "https://api.example/v1",
+        "k",
+        "m",
+        request_extras={"thinking": {"type": "disabled"}, "temperature": 0.2},
+    )
+    client.complete("a", "b", max_tokens=10)
+    body = json.loads(calls[0][0].data)
+    assert body["thinking"] == {"type": "disabled"}
+    assert body["temperature"] == 0.2
 
 
-def test_http_error_returns_none(client, monkeypatch):
+def test_from_config_passes_request_extras(monkeypatch):
+    calls = _fake_urlopen(monkeypatch, FakeResponse(GOOD_PAYLOAD))
+    cfg = config.load(
+        {
+            "JULIUS_AI_API_KEY": "k",
+            "JULIUS_AI_BASE_URL": "https://api.example/v1",
+            "JULIUS_AI_MODEL": "cheap-1",
+            "JULIUS_AI_REQUEST_EXTRAS": '{"thinking":{"type":"disabled"}}',
+        }
+    )
+    HttpLlmClient.from_config(cfg).complete("a", "b", max_tokens=10)
+    body = json.loads(calls[0][0].data)
+    assert body["thinking"] == {"type": "disabled"}
+
+
+def test_http_error_maps_to_http_code(client, monkeypatch):
     _fake_urlopen(monkeypatch, error=HTTPError("u", 500, "boom", {}, None))
-    assert client.complete("a", "b") is None
+    assert client.complete("a", "b", max_tokens=10) == LlmResponse("", 0, 0, error="HTTP 500")
 
 
-def test_network_error_returns_none(client, monkeypatch):
-    _fake_urlopen(monkeypatch, error=URLError("dns down"))
-    assert client.complete("a", "b") is None
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (TimeoutError(), "timeout"),
+        (URLError("dns down"), "network:"),
+    ],
+)
+def test_timeout_and_network_errors(client, monkeypatch, error, expected):
+    _fake_urlopen(monkeypatch, error=error)
+    result = client.complete("a", "b", max_tokens=10)
+    assert result.text == "" and result.input_tokens == 0 and result.output_tokens == 0
+    assert result.error == expected or result.error.startswith(expected)
 
 
-def test_non_2xx_status_returns_none(client, monkeypatch):
+def test_non_2xx_status_without_exception(client, monkeypatch):
     _fake_urlopen(monkeypatch, FakeResponse(GOOD_PAYLOAD, status=429))
-    assert client.complete("a", "b") is None
+    assert client.complete("a", "b", max_tokens=10) == LlmResponse("", 0, 0, error="HTTP 429")
 
 
-def test_invalid_json_returns_none(client, monkeypatch):
+def test_invalid_json_body(client, monkeypatch):
     _fake_urlopen(monkeypatch, FakeResponse(b"<html>not json"))
-    assert client.complete("a", "b") is None
+    assert client.complete("a", "b", max_tokens=10) == LlmResponse("", 0, 0, error="invalid json body")
 
 
-def test_missing_usage_returns_none(client, monkeypatch):
-    _fake_urlopen(monkeypatch, FakeResponse({"choices": GOOD_PAYLOAD["choices"]}))
-    assert client.complete("a", "b") is None
-
-
-def test_missing_choices_returns_none(client, monkeypatch):
-    _fake_urlopen(monkeypatch, FakeResponse({"usage": GOOD_PAYLOAD["usage"]}))
-    assert client.complete("a", "b") is None
-
-
-def test_non_string_content_returns_none(client, monkeypatch):
-    payload = {**GOOD_PAYLOAD, "choices": [{"message": {"content": None}}]}
+def test_finish_reason_length_is_error_but_keeps_tokens(client, monkeypatch):
+    payload = {
+        "choices": [{"message": {"content": ""}, "finish_reason": "length"}],
+        "usage": {"prompt_tokens": 1200, "completion_tokens": 1200},
+    }
     _fake_urlopen(monkeypatch, FakeResponse(payload))
-    assert client.complete("a", "b") is None
+    result = client.complete("a", "b", max_tokens=1200)
+    assert result.error == "finish_reason length"
+    assert result.input_tokens == 1200
+    assert result.output_tokens == 1200
+    assert result.text == ""
+
+
+@pytest.mark.parametrize("content", [None, "   "])
+def test_empty_content_is_error_with_tokens(client, monkeypatch, content):
+    payload = {
+        "choices": [{"message": {"content": content}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 5, "completion_tokens": 1},
+    }
+    _fake_urlopen(monkeypatch, FakeResponse(payload))
+    result = client.complete("a", "b", max_tokens=10)
+    assert result.error == "empty content"
+    assert (result.input_tokens, result.output_tokens) == (5, 1)
+
+
+def test_missing_usage_and_missing_choices(client, monkeypatch):
+    _fake_urlopen(monkeypatch, FakeResponse({"choices": GOOD_PAYLOAD["choices"]}))
+    assert client.complete("a", "b", max_tokens=10) == LlmResponse("", 0, 0, error="no usage")
+
+    _fake_urlopen(monkeypatch, FakeResponse({"usage": GOOD_PAYLOAD["usage"]}))
+    result = client.complete("a", "b", max_tokens=10)
+    assert result.error == "no choices"
+    assert (result.input_tokens, result.output_tokens) == (12, 3)
+
+
+def test_unexpected_exception_never_propagates(client, monkeypatch):
+    _fake_urlopen(monkeypatch, error=RuntimeError("unexpected"))
+    assert client.complete("a", "b", max_tokens=10) == LlmResponse("", 0, 0, error="RuntimeError: unexpected")
 
 
 def test_from_config_returns_none_when_not_configured():
@@ -132,6 +191,7 @@ def test_from_config_builds_client_when_configured():
     assert built._url == "https://api.example/v1/chat/completions"
 
 
-def test_complete_never_raises_even_on_unexpected_exception(client, monkeypatch):
-    _fake_urlopen(monkeypatch, error=RuntimeError("unexpected"))
-    assert client.complete("a", "b") is None
+def test_base_url_without_trailing_slash_gives_same_url(monkeypatch):
+    calls = _fake_urlopen(monkeypatch, FakeResponse(GOOD_PAYLOAD))
+    HttpLlmClient("https://api.example/v1", "k", "m").complete("a", "b", max_tokens=10)
+    assert calls[0][0].full_url == "https://api.example/v1/chat/completions"

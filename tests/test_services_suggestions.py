@@ -23,16 +23,18 @@ CONFIG = Config(
 
 class FakeLlmClient:
     def __init__(self, text: str | None, input_tokens: int = 1000, output_tokens: int = 500) -> None:
-        self._response = None if text is None else LlmResponse(text, input_tokens, output_tokens)
-        self.calls: list[tuple[str, str]] = []
+        self._response = (
+            LlmResponse("", 0, 0, error="no response") if text is None else LlmResponse(text, input_tokens, output_tokens)
+        )
+        self.calls: list[tuple[str, str, int]] = []
 
-    def complete(self, system_prompt: str, user_prompt: str) -> LlmResponse | None:
-        self.calls.append((system_prompt, user_prompt))
+    def complete(self, system_prompt: str, user_prompt: str, *, max_tokens: int) -> LlmResponse:
+        self.calls.append((system_prompt, user_prompt, max_tokens))
         return self._response
 
 
 class RaisingLlmClient:
-    def complete(self, system_prompt: str, user_prompt: str) -> LlmResponse | None:
+    def complete(self, system_prompt: str, user_prompt: str, *, max_tokens: int) -> LlmResponse:
         raise RuntimeError("boom")
 
 
