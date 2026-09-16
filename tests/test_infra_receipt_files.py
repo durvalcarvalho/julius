@@ -52,6 +52,19 @@ def test_archive_overwrites_same_receipt(tmp_path):
     assert [path.name for path in destination.iterdir()] == [f"2026-09-16_{KEY_A}.html"]
 
 
+def test_archive_of_an_already_archived_file_keeps_it(tmp_path):
+    """Re-importing an archived receipt must not destroy it: that reimport is the recovery the
+    archive exists for (the store address was recovered in v2 exactly that way)."""
+    source = _html(tmp_path / "entrada")
+    destination = tmp_path / "importados"
+    archived = receipt_files.archive(source, destination, purchased_at="2026-09-16T18:53:00", access_key=KEY_A)
+
+    again = receipt_files.archive(archived, destination, purchased_at="2026-09-16T18:53:00", access_key=KEY_A)
+
+    assert again == archived
+    assert archived.read_text(encoding="utf-8") == "<html>nota</html>"
+
+
 def test_archive_two_receipts_named_qrcode_do_not_collide(tmp_path):
     destination = tmp_path / "importados"
     first = _html(tmp_path / "a")

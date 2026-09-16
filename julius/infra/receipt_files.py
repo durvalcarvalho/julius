@@ -17,6 +17,11 @@ def archive(html_path: Path, destination_dir: Path, *, purchased_at: str, access
         raise ValueError("purchased_at and access_key are required to name the archived file")
     destination_dir.mkdir(parents=True, exist_ok=True)
     destination = destination_dir / f"{purchased_at[:10]}_{access_key}.html"
+    if html_path.resolve() == destination.resolve():
+        # Re-importing an already archived receipt: it is already where it belongs. Without this
+        # the unlink below would delete the file and the move would then fail — and reimporting
+        # archived HTML is exactly the recovery this archive exists to protect.
+        return destination
     destination.unlink(missing_ok=True)
     shutil.move(str(html_path), destination)
     return destination
