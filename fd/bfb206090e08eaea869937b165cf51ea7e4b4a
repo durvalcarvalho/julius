@@ -1,0 +1,47 @@
+Makefile
+  s_9897d2094c6052::t_b329484fcb6aef 1,17-22
+julius/cli/receipts.py
+  s_9897d2094c6052::t_b329484fcb6aef 16,33-38,42-46,60-61,156-183
+  s_9897d2094c6052::t_5377d181eac0f0 184-185
+tests/conftest.py
+  s_9897d2094c6052::t_925bc82a49060b 40-47
+  s_9897d2094c6052::t_c36b2dcf6df96c 3,32-37
+  s_9897d2094c6052::t_038b7a236da0a1 38-39
+tests/test_e2e.py
+  s_9897d2094c6052::t_c36b2dcf6df96c 7,32
+  s_9897d2094c6052::t_f469bce2ce0cca 200,256,259,295
+  s_9897d2094c6052::t_a628859a095f6e 6,362-390
+  s_9897d2094c6052::t_925bc82a49060b 15,49
+tests/test_cli_catalog.py
+  s_9897d2094c6052::t_c36b2dcf6df96c 2,22
+  s_9897d2094c6052::t_925bc82a49060b 9,26
+.gitignore
+  s_9897d2094c6052::t_b329484fcb6aef 13
+tests/test_cli_review.py
+  s_9897d2094c6052::t_c36b2dcf6df96c 2,23
+  s_9897d2094c6052::t_925bc82a49060b 9,31
+tests/test_cli_receipts.py
+  s_9897d2094c6052::t_c36b2dcf6df96c 5,27
+  s_9897d2094c6052::t_f0e74e277e374e 4,620-728
+  s_9897d2094c6052::t_925bc82a49060b 12,31
+README.md
+  s_9897d2094c6052::t_daddb8e8c0042a 80-88,120-121,125-127
+docs/tickets/julius-v2/index.md
+  s_9897d2094c6052::t_daddb8e8c0042a 71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fdbfb206090e08eaea869937b165cf51ea7e4b4a",
+  "prompts": {},
+  "sessions": {
+    "s_9897d2094c6052": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "864f6773-d792-4392-aff4-08e50f62bd9e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
