@@ -129,6 +129,7 @@ class ProductEnrichment:
     readable_name: str
     tags: tuple[str, ...]  # best first; len > 1 means the model was unsure
     content: ContentSuggestion | None
+    kind: str | None  # comparison group proposed by the model
 
 
 @dataclass(frozen=True)

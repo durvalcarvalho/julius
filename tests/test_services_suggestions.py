@@ -195,11 +195,63 @@ def test_enrich_prompt_lists_categories_and_id_name_lines(conn, cfg):
     client = ScriptedLlmClient([_enrich_response({"products": []})])
     products = [Product(id=60, canonical_name="LING FGO RESF AURORA kg")]
 
-    suggestions.enrich_products(conn, cfg, client, products, ["carnes", "bebidas"], MONTH)
+    suggestions.enrich_products(conn, cfg, client, products, ["carnes", "bebidas"], month=MONTH)
 
     prompt = client.calls[0][1]
     assert 'categorias: ["carnes", "bebidas"]' in prompt
     assert "60 | LING FGO RESF AURORA kg" in prompt
+
+
+def test_enrich_parses_kind(conn, cfg):
+    payload = {"products": [{"id": 1, "readable_name": "Tomate", "tags": ["hortifruti"], "kind": "Tomate"}]}
+    client = ScriptedLlmClient([_enrich_response(payload)])
+
+    result = suggestions.enrich_products(
+        conn, cfg, client, [Product(id=1, canonical_name="TOMATE ITALIANO kg")], ["hortifruti"], month=MONTH
+    )
+
+    assert result[1].kind == "tomate"
+
+
+def test_enrich_kind_missing_is_none(conn, cfg):
+    payload = {"products": [{"id": 1, "readable_name": "Refri", "tags": ["bebidas"], "content": None}]}
+    client = ScriptedLlmClient([_enrich_response(payload)])
+
+    result = suggestions.enrich_products(
+        conn, cfg, client, [Product(id=1, canonical_name="REFRI")], ["bebidas"], month=MONTH
+    )
+
+    assert result[1] == ProductEnrichment("Refri", ("bebidas",), None, None)
+
+
+@pytest.mark.parametrize("bad_kind", [None, "", "   ", 123, [], {"a": 1}])
+def test_enrich_kind_invalid_types_are_none(conn, cfg, bad_kind):
+    payload = {"products": [{"id": 1, "readable_name": "Refri", "tags": ["bebidas"], "kind": bad_kind}]}
+    client = ScriptedLlmClient([_enrich_response(payload)])
+
+    result = suggestions.enrich_products(
+        conn, cfg, client, [Product(id=1, canonical_name="REFRI")], ["bebidas"], month=MONTH
+    )
+
+    assert result[1].kind is None
+    assert result[1].readable_name == "Refri"
+
+
+def test_enrich_prompt_includes_known_kinds(conn, cfg):
+    client = ScriptedLlmClient([_enrich_response({"products": []})])
+    products = [Product(id=60, canonical_name="TOMATE ITALIANO kg")]
+
+    suggestions.enrich_products(conn, cfg, client, products, ["hortifruti"], ["tomate", "cebola"], month=MONTH)
+    assert 'tipos: ["tomate", "cebola"]' in client.calls[0][1]
+
+    suggestions.enrich_products(conn, cfg, client, products, ["hortifruti"], [], month=MONTH)
+    assert "tipos: []" in client.calls[1][1]
+
+
+def test_enrich_prompt_version_is_2(conn, cfg):
+    client = ScriptedLlmClient([_enrich_response({"products": []})])
+    suggestions.enrich_products(conn, cfg, client, [Product(id=1, canonical_name="A")], [], month=MONTH)
+    assert [line["prompt_version"] for line in _lines(cfg)] == ["2"]
 
 
 def test_enrich_parses_valid_batch_with_null_and_object_content(conn, cfg):
@@ -213,10 +265,10 @@ def test_enrich_parses_valid_batch_with_null_and_object_content(conn, cfg):
     client = ScriptedLlmClient([_enrich_response(payload)])
     products = [Product(id=1, canonical_name="A"), Product(id=2, canonical_name="B"), Product(id=3, canonical_name="C")]
 
-    result = suggestions.enrich_products(conn, cfg, client, products, ["carnes", "bebidas", "mercearia"], MONTH)
+    result = suggestions.enrich_products(conn, cfg, client, products, ["carnes", "bebidas", "mercearia"], month=MONTH)
 
-    assert result[1] == ProductEnrichment("Linguiça", ("carnes",), None)
-    assert result[2] == ProductEnrichment("Refri", ("bebidas",), ContentSuggestion(1.5, "L"))
+    assert result[1] == ProductEnrichment("Linguiça", ("carnes",), None, None)
+    assert result[2] == ProductEnrichment("Refri", ("bebidas",), ContentSuggestion(1.5, "L"), None)
     assert len(result) == 3
 
 
@@ -234,7 +286,7 @@ def test_enrich_drops_items_with_unknown_id_or_bad_name_or_bad_tags_but_keeps_ot
     client = ScriptedLlmClient([_enrich_response({"products": [bad_item, good_item]})])
     products = [Product(id=1, canonical_name="A"), Product(id=2, canonical_name="B")]
 
-    result = suggestions.enrich_products(conn, cfg, client, products, ["carnes"], MONTH)
+    result = suggestions.enrich_products(conn, cfg, client, products, ["carnes"], month=MONTH)
 
     assert 1 not in result
     assert result[2].readable_name == "Bom"
@@ -245,7 +297,7 @@ def test_enrich_invalid_content_keeps_item_with_content_none(conn, cfg, content)
     payload = {"products": [{"id": 1, "readable_name": "X", "tags": ["carnes"], "content": content}]}
     client = ScriptedLlmClient([_enrich_response(payload)])
 
-    result = suggestions.enrich_products(conn, cfg, client, [Product(id=1, canonical_name="A")], ["carnes"], MONTH)
+    result = suggestions.enrich_products(conn, cfg, client, [Product(id=1, canonical_name="A")], ["carnes"], month=MONTH)
 
     assert result[1].content is None
     assert result[1].readable_name == "X"
@@ -261,7 +313,7 @@ def test_enrich_splits_into_batches_of_25(conn, cfg):
     ]
     client = ScriptedLlmClient(responses)
 
-    result = suggestions.enrich_products(conn, cfg, client, products, ["carnes"], MONTH)
+    result = suggestions.enrich_products(conn, cfg, client, products, ["carnes"], month=MONTH)
 
     assert len(client.calls) == 3
     assert [call[1].count(" | ") for call in client.calls] == [25, 25, 10]
@@ -279,7 +331,7 @@ def test_enrich_failed_batch_only_loses_that_batch(conn, cfg):
     )
     client = ScriptedLlmClient([ok1, err, err, ok3])
 
-    result = suggestions.enrich_products(conn, cfg, client, products, ["carnes"], MONTH)
+    result = suggestions.enrich_products(conn, cfg, client, products, ["carnes"], month=MONTH)
 
     assert set(result) == set(range(1, 26)) | set(range(51, 61))
 
@@ -287,15 +339,15 @@ def test_enrich_failed_batch_only_loses_that_batch(conn, cfg):
 def test_enrich_max_tokens_formula(conn, cfg):
     client = ScriptedLlmClient([_enrich_response({"products": []})])
     products = [Product(id=i, canonical_name=f"P{i}") for i in range(1, 7)]
-    suggestions.enrich_products(conn, cfg, client, products, [], MONTH)
-    assert client.calls[0][2] == 920
+    suggestions.enrich_products(conn, cfg, client, products, [], month=MONTH)
+    assert client.calls[0][2] == 1040
 
 
 def test_enrich_unavailable_returns_empty_dict_without_calls(conn, cfg):
     config = replace(cfg, ai_api_key=None)
     client = ScriptedLlmClient([_enrich_response({"products": []})])
 
-    result = suggestions.enrich_products(conn, config, client, [Product(id=1, canonical_name="A")], [], MONTH)
+    result = suggestions.enrich_products(conn, config, client, [Product(id=1, canonical_name="A")], [], month=MONTH)
 
     assert result == {}
     assert client.calls == []

@@ -15,7 +15,7 @@ from julius.repositories import ai_usage
 MAX_ATTEMPTS = 2  # one retry on transport error, empty response, or invalid JSON
 ENRICH_BATCH_SIZE = 25
 
-PROMPT_VERSIONS: dict[str, str] = {"enrich": "1", "merge": "2", "match": "1"}
+PROMPT_VERSIONS: dict[str, str] = {"enrich": "2", "merge": "2", "match": "1"}
 
 SYSTEM_PROMPTS: dict[str, str] = {
     "merge": (
@@ -50,11 +50,19 @@ SYSTEM_PROMPTS: dict[str, str] = {
         '- "content": conteúdo total da embalagem, {"quantity": número, "unit": "L"|"KG"|"UN"}, apenas quando a '
         'descrição deixa isso inequívoco (500G → 0.5 KG; 1.5L → 1.5 L; C/30 → 30 UN). null quando não há '
         'tamanho, quando é ambíguo, ou quando o produto é vendido por peso (termina em "kg").\n'
+        '- "kind": o TIPO da coisa, em minúsculas, para comparar preço entre lojas. Deve ser específico o '
+        "bastante para que dois produtos do mesmo tipo sejam alternativas de compra um do outro: "
+        '"leite uht" e "leite condensado" são tipos DIFERENTES; "pão de forma", "pão de alho" e '
+        '"pão de queijo" também. Marca, fornecedor, sabor e tamanho NÃO entram no tipo ("tomate", não '
+        '"tomate italiano união"; "uva", não "uva green dreams"). Prefira um tipo da lista "tipos" '
+        "quando servir.\n"
         "Responda somente com um objeto json exatamente neste formato, um item por produto recebido, mesmos ids:\n"
-        '{"products": [{"id": 1, "readable_name": "...", "tags": ["..."], "content": {"quantity": 1, "unit": "KG"}}]}\n'
+        '{"products": [{"id": 1, "readable_name": "...", "tags": ["..."], '
+        '"content": {"quantity": 1, "unit": "KG"}, "kind": "..."}]}\n'
         "\n"
         "Exemplo de entrada:\n"
         'categorias: ["hortifruti", "carnes", "laticinios", "bebidas", "mercearia", "limpeza"]\n'
+        'tipos: ["linguiça", "refrigerante", "chá"]\n'
         "produtos:\n"
         "1 | LING FGO RESF AURORA kg\n"
         "2 | REFRI ANT GUARANA PET 1.5L\n"
@@ -62,13 +70,14 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "4 | AC MASC F TER ES 1kg\n"
         "Exemplo de saída:\n"
         '{"products": [\n'
-        ' {"id": 1, "readable_name": "Linguiça de frango resfriada Aurora", "tags": ["carnes"], "content": null},\n'
+        ' {"id": 1, "readable_name": "Linguiça de frango resfriada Aurora", "tags": ["carnes"], '
+        '"content": null, "kind": "linguiça"},\n'
         ' {"id": 2, "readable_name": "Refrigerante Antarctica Guaraná PET 1,5L", "tags": ["bebidas"], '
-        '"content": {"quantity": 1.5, "unit": "L"}},\n'
+        '"content": {"quantity": 1.5, "unit": "L"}, "kind": "refrigerante"},\n'
         ' {"id": 3, "readable_name": "Chá Leão Relaxa camomila e maracujá caixa 16g com 10 sachês", '
-        '"tags": ["mercearia", "bebidas"], "content": null},\n'
+        '"tags": ["mercearia", "bebidas"], "content": null, "kind": "chá"},\n'
         ' {"id": 4, "readable_name": "AC MASC F TER ES 1kg", "tags": ["mercearia"], '
-        '"content": {"quantity": 1, "unit": "KG"}}\n'
+        '"content": {"quantity": 1, "unit": "KG"}, "kind": null}\n'
         "]}"
     ),
     "match": (
@@ -270,6 +279,12 @@ def _valid_content(raw: object) -> ContentSuggestion | None:
     return ContentSuggestion(quantity=float(quantity), unit=unit)  # type: ignore[arg-type]
 
 
+def _valid_kind(raw: object) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    return raw.strip().lower() or None
+
+
 def _valid_tags(raw: object) -> tuple[str, ...] | None:
     if not isinstance(raw, list):
         return None
@@ -296,7 +311,9 @@ def _valid_enrichment(item: object, valid_ids: set[int]) -> tuple[int, ProductEn
     if tags is None:
         return None
     content = _valid_content(item.get("content"))
-    return product_id, ProductEnrichment(readable_name=readable_name.strip(), tags=tags, content=content)
+    return product_id, ProductEnrichment(
+        readable_name=readable_name.strip(), tags=tags, content=content, kind=_valid_kind(item.get("kind"))
+    )
 
 
 def enrich_products(
@@ -305,6 +322,7 @@ def enrich_products(
     client: LlmClient,
     products: Sequence[Product],
     known_tags: Sequence[str],
+    known_kinds: Sequence[str] = (),
     month: str | None = None,
 ) -> dict[int, ProductEnrichment]:
     if not products:
@@ -315,9 +333,10 @@ def enrich_products(
         try:
             user_prompt = (
                 f"categorias: {json.dumps(list(known_tags), ensure_ascii=False)}\n"
+                f"tipos: {json.dumps(list(known_kinds), ensure_ascii=False)}\n"
                 "produtos:\n" + "\n".join(f"{p.id} | {p.canonical_name}" for p in batch)
             )
-            max_tokens = 120 * len(batch) + 200
+            max_tokens = 140 * len(batch) + 200
             data = _ask(conn, config, client, "enrich", user_prompt, max_tokens=max_tokens, month=month)
             items = data.get("products") if isinstance(data, dict) else None
             if not isinstance(items, list):
