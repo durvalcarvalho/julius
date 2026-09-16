@@ -25,6 +25,7 @@ class Store:
     cnpj: str
     legal_name: str
     nickname: str
+    address: str | None = None
 
 
 @dataclass(frozen=True)

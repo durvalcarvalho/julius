@@ -12,6 +12,12 @@ from julius.services import catalog
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 CNPJ = "00000000000191"
+SEEDED_TAGS = sorted(
+    [
+        "hortifruti", "carnes", "frios", "laticinios", "padaria", "mercearia",
+        "bebidas", "limpeza", "higiene", "congelados", "temperos", "doces", "utilidades",
+    ]
+)  # migration 0002
 NO_AI = Config(Path("unused"), None, None, None, 1.0, None, None)
 AI = Config(Path("unused"), "key", "https://llm.example/v1", "cheap", 1.0, 1.0, 1.0)
 
@@ -133,14 +139,14 @@ def test_tag_product_normalizes_case_and_whitespace(conn):
     catalog.tag_product(conn, product_id, " Limpeza ")
     catalog.tag_product(conn, product_id, "limpeza")
     assert products.get_product(conn, product_id).tags == ("limpeza",)
-    assert products.all_tag_names(conn) == ["limpeza"]
+    assert products.all_tag_names(conn) == SEEDED_TAGS
 
 
 def test_tag_product_blank_raises(conn):
     product_id = _product(conn, "A", "1")
     with pytest.raises(ValueError, match="blank"):
         catalog.tag_product(conn, product_id, "  ")
-    assert products.all_tag_names(conn) == []
+    assert products.all_tag_names(conn) == SEEDED_TAGS
 
 
 def test_set_product_content_normalizes_grams_to_kilograms(conn):

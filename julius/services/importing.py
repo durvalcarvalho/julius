@@ -14,7 +14,7 @@ def import_receipt(conn: sqlite3.Connection, path: Path, parser: ReceiptParser) 
     new_items = 0
     new_product_ids: list[int] = []
     with conn:
-        stores.ensure_store(conn, receipt.store_cnpj, receipt.store_legal_name)
+        stores.ensure_store(conn, receipt.store_cnpj, receipt.store_legal_name, receipt.store_address)
         for item in receipt.items:
             product_id = products.find_product_id(conn, receipt.store_cnpj, item.product_code)
             if product_id is None:

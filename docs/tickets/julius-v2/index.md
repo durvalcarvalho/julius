@@ -41,7 +41,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | # | Ticket | Depende de | Esforço | Estado | Entrega |
 |---|---|---|---|---|---|
 | 101 | [Parser — endereço](101-parser-store-address.md) | — | S | feito | `Receipt.store_address`, `_ADDRESS` |
-| 102 | [Migração 0002 + stores](102-migration-store-address-seed-tags.md) | 101 | M | a fazer | `stores.address`, 13 tags semeadas, upsert em `ensure_store`, `importing` passa endereço |
+| 102 | [Migração 0002 + stores](102-migration-store-address-seed-tags.md) | 101 | M | feito | `stores.address`, 13 tags semeadas, upsert em `ensure_store`, `importing` passa endereço |
 | 103 | [Endereço em prices/CSV](103-prices-export-store-address.md) | 102 | S | a fazer | `PriceRecord.store_address`, coluna `store_address` no export |
 | 104 | [products: untag/pendentes/nome cru](104-products-repo-untag-pending.md) | — | S | a fazer | `remove_tag`, `untagged_product_ids`, `has_raw_name`, `catalog.untag_product` |
 | 105 | [Config + ai_log](105-config-ai-log.md) | — | S | a fazer | `ai_log_path`, `JULIUS_AI_REQUEST_EXTRAS`, `infra/ai_log.py` |

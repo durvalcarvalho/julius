@@ -14,6 +14,12 @@ from julius.services.search import search_prices
 
 FIXTURES = Path(__file__).parent / "fixtures"
 PARSER = DFReceiptParser()
+SEEDED_TAGS = sorted(
+    [
+        "hortifruti", "carnes", "frios", "laticinios", "padaria", "mercearia",
+        "bebidas", "limpeza", "higiene", "congelados", "temperos", "doces", "utilidades",
+    ]
+)  # migration 0002
 
 
 def _import(conn, name: str) -> ImportResult:
@@ -50,13 +56,13 @@ def test_after_search_suggests_tags_when_nothing_is_close(conn):
     _import(conn, "qrcode-3.html")
     products.add_tag(conn, 1, "hortifruti")
     (hint,) = _search_hints(conn, "carne")
-    assert hint == Hint("NO_MATCH_TRY_TAGS", ("hortifruti",))
+    assert hint == Hint("NO_MATCH_TRY_TAGS", tuple(SEEDED_TAGS[:5]))
 
 
 def test_after_search_unknown_tag_lists_existing_tags(conn):
     _import(conn, "qrcode.html")
     products.add_tag(conn, 1, "bebidas")
-    assert _search_hints(conn, tag="carne") == [Hint("UNKNOWN_TAG", ("bebidas",))]
+    assert _search_hints(conn, tag="carne") == [Hint("UNKNOWN_TAG", tuple(SEEDED_TAGS))]
     # Unknown tag plus a term that matches: the tag is the only problem worth reporting.
     assert _kinds(_search_hints(conn, "picanha", tag="carne")) == ["UNKNOWN_TAG"]
     # Known tag plus a matching term with an empty intersection: nothing wrong to diagnose.

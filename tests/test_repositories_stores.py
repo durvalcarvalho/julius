@@ -49,3 +49,25 @@ def test_rename_store_unknown_cnpj_raises_lookup_error(conn):
 
 def test_get_store_returns_none_when_missing(conn):
     assert stores.get_store(conn, "00000000000000") is None
+
+
+def test_ensure_store_records_address_on_create(conn):
+    stores.ensure_store(conn, CNPJ, LEGAL_NAME, "QUADRA QE 30, GUARA II, BRASILIA, DF")
+    assert stores.get_store(conn, CNPJ) == Store(
+        cnpj=CNPJ, legal_name=LEGAL_NAME, nickname=LEGAL_NAME, address="QUADRA QE 30, GUARA II, BRASILIA, DF"
+    )
+
+
+def test_ensure_store_fills_missing_address_without_touching_nickname(conn):
+    stores.ensure_store(conn, CNPJ, LEGAL_NAME)
+    stores.rename_store(conn, CNPJ, "FL 3 Costa")
+    stores.ensure_store(conn, CNPJ, LEGAL_NAME, "QUADRA QE 30, GUARA II, BRASILIA, DF")
+    store = stores.get_store(conn, CNPJ)
+    assert store.address == "QUADRA QE 30, GUARA II, BRASILIA, DF"
+    assert store.nickname == "FL 3 Costa"
+
+
+def test_ensure_store_keeps_existing_address_when_new_is_none(conn):
+    stores.ensure_store(conn, CNPJ, LEGAL_NAME, "QUADRA QE 30, GUARA II, BRASILIA, DF")
+    stores.ensure_store(conn, CNPJ, LEGAL_NAME)
+    assert stores.get_store(conn, CNPJ).address == "QUADRA QE 30, GUARA II, BRASILIA, DF"

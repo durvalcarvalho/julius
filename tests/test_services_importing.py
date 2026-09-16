@@ -95,3 +95,15 @@ def test_unknown_unit_writes_nothing(conn, tmp_path):
 def test_missing_file_raises_file_not_found(conn, tmp_path):
     with pytest.raises(FileNotFoundError):
         import_receipt(conn, tmp_path / "nao-existe.html", PARSER)
+
+
+def test_import_receipt_stores_the_address(conn):
+    _import(conn, "qrcode-3.html")
+    assert stores.get_store(conn, "11832478000285").address.endswith("GUARA II, BRASILIA, DF")
+
+    _import(conn, "qrcode-4.html")
+    assert stores.get_store(conn, "11832478000366").address.endswith("CANDANGOLANDIA, BRASILIA, DF")
+
+    before = stores.get_store(conn, "11832478000285")
+    _import(conn, "qrcode-3.html")
+    assert stores.get_store(conn, "11832478000285") == before

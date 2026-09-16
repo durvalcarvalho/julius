@@ -81,7 +81,8 @@ def test_consultar_unrelated_term_suggests_tags():
     result = runner.invoke(app, ["consultar", "carne"])
     assert result.exit_code == 0
     (hint,) = _hint_lines(result.output)
-    assert "produtos tag" in hint and "consultar --tag" in hint and "hortifruti" in hint
+    # NO_MATCH_TRY_TAGS lists the first 5 known tags (migration 0002 seed), not just used ones.
+    assert "produtos tag" in hint and "consultar --tag" in hint and "bebidas" in hint
 
 
 def test_consultar_unknown_tag_lists_existing():

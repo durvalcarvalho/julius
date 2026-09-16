@@ -6,12 +6,20 @@ from julius.repositories import products
 
 STORE_A = "27289076001379"
 STORE_B = "11832478000285"
+SEEDED_TAGS = sorted(
+    [
+        "hortifruti", "carnes", "frios", "laticinios", "padaria", "mercearia",
+        "bebidas", "limpeza", "higiene", "congelados", "temperos", "doces", "utilidades",
+    ]
+)  # migration 0002
 
 
 @pytest.fixture
 def conn_with_stores(conn):
     for cnpj in (STORE_A, STORE_B):
-        conn.execute("INSERT INTO stores VALUES (?, ?, ?)", (cnpj, f"Store {cnpj}", f"Store {cnpj}"))
+        conn.execute(
+            "INSERT INTO stores (cnpj, legal_name, nickname) VALUES (?, ?, ?)", (cnpj, f"Store {cnpj}", f"Store {cnpj}")
+        )
     return conn
 
 
@@ -90,9 +98,9 @@ def test_add_tag_is_idempotent_and_reuses_tag_row(conn_with_stores):
     products.add_tag(conn, a, "limpeza")
     products.add_tag(conn, a, "limpeza")
     products.add_tag(conn, b, "limpeza")
-    assert _count(conn, "tags") == 1
+    assert _count(conn, "tags") == 13  # "limpeza" is one of the 13 seeded by migration 0002
     assert _count(conn, "product_tags") == 2
-    assert products.all_tag_names(conn) == ["limpeza"]
+    assert products.all_tag_names(conn) == SEEDED_TAGS
     with pytest.raises(LookupError):
         products.add_tag(conn, 999, "limpeza")
 
