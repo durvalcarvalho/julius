@@ -1,0 +1,29 @@
+julius/services/comparison.py
+  s_9897d2094c6052::t_735be5b98e70da 50
+  s_9897d2094c6052::t_85a0cd17216ebb 1-49,51-55
+tests/test_services_comparison.py
+  s_9897d2094c6052::t_cfa6d1b5b903e3 1-156
+julius/domain/comparison_basis.py
+  s_9897d2094c6052::t_58814317249ec7 13,15
+julius/domain/models.py
+  s_9897d2094c6052::t_58814317249ec7 9,151-171
+  s_9897d2094c6052::t_9e7ba1c779be71 172-173
+docs/tickets/julius-v2/index.md
+  s_9897d2094c6052::t_b958f74f6557df 66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2f8387d649ed6ccc2119d08915069b70aaefb12f",
+  "prompts": {},
+  "sessions": {
+    "s_9897d2094c6052": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "864f6773-d792-4392-aff4-08e50f62bd9e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
