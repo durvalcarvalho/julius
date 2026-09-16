@@ -299,3 +299,21 @@ def test_v2_ai_log_has_one_line_per_attempt(monkeypatch, tmp_path):
     assert "enrich" in kinds
     for line in lines:
         assert isinstance(line["parsed_ok"], bool)
+
+
+def test_e2e_comparar_after_import_and_kinds():
+    _import("qrcode.html", "qrcode-3.html")
+    output = _run("produtos", "listar").output
+    ids = [int(match.group(1)) for match in re.finditer(r"│\s*(\d+)\s*│\s*TOMATE ITALIANO", output)]
+    assert len(ids) == 2
+    for product_id in ids:
+        assert _run("produtos", "tipo", str(product_id), "tomate").exit_code == 0
+
+    result = _run("mercados", "comparar")
+
+    assert result.exit_code == 0, result.output
+    assert "tomate · por KG" in result.output
+    price_rows = [line for line in result.output.splitlines() if "R$" in line]
+    assert "FL 3 COSTA" in price_rows[0] and "R$ 11,89" in price_rows[0]
+    assert "DONA DE CASA" in price_rows[1] and "R$ 14,99" in price_rows[1]
+    assert "base: 1 grupo · 07/09 a 12/09" in result.output

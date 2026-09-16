@@ -12,6 +12,12 @@ from julius.infra import db
 console = Console()
 error_console = Console(stderr=True)
 
+HIGHLIGHT_STYLE = {"lowest": "green", "highest": "red"}
+
+
+def money(value: float) -> str:
+    return f"R$ {value:.2f}".replace(".", ",")
+
 
 def open_db() -> sqlite3.Connection:
     return db.connect(config.load().db_path)

@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -269,3 +270,79 @@ def test_help_shows_subcommands():
     products_help = _run("produtos", "--help").output
     for command in ("listar", "renomear", "fundir", "tag", "tipo", "definir-conteudo"):
         assert command in products_help
+
+
+def _tomatoes_in_two_stores() -> tuple[int, int]:
+    _import("qrcode.html", "qrcode-3.html")
+    output = _run("produtos", "listar").output
+    ids = [int(match.group(1)) for match in re.finditer(r"│\s*(\d+)\s*│\s*TOMATE ITALIANO", output)]
+    assert len(ids) == 2, output
+    return ids[0], ids[1]
+
+
+def test_comparar_message_when_no_kinds():
+    _import("qrcode.html")
+    result = _run("mercados", "comparar")
+    assert result.exit_code == 0, result.output
+    assert "Nenhum produto tem tipo ainda" in result.output
+    assert "julius produtos revisar" in result.output
+
+
+def test_comparar_message_when_no_shared_kind():
+    _import("qrcode.html")
+    assert _run("produtos", "tipo", "1", "refrigerante").exit_code == 0
+    result = _run("mercados", "comparar")
+    assert result.exit_code == 0, result.output
+    assert "sem base para comparar" in result.output
+
+
+def test_comparar_prints_table_and_orders_cheapest_first():
+    first, second = _tomatoes_in_two_stores()
+    for product_id in (first, second):
+        assert _run("produtos", "tipo", str(product_id), "tomate").exit_code == 0
+
+    result = _run("mercados", "comparar")
+
+    assert result.exit_code == 0, result.output
+    assert "tomate · por KG" in result.output
+    rows = [line for line in result.output.splitlines() if "R$" in line]
+    assert "FL 3 COSTA" in rows[0]
+    assert "DONA DE CASA" in rows[1]
+
+
+def test_comparar_footer_shows_group_count_and_period():
+    first, second = _tomatoes_in_two_stores()
+    for product_id in (first, second):
+        assert _run("produtos", "tipo", str(product_id), "tomate").exit_code == 0
+
+    result = _run("mercados", "comparar")
+
+    assert "base: 1 grupo · 07/09 a 12/09" in result.output
+    assert "Período largo" in result.output
+
+
+def test_comparar_tally_counts_only_groups_where_store_appears():
+    first, second = _tomatoes_in_two_stores()
+    for product_id in (first, second):
+        assert _run("produtos", "tipo", str(product_id), "tomate").exit_code == 0
+
+    result = _run("mercados", "comparar")
+
+    assert re.search(r"FL 3 COSTA[^\n]*mais barato em 1 de 1 grupo", result.output)
+    assert re.search(r"DONA DE CASA[^\n]*mais barato em 0 de 1 grupo", result.output)
+
+
+def test_comparar_title_shows_per_content_basis():
+    _import("qrcode.html", "qrcode-3.html")
+    output = _run("produtos", "listar").output
+    pepsi = int(re.search(r"│\s*(\d+)\s*│\s*REFRI PEPSI PET 2L", output).group(1))
+    trebeschi = int(re.search(r"│\s*(\d+)\s*│\s*TOMATE TREBESCHI 250G DUO", output).group(1))
+    for product_id in (pepsi, trebeschi):
+        assert _run("produtos", "tipo", str(product_id), "liquido").exit_code == 0
+    assert _run("produtos", "definir-conteudo", str(pepsi), "2", "L").exit_code == 0
+    assert _run("produtos", "definir-conteudo", str(trebeschi), "250", "ML").exit_code == 0
+
+    result = _run("mercados", "comparar")
+
+    assert result.exit_code == 0, result.output
+    assert "liquido · por L (por conteúdo)" in result.output

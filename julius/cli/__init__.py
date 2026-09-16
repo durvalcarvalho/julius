@@ -18,5 +18,5 @@ def _root() -> None:
 app.command("importar")(receipts.import_receipts)
 app.command("consultar")(receipts.search)
 app.command("exportar")(receipts.export)
-app.add_typer(stores.app, name="mercados", help="Mercados importados: listar e dar apelido.")
+app.add_typer(stores.app, name="mercados", help="Mercados importados: listar, dar apelido e comparar preços.")
 app.add_typer(products.app, name="produtos", help="Catálogo de produtos: renomear, fundir, tags e conteúdo.")

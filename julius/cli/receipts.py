@@ -10,15 +10,13 @@ from rich.text import Text
 
 from julius import config
 from julius.cli import _review
-from julius.cli._common import console, error_console, fail, open_db
+from julius.cli._common import HIGHLIGHT_STYLE, console, error_console, fail, money, open_db
 from julius.cli._hints import print_hints
 from julius.domain.models import ImportResult, PriceRecord, SearchOutcome
 from julius.infra import ai_log
 from julius.infra.llm_client import HttpLlmClient
 from julius.parsers.df import DFReceiptParser
 from julius.services import export as export_service, guidance, importing, search as search_service, suggestions
-
-_HIGHLIGHT_STYLE = {"lowest": "green", "highest": "red"}
 
 
 def import_receipts(
@@ -153,10 +151,6 @@ def _merge(results: list[ImportResult]) -> ImportResult:
     )
 
 
-def _money(value: float) -> str:
-    return f"R$ {value:.2f}".replace(".", ",")
-
-
 def _store_cell(record: PriceRecord) -> str | Text:
     if not record.store_address:
         return record.store_nickname
@@ -172,8 +166,8 @@ def _table(unit: str, records: list[PriceRecord]) -> Table:
         (only_unit,) = per_content_units if len(per_content_units) == 1 else (None,)
         table.add_column(f"Por {only_unit}" if only_unit else "Por conteúdo")
     for record in records:
-        row = [record.purchased_at[:10], record.canonical_name, _store_cell(record), _money(record.unit_price)]
+        row = [record.purchased_at[:10], record.canonical_name, _store_cell(record), money(record.unit_price)]
         if per_content_units:
-            row.append("" if record.price_per_content is None else _money(record.price_per_content))
-        table.add_row(*row, style=_HIGHLIGHT_STYLE.get(record.highlight or ""))
+            row.append("" if record.price_per_content is None else money(record.price_per_content))
+        table.add_row(*row, style=HIGHLIGHT_STYLE.get(record.highlight or ""))
     return table
