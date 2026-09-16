@@ -1,0 +1,74 @@
+docs/tickets/julius-v2/113-cli-importar-review.md
+  s_c54f445e6fe7d6::t_5c74b22415940f 1-58
+docs/tickets/julius-v2/105-config-ai-log.md
+  s_c54f445e6fe7d6::t_58eeefaa6386aa 1-58
+docs/tickets/julius-v2/114-e2e-docs-backfill.md
+  s_c54f445e6fe7d6::t_5c74b22415940f 1-69
+docs/requirements/ai-v2.md
+  s_c54f445e6fe7d6::t_ba255e9f344c87 1-154
+docs/tickets/julius-v2/112-cli-review-and-revisar.md
+  s_c54f445e6fe7d6::t_9517c9cf43ce43 32
+  s_c54f445e6fe7d6::t_5c74b22415940f 1-31,33-78
+docs/tickets/julius-v2/108-suggestions-enrich-match.md
+  s_c54f445e6fe7d6::t_58eeefaa6386aa 1-71
+claudedocs/research_llm_integration_best_practices_20260915.md
+  s_dbb0c29847ad71::t_829609995b136f 1-134
+docs/tickets/julius-v2/106-llm-client-json-mode.md
+  s_c54f445e6fe7d6::t_58eeefaa6386aa 1-83
+docs/tickets/julius-v2/110-search-guidance-hints.md
+  s_c54f445e6fe7d6::t_2781dbdb13f487 1-79
+docs/tickets/julius-v2/102-migration-store-address-seed-tags.md
+  s_c54f445e6fe7d6::t_e9427b33395947 1-85
+docs/tickets/julius-v2/101-parser-store-address.md
+  s_c54f445e6fe7d6::t_e9427b33395947 1-62
+docs/tickets/julius-v2/109-service-curation.md
+  s_c54f445e6fe7d6::t_2781dbdb13f487 1-80
+docs/tickets/julius-v2/103-prices-export-store-address.md
+  s_c54f445e6fe7d6::t_e9427b33395947 1-53
+claudedocs/handoff_smoke_test_deepseek_20260915.md
+  s_8244b6450d1122::t_338a655be7ad31 1-76
+docs/design/ai-v2.md
+  s_c54f445e6fe7d6::t_e9427b33395947 30-40
+  s_c54f445e6fe7d6::t_b9560fed6cd340 1-29,41-433
+docs/tickets/julius-v2/index.md
+  s_c54f445e6fe7d6::t_5c74b22415940f 1-104
+docs/tickets/julius-v2/111-cli-read-side.md
+  s_c54f445e6fe7d6::t_9517c9cf43ce43 59
+  s_c54f445e6fe7d6::t_2781dbdb13f487 1-58,60-72
+docs/tickets/julius-v2/104-products-repo-untag-pending.md
+  s_c54f445e6fe7d6::t_e9427b33395947 1-57
+docs/tickets/julius-v2/107-suggestions-core-merge.md
+  s_c54f445e6fe7d6::t_58eeefaa6386aa 1-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0323993898dc85e47c3adf3880f5578e2e8da325",
+  "prompts": {},
+  "sessions": {
+    "s_8244b6450d1122": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6f8410e-3234-4b3c-9fc6-aea08e3fabb1",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    },
+    "s_c54f445e6fe7d6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f13f1825-ff09-498c-93e2-94ba01190568",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    },
+    "s_dbb0c29847ad71": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4c547cb0-ae4e-41dd-b667-f4dfe0721a87",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
