@@ -317,3 +317,41 @@ def test_e2e_comparar_after_import_and_kinds():
     assert "FL 3 COSTA" in price_rows[0] and "R$ 11,89" in price_rows[0]
     assert "DONA DE CASA" in price_rows[1] and "R$ 14,99" in price_rows[1]
     assert "base: 1 grupo · 07/09 a 12/09" in result.output
+
+
+def test_e2e_import_twice_reports_lower_price(monkeypatch):
+    _import("qrcode-3.html")
+    dona_tomato = _product_id("TOMATE ITALIANO kg")
+    assert _run("produtos", "tipo", str(dona_tomato), "tomate").exit_code == 0
+    _ai_env(monkeypatch)
+    _stub_client(
+        monkeypatch,
+        ScriptedLlmClient(
+            by_kind={
+                "enrich": LlmResponse(
+                    json.dumps(
+                        {
+                            "products": [
+                                {
+                                    "id": 19,
+                                    "readable_name": "Tomate Italiano União",
+                                    "tags": ["hortifruti"],
+                                    "kind": "tomate",
+                                }
+                            ]
+                        }
+                    ),
+                    10,
+                    5,
+                ),
+                "merge": LlmResponse(json.dumps({"pairs": []}), 10, 5),
+            }
+        ),
+    )
+
+    result = _import("qrcode.html")
+
+    assert result.exit_code == 0, result.output
+    signal = next(line for line in result.output.splitlines() if "↓" in line)
+    assert "Tomate Italiano União" in signal and "R$ 11,89" in signal
+    assert "menor preço já pago" in signal

@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from pathlib import Path
 
@@ -8,6 +9,8 @@ from typer.testing import CliRunner
 import julius.cli.receipts as receipts_cli
 from _fakes import ScriptedLlmClient
 from julius.cli import app
+from julius.domain.models import PriceExtreme
+from julius.infra import db
 from julius.infra.llm_client import LlmResponse
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -473,3 +476,140 @@ def test_consultar_logs_ai_fallback_flag(tmp_path, monkeypatch):
     last = json.loads(lines[-1])
     assert last["ai_fallback"] is True
     assert last["detected_tag"] == "carnes"
+
+
+def _extreme(name: str, highlight: str = "lowest", price: float = 1.0, **overrides) -> PriceExtreme:
+    values = dict(
+        product_name=name,
+        store_nickname="Loja",
+        unit="KG",
+        price=price,
+        highlight=highlight,
+        basis="unit_price",
+        content_unit=None,
+        previous_price=price * 2,
+        previous_store="Outra",
+        previous_at="2026-09-04T10:00:00",
+        scope=name,
+    )
+    values.update(overrides)
+    return PriceExtreme(**values)
+
+
+def _tomato_review(monkeypatch, product_id: int):
+    _ai_env(monkeypatch)
+    _stub_client(
+        monkeypatch,
+        ScriptedLlmClient(
+            by_kind={
+                "enrich": _enrich(
+                    [{"id": product_id, "readable_name": "Tomate Italiano União", "tags": ["hortifruti"], "kind": "tomate"}]
+                ),
+                "merge": _merge([]),
+            }
+        ),
+    )
+
+
+def test_import_prints_new_low_signal(monkeypatch):
+    _import("qrcode-3.html")
+    assert runner.invoke(app, ["produtos", "tipo", "4", "tomate"]).exit_code == 0
+    _tomato_review(monkeypatch, 19)
+
+    result = _import("qrcode.html")
+
+    assert result.exit_code == 0, result.output
+    assert "Nesta compra:" in result.output
+    signal = next(line for line in result.output.splitlines() if "↓" in line)
+    assert "Tomate Italiano União" in signal
+    assert "R$ 11,89/KG" in signal
+    assert "menor preço já pago" in signal
+    assert "R$ 14,99" in signal and "DONA DE CASA" in signal
+
+
+def test_import_signal_runs_after_review(monkeypatch):
+    """Proves the order: without the review assigning the kind first, the new product would only
+    be compared against its own (empty) history and no cross-store signal would exist."""
+    _import("qrcode-3.html")
+    assert runner.invoke(app, ["produtos", "tipo", "4", "tomate"]).exit_code == 0
+    _tomato_review(monkeypatch, 19)
+
+    with_review = _import("qrcode.html").output
+
+    assert "07/09" in next(line for line in with_review.splitlines() if "↓" in line)
+
+
+def test_import_prints_nothing_without_extremes():
+    result = _import("qrcode.html")
+    assert result.exit_code == 0
+    assert "Nesta compra:" not in result.output
+
+
+def test_import_limits_signal_to_five_lines(monkeypatch):
+    extremes = [_extreme(f"Produto {i}", price=float(i + 1)) for i in range(7)]
+    monkeypatch.setattr(receipts_cli.comparison_service, "new_extremes", lambda conn, keys: extremes)
+
+    result = _import("qrcode-2.html")
+
+    assert result.exit_code == 0, result.output
+    assert len([line for line in result.output.splitlines() if "↓" in line]) == 5
+    assert "+2 mais" in result.output
+
+
+def test_import_signal_shows_per_content_suffix(monkeypatch):
+    extreme = _extreme("Água 1,5L", unit="UN", price=2.46, basis="price_per_content", content_unit="L")
+    monkeypatch.setattr(receipts_cli.comparison_service, "new_extremes", lambda conn, keys: [extreme])
+
+    result = _import("qrcode-2.html")
+
+    assert "R$ 2,46/L (por conteúdo)" in result.output
+
+
+def test_import_no_signal_when_all_files_fail(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(receipts_cli.comparison_service, "new_extremes", lambda conn, keys: calls.append(keys) or [])
+    garbage = tmp_path / "pagina.html"
+    garbage.write_text("<html><body>nada aqui</body></html>", encoding="utf-8")
+
+    result = runner.invoke(app, ["importar", str(garbage)])
+
+    assert result.exit_code == 1
+    assert calls == []
+    assert "Nesta compra:" not in result.output
+
+
+def test_search_shows_weekday_column():
+    _import("qrcode.html")  # 2026-09-12 was a Saturday
+    result = runner.invoke(app, ["consultar", "picanha"])
+    assert result.exit_code == 0, result.output
+    assert "Dia" in result.output
+    assert "sab" in result.output
+
+
+@pytest.mark.parametrize(
+    ("date", "expected"),
+    [
+        ("2026-09-14", "seg"),
+        ("2026-09-15", "ter"),
+        ("2026-09-16", "qua"),
+        ("2026-09-17", "qui"),
+        ("2026-09-18", "sex"),
+        ("2026-09-19", "sab"),
+        ("2026-09-20", "dom"),
+    ],
+)
+def test_search_weekday_for_all_days(date, expected):
+    assert receipts_cli._weekday(f"{date}T10:00:00") == expected
+
+
+def test_search_tolerates_bad_purchased_at():
+    _import("qrcode.html")
+    conn = db.connect(Path(os.environ["JULIUS_DB"]))
+    conn.execute("UPDATE prices SET purchased_at = 'ontem de manhã'")
+    conn.commit()
+    conn.close()
+
+    result = runner.invoke(app, ["consultar", "picanha"])
+
+    assert result.exit_code == 0, result.output
+    assert "PICANHA" in result.output

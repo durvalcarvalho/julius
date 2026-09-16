@@ -12,11 +12,21 @@ from julius import config
 from julius.cli import _review
 from julius.cli._common import HIGHLIGHT_STYLE, console, error_console, fail, money, open_db
 from julius.cli._hints import print_hints
-from julius.domain.models import ImportResult, PriceRecord, SearchOutcome
+from julius.domain.models import ImportResult, PriceExtreme, PriceRecord, SearchOutcome
 from julius.infra import ai_log
 from julius.infra.llm_client import HttpLlmClient
 from julius.parsers.df import DFReceiptParser
-from julius.services import export as export_service, guidance, importing, search as search_service, suggestions
+from julius.services import (
+    comparison as comparison_service,
+    export as export_service,
+    guidance,
+    importing,
+    search as search_service,
+    suggestions,
+)
+
+_WEEKDAYS = ("seg", "ter", "qua", "qui", "sex", "sab", "dom")
+MAX_SIGNAL_LINES = 5
 
 
 def import_receipts(
@@ -55,6 +65,9 @@ def import_receipts(
                     error_console.print(f"IA: erro ao aplicar sugestões — {error}")
                     reviewed = False
         if results:
+            # Order matters: the review above is what assigns the kind, so the signal below can
+            # compare across stores instead of falling back to the product's own history.
+            _print_new_extremes(conn, [result.access_key for result in results if result.access_key])
             # Hints once per command, not per file: importing a folder must not repeat them.
             print_hints(guidance.after_import(conn, merged, reviewed=reviewed))
     finally:
@@ -130,6 +143,40 @@ def export(
     console.print(f"{count} linhas exportadas para {output}")
 
 
+def _print_new_extremes(conn, access_keys: list[str]) -> None:
+    """Nothing to report prints nothing: silence is the right answer when there is no news."""
+    extremes = comparison_service.new_extremes(conn, access_keys)
+    if not extremes:
+        return
+    console.print("Nesta compra:")
+    for extreme in extremes[:MAX_SIGNAL_LINES]:
+        console.print(f"  {_extreme_line(extreme)}", style=HIGHLIGHT_STYLE.get(extreme.highlight, ""))
+    if len(extremes) > MAX_SIGNAL_LINES:
+        console.print(f"  +{len(extremes) - MAX_SIGNAL_LINES} mais")
+
+
+def _extreme_line(extreme: PriceExtreme) -> str:
+    arrow = "↓" if extreme.highlight == "lowest" else "↑"
+    verdict = "menor preço já pago" if extreme.highlight == "lowest" else "maior preço já pago"
+    if extreme.basis == "price_per_content":
+        suffix = f"/{extreme.content_unit} (por conteúdo)"
+    else:
+        suffix = f"/{extreme.unit}"
+    previous = f"era {money(extreme.previous_price)} em {extreme.previous_store}, {_day_month(extreme.previous_at)}"
+    return f"{arrow} {extreme.product_name}  {money(extreme.price)}{suffix}  {verdict} ({previous})"
+
+
+def _day_month(purchased_at: str) -> str:
+    return f"{purchased_at[8:10]}/{purchased_at[5:7]}"
+
+
+def _weekday(purchased_at: str) -> str:
+    try:
+        return _WEEKDAYS[datetime.fromisoformat(purchased_at).weekday()]
+    except ValueError:
+        return ""
+
+
 def _ai_fallback(conn, term: str, limit: int) -> tuple[list[PriceRecord], list]:
     """consultar never calls the AI when the deterministic search already found something."""
     settings = config.load()
@@ -160,13 +207,19 @@ def _store_cell(record: PriceRecord) -> str | Text:
 def _table(unit: str, records: list[PriceRecord]) -> Table:
     per_content_units = {r.content_unit for r in records if r.price_per_content is not None}
     table = Table(title=f"Preços por {unit}")
-    for column in ("Data", "Produto", "Mercado", "Preço"):
+    for column in ("Data", "Dia", "Produto", "Mercado", "Preço"):
         table.add_column(column)
     if per_content_units:
         (only_unit,) = per_content_units if len(per_content_units) == 1 else (None,)
         table.add_column(f"Por {only_unit}" if only_unit else "Por conteúdo")
     for record in records:
-        row = [record.purchased_at[:10], record.canonical_name, _store_cell(record), money(record.unit_price)]
+        row = [
+            record.purchased_at[:10],
+            _weekday(record.purchased_at),
+            record.canonical_name,
+            _store_cell(record),
+            money(record.unit_price),
+        ]
         if per_content_units:
             row.append("" if record.price_per_content is None else money(record.price_per_content))
         table.add_row(*row, style=HIGHLIGHT_STYLE.get(record.highlight or ""))
