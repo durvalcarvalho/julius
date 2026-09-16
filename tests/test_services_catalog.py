@@ -190,9 +190,11 @@ def test_compare_returns_text_similarity_without_client(conn):
     assert _tomato_ids(conn) == [id_a, id_b]
 
 
-def test_compare_uses_ai_when_available(conn):
+def test_compare_products_uses_batch_merge_and_returns_first(conn):
     id_a, id_b = _product(conn, "A", "1"), _product(conn, "B", "2")
-    client = FakeLlmClient('{"same_product": true, "confidence": 0.9, "rationale": "mesmo item"}')
+    client = FakeLlmClient(
+        '{"pairs": [{"id": 1, "rationale": "mesmo item", "same_product": true, "confidence": 0.9}]}'
+    )
     result = catalog.compare_products(conn, AI, client, id_a, id_b)
     assert result.ai_suggestion == MergeSuggestion(True, 0.9, "mesmo item")
     assert client.calls == 1
@@ -202,7 +204,7 @@ def test_compare_skips_ai_when_budget_exhausted(conn):
     id_a, id_b = _product(conn, "A", "1"), _product(conn, "B", "2")
     with conn:
         ai_usage.add_spent(conn, datetime.now().strftime("%Y-%m"), AI.ai_budget_usd)
-    client = FakeLlmClient('{"same_product": true, "confidence": 0.9, "rationale": "x"}')
+    client = FakeLlmClient('{"pairs": [{"id": 1, "rationale": "x", "same_product": true, "confidence": 0.9}]}')
     result = catalog.compare_products(conn, AI, client, id_a, id_b)
     assert result.ai_suggestion is None
     assert client.calls == 0

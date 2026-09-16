@@ -72,7 +72,7 @@ def compare_products(
     similarity = fuzz.token_set_ratio(normalize_text(a.canonical_name), normalize_text(b.canonical_name)) / 100
     suggestion = None
     if client is not None and suggestions.is_available(conn, config):
-        suggestion = suggestions.suggest_merge(conn, config, client, a.canonical_name, b.canonical_name)
+        suggestion = suggestions.suggest_merges(conn, config, client, [(a.canonical_name, b.canonical_name)])[0]
     return ProductComparison(text_similarity=similarity, ai_suggestion=suggestion)
 
 
