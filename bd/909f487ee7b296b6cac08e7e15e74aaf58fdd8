@@ -1,0 +1,39 @@
+julius/cli/products.py
+  s_c0ef054dc440b4::t_a37720e1a883ef 13
+  s_c0ef054dc440b4::t_db9e2f15cabaa4 78,80,83-86,91-95
+  s_c0ef054dc440b4::t_435fe6cc5e01f5 126-127,139-140,142
+docs/tickets/julius-v2/index.md
+  s_c0ef054dc440b4::t_b3246b5fd55fb0 53
+tests/test_cli_receipts.py
+  s_c0ef054dc440b4::t_96d0788e24cec8 135-204
+  s_c0ef054dc440b4::t_65c1dc934c2db9 1-2,8-9,11,31-54
+  s_c0ef054dc440b4::t_42f19b60eb8028 55-56
+julius/cli/stores.py
+  s_c0ef054dc440b4::t_997ed4c846bfdc 26,28
+tests/test_cli_catalog.py
+  s_c0ef054dc440b4::t_aa61d56943045a 147-200
+  s_c0ef054dc440b4::t_a4e31851fd57de 6-7,9
+  s_c0ef054dc440b4::t_60f5c765fe0608 40-47
+julius/cli/receipts.py
+  s_c0ef054dc440b4::t_5e9651ca775733 126
+  s_c0ef054dc440b4::t_441219a0b00864 8,10,14,16
+  s_c0ef054dc440b4::t_773e2323707640 61-64
+  s_c0ef054dc440b4::t_40c100008d1dc2 111-116
+  s_c0ef054dc440b4::t_681bb169cb3945 86-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bd909f487ee7b296b6cac08e7e15e74aaf58fdd8",
+  "prompts": {},
+  "sessions": {
+    "s_c0ef054dc440b4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "98cfa69a-7548-4f8e-9894-c620fd4d7390",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
