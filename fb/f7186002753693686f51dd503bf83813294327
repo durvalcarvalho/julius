@@ -1,0 +1,63 @@
+docs/tickets/julius-v2/130-e2e-docs-sync.md
+  s_3d5b8f697b588e::t_f13b585394572d 1-85
+docs/requirements/receipt-inbox.md
+  s_3d5b8f697b588e::t_0536e4b97468da 38
+docs/design/comparability-v2.2.md
+  s_3d5b8f697b588e::t_f85c29f0583fa8 315-316,319-332,335-340,343
+  s_3d5b8f697b588e::t_606d2a6dca4137 1-166,170-180,183-307,309-314,317-318,333-334,341-342,344-360
+  s_3d5b8f697b588e::t_23560ff8e5742a 308
+  s_3d5b8f697b588e::t_301f8aed2df970 167-169
+  s_3d5b8f697b588e::t_eac2117a4af542 181-182
+docs/tickets/julius-v2/124-comparison-compare-stores.md
+  s_3d5b8f697b588e::t_44b895182630a7 1-101
+docs/tickets/julius-v2/122-review-auto-apply-action-log.md
+  s_3d5b8f697b588e::t_dd9e3051ae62bf 1-106
+docs/tickets/julius-v2/126-comparison-new-extremes.md
+  s_3d5b8f697b588e::t_da9ff78b33fd8e 1-98
+docs/tickets/julius-v2/117-product-kind-column.md
+  s_3d5b8f697b588e::t_7f7641cb088b7e 1-101
+docs/tickets/julius-v2/121-curation-kind-applied-actions.md
+  s_3d5b8f697b588e::t_4347a89e71cfcc 1-92
+docs/requirements/comparability-closure.md
+  s_3d5b8f697b588e::t_b09a1035fc033c 148-150
+docs/tickets/julius-v2/118-kind-content-undo-commands.md
+  s_3d5b8f697b588e::t_f6f38366664c4e 1-87
+docs/tickets/julius-v2/125-cli-mercados-comparar.md
+  s_3d5b8f697b588e::t_5c358e7366b21f 1-98
+docs/tickets/julius-v2/127-cli-import-signal-weekday.md
+  s_3d5b8f697b588e::t_de47212f247277 1-92
+docs/tickets/julius-v2/128-receipt-files-infra.md
+  s_3d5b8f697b588e::t_a3a79031663c73 1-97
+docs/tickets/julius-v2/123-review-last-actions.md
+  s_3d5b8f697b588e::t_5857d369388a44 1-86
+docs/tickets/julius-v2/120-suggestions-enrich-kind.md
+  s_3d5b8f697b588e::t_aa94e1e23a67d1 1-91
+docs/tickets/julius-v2/119-comparison-basis.md
+  s_3d5b8f697b588e::t_97537d7729c2ec 1-107
+docs/tickets/julius-v2/129-cli-inbox-archive.md
+  s_3d5b8f697b588e::t_8f95d11e29d996 1-106
+docs/tickets/julius-v2/index.md
+  s_3d5b8f697b588e::t_a76fb1cc42aada 30
+  s_3d5b8f697b588e::t_34edc9a3216518 117-123
+  s_3d5b8f697b588e::t_62402a60124cfa 138-142
+  s_3d5b8f697b588e::t_31a8ac339840e1 153-160
+  s_3d5b8f697b588e::t_eded01c82b9bf7 86-94,99-100,105-107
+  s_3d5b8f697b588e::t_0ea97e7bb4a651 59-74
+  s_3d5b8f697b588e::t_2384940fd62eba 108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fbf7186002753693686f51dd503bf83813294327",
+  "prompts": {},
+  "sessions": {
+    "s_3d5b8f697b588e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d98fe62-062a-45a0-a424-fff1489f9973",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
