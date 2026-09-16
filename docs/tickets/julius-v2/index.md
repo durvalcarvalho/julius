@@ -47,7 +47,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 105 | [Config + ai_log](105-config-ai-log.md) | — | S | feito | `ai_log_path`, `JULIUS_AI_REQUEST_EXTRAS`, `infra/ai_log.py` |
 | 106 | [Cliente LLM JSON mode](106-llm-client-json-mode.md) | 105 | M | feito | `LlmResponse.error`, `max_tokens`, `response_format`, extras, `tests/_fakes.py` |
 | 107 | [suggestions núcleo + merges](107-suggestions-core-merge.md) | 105, 106 | M | feito | `_ask` (retry, custo, log), `suggest_merges`, `spent_this_month`; remove funções antigas |
-| 108 | [suggestions enrich + match](108-suggestions-enrich-match.md) | 107 | M | a fazer | `enrich_products` (lotes de 25), `match_products`, `ProductEnrichment` |
+| 108 | [suggestions enrich + match](108-suggestions-enrich-match.md) | 107 | M | feito | `enrich_products` (lotes de 25), `match_products`, `ProductEnrichment` |
 | 109 | [Serviço curation](109-service-curation.md) | 104, 108 | M | a fazer | `propose`, `apply`, `duplicate_candidates`, `judge_duplicates` |
 | 110 | [search/guidance/hints](110-search-guidance-hints.md) | 103 | M | a fazer | `records_for_products`, `catalog_for_matching`, 3 `HintKind`, `after_import(reviewed)`, textos |
 | 111 | [CLI leitura](111-cli-read-side.md) | 104, 108, 110 | M | a fazer | endereço em `mercados listar`/`consultar`, fallback IA, `comparar` 3 motivos, `tag --remover` |

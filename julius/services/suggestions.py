@@ -7,14 +7,15 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from julius.config import Config
-from julius.domain.models import MergeSuggestion
+from julius.domain.models import ContentSuggestion, MergeSuggestion, Product, ProductEnrichment
 from julius.infra import ai_log
 from julius.infra.llm_client import LlmClient, LlmResponse
 from julius.repositories import ai_usage
 
 MAX_ATTEMPTS = 2  # one retry on transport error, empty response, or invalid JSON
+ENRICH_BATCH_SIZE = 25
 
-PROMPT_VERSIONS: dict[str, str] = {"merge": "2"}
+PROMPT_VERSIONS: dict[str, str] = {"enrich": "1", "merge": "2", "match": "1"}
 
 SYSTEM_PROMPTS: dict[str, str] = {
     "merge": (
@@ -36,6 +37,45 @@ SYSTEM_PROMPTS: dict[str, str] = {
         ' {"id": 3, "rationale": "mesma marca e peso, mas flocos finos e regulares são produtos distintos", '
         '"same_product": false, "confidence": 0.85}\n'
         "]}"
+    ),
+    "enrich": (
+        "Você organiza um catálogo pessoal de compras de supermercado no Brasil. As descrições vêm de cupons "
+        "fiscais (NFC-e): maiúsculas, sem acento, muito abreviadas. Para cada produto devolva:\n"
+        '- "readable_name": nome legível em português com acentos, mantendo marca, variante/sabor e tamanho '
+        "quando aparecem. Não invente o que a abreviação não permite deduzir: na dúvida, mantenha a palavra "
+        "abreviada como está. Não repita a unidade de venda (kg/UN) no fim.\n"
+        '- "tags": de 1 a 3 categorias, a mais provável primeiro, escolhidas de preferência da lista '
+        '"categorias". Devolva UMA só quando tiver certeza; 2 ou 3 quando houver dúvida real entre elas. '
+        "Só proponha uma categoria fora da lista se nenhuma servir.\n"
+        '- "content": conteúdo total da embalagem, {"quantity": número, "unit": "L"|"KG"|"UN"}, apenas quando a '
+        'descrição deixa isso inequívoco (500G → 0.5 KG; 1.5L → 1.5 L; C/30 → 30 UN). null quando não há '
+        'tamanho, quando é ambíguo, ou quando o produto é vendido por peso (termina em "kg").\n'
+        "Responda somente com um objeto json exatamente neste formato, um item por produto recebido, mesmos ids:\n"
+        '{"products": [{"id": 1, "readable_name": "...", "tags": ["..."], "content": {"quantity": 1, "unit": "KG"}}]}\n'
+        "\n"
+        "Exemplo de entrada:\n"
+        'categorias: ["hortifruti", "carnes", "laticinios", "bebidas", "mercearia", "limpeza"]\n'
+        "produtos:\n"
+        "1 | LING FGO RESF AURORA kg\n"
+        "2 | REFRI ANT GUARANA PET 1.5L\n"
+        "3 | CHA LEAO RELAXA CX 16G C/10UN CAMOM/MARACUJA\n"
+        "4 | AC MASC F TER ES 1kg\n"
+        "Exemplo de saída:\n"
+        '{"products": [\n'
+        ' {"id": 1, "readable_name": "Linguiça de frango resfriada Aurora", "tags": ["carnes"], "content": null},\n'
+        ' {"id": 2, "readable_name": "Refrigerante Antarctica Guaraná PET 1,5L", "tags": ["bebidas"], '
+        '"content": {"quantity": 1.5, "unit": "L"}},\n'
+        ' {"id": 3, "readable_name": "Chá Leão Relaxa camomila e maracujá caixa 16g com 10 sachês", '
+        '"tags": ["mercearia", "bebidas"], "content": null},\n'
+        ' {"id": 4, "readable_name": "AC MASC F TER ES 1kg", "tags": ["mercearia"], '
+        '"content": {"quantity": 1, "unit": "KG"}}\n'
+        "]}"
+    ),
+    "match": (
+        "O usuário digitou um termo de busca num catálogo pessoal de supermercado. Dado o catálogo (id | nome | "
+        "tags), devolva os ids dos produtos que correspondem ao termo: mesmo produto, sinônimo, abreviação, ou "
+        'categoria óbvia (ex.: "carne" → picanha, fraldinha, linguiça). Nada corresponde → lista vazia. Responda '
+        'somente com json: {"ids": [60, 61]}'
     ),
 }
 
@@ -169,7 +209,7 @@ def _ask(
     return None
 
 
-def _valid_merge_item(item: object, seen: int) -> MergeSuggestion | None:
+def _valid_merge_item(item: object) -> MergeSuggestion | None:
     if not isinstance(item, dict):
         return None
     same_product = item.get("same_product")
@@ -209,7 +249,114 @@ def suggest_merges(
                 continue
             if result[index - 1] is not None:
                 continue  # first item for a given id wins
-            result[index - 1] = _valid_merge_item(item, index)
+            result[index - 1] = _valid_merge_item(item)
         return result
     except Exception:
         return [None] * len(pairs)
+
+
+def _valid_content(raw: object) -> ContentSuggestion | None:
+    if not isinstance(raw, dict):
+        return None
+    quantity = raw.get("quantity")
+    unit = raw.get("unit")
+    if isinstance(quantity, bool) or not isinstance(quantity, (int, float)) or quantity <= 0:
+        return None
+    if not isinstance(unit, str):
+        return None
+    unit = unit.strip().upper()
+    if unit not in ("L", "KG", "UN"):
+        return None
+    return ContentSuggestion(quantity=float(quantity), unit=unit)  # type: ignore[arg-type]
+
+
+def _valid_tags(raw: object) -> tuple[str, ...] | None:
+    if not isinstance(raw, list):
+        return None
+    tags: list[str] = []
+    for tag in raw:
+        if not isinstance(tag, str):
+            continue
+        cleaned = tag.strip().lower()
+        if cleaned and cleaned not in tags:
+            tags.append(cleaned)
+    return tuple(tags[:3]) if tags else None
+
+
+def _valid_enrichment(item: object, valid_ids: set[int]) -> tuple[int, ProductEnrichment] | None:
+    if not isinstance(item, dict):
+        return None
+    product_id = item.get("id")
+    if not isinstance(product_id, int) or isinstance(product_id, bool) or product_id not in valid_ids:
+        return None
+    readable_name = item.get("readable_name")
+    if not isinstance(readable_name, str) or not readable_name.strip():
+        return None
+    tags = _valid_tags(item.get("tags"))
+    if tags is None:
+        return None
+    content = _valid_content(item.get("content"))
+    return product_id, ProductEnrichment(readable_name=readable_name.strip(), tags=tags, content=content)
+
+
+def enrich_products(
+    conn: sqlite3.Connection,
+    config: Config,
+    client: LlmClient,
+    products: Sequence[Product],
+    known_tags: Sequence[str],
+    month: str | None = None,
+) -> dict[int, ProductEnrichment]:
+    if not products:
+        return {}
+    result: dict[int, ProductEnrichment] = {}
+    for start in range(0, len(products), ENRICH_BATCH_SIZE):
+        batch = products[start : start + ENRICH_BATCH_SIZE]
+        try:
+            user_prompt = (
+                f"categorias: {json.dumps(list(known_tags), ensure_ascii=False)}\n"
+                "produtos:\n" + "\n".join(f"{p.id} | {p.canonical_name}" for p in batch)
+            )
+            max_tokens = 120 * len(batch) + 200
+            data = _ask(conn, config, client, "enrich", user_prompt, max_tokens=max_tokens, month=month)
+            items = data.get("products") if isinstance(data, dict) else None
+            if not isinstance(items, list):
+                continue
+            valid_ids = {p.id for p in batch}
+            for item in items:
+                parsed = _valid_enrichment(item, valid_ids)
+                if parsed is None:
+                    continue
+                product_id, enrichment = parsed
+                if product_id not in result:
+                    result[product_id] = enrichment
+        except Exception:
+            continue
+    return result
+
+
+def match_products(
+    conn: sqlite3.Connection,
+    config: Config,
+    client: LlmClient,
+    term: str,
+    catalog: Sequence[tuple[int, str, tuple[str, ...]]],
+    month: str | None = None,
+) -> list[int]:
+    if not catalog or not term or not term.strip():
+        return []
+    try:
+        lines = [f"{product_id} | {name} | {', '.join(tags)}" for product_id, name, tags in catalog]
+        user_prompt = f"termo: {term}\ncatálogo:\n" + "\n".join(lines)
+        data = _ask(conn, config, client, "match", user_prompt, max_tokens=200, month=month)
+        ids = data.get("ids") if isinstance(data, dict) else None
+        if not isinstance(ids, list):
+            return []
+        valid_ids = {product_id for product_id, _, _ in catalog}
+        result: list[int] = []
+        for item in ids:
+            if isinstance(item, int) and not isinstance(item, bool) and item in valid_ids and item not in result:
+                result.append(item)
+        return result
+    except Exception:
+        return []

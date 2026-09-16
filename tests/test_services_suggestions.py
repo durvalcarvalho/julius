@@ -5,7 +5,7 @@ import pytest
 
 from _fakes import RaisingLlmClient, ScriptedLlmClient
 from julius.config import Config
-from julius.domain.models import MergeSuggestion
+from julius.domain.models import ContentSuggestion, MergeSuggestion, Product, ProductEnrichment
 from julius.infra.llm_client import LlmResponse
 from julius.repositories import ai_usage
 from julius.services import suggestions
@@ -27,6 +27,10 @@ def cfg(db_path) -> Config:
 
 
 def _merge_response(payload: dict, input_tokens: int = 1000, output_tokens: int = 500) -> LlmResponse:
+    return LlmResponse(json.dumps(payload), input_tokens, output_tokens)
+
+
+def _enrich_response(payload: dict, input_tokens: int = 1000, output_tokens: int = 500) -> LlmResponse:
     return LlmResponse(json.dumps(payload), input_tokens, output_tokens)
 
 
@@ -185,3 +189,144 @@ def test_spent_this_month_reads_current_month(conn, monkeypatch):
 def test_is_available_never_raises_on_broken_connection(conn, cfg):
     conn.close()
     assert suggestions.is_available(conn, cfg, MONTH) is False
+
+
+def test_enrich_prompt_lists_categories_and_id_name_lines(conn, cfg):
+    client = ScriptedLlmClient([_enrich_response({"products": []})])
+    products = [Product(id=60, canonical_name="LING FGO RESF AURORA kg")]
+
+    suggestions.enrich_products(conn, cfg, client, products, ["carnes", "bebidas"], MONTH)
+
+    prompt = client.calls[0][1]
+    assert 'categorias: ["carnes", "bebidas"]' in prompt
+    assert "60 | LING FGO RESF AURORA kg" in prompt
+
+
+def test_enrich_parses_valid_batch_with_null_and_object_content(conn, cfg):
+    payload = {
+        "products": [
+            {"id": 1, "readable_name": "Linguiça", "tags": [" Carnes ", "carnes"], "content": None},
+            {"id": 2, "readable_name": "Refri", "tags": ["bebidas"], "content": {"quantity": 1.5, "unit": "l"}},
+            {"id": 3, "readable_name": "Outro", "tags": ["mercearia"], "content": None},
+        ]
+    }
+    client = ScriptedLlmClient([_enrich_response(payload)])
+    products = [Product(id=1, canonical_name="A"), Product(id=2, canonical_name="B"), Product(id=3, canonical_name="C")]
+
+    result = suggestions.enrich_products(conn, cfg, client, products, ["carnes", "bebidas", "mercearia"], MONTH)
+
+    assert result[1] == ProductEnrichment("Linguiça", ("carnes",), None)
+    assert result[2] == ProductEnrichment("Refri", ("bebidas",), ContentSuggestion(1.5, "L"))
+    assert len(result) == 3
+
+
+@pytest.mark.parametrize(
+    "bad_item",
+    [
+        {"id": 999, "readable_name": "X", "tags": ["carnes"], "content": None},
+        {"id": 1, "readable_name": "  ", "tags": ["carnes"], "content": None},
+        {"id": 1, "readable_name": "X", "tags": [], "content": None},
+        {"id": 1, "readable_name": "X", "tags": "carnes", "content": None},
+    ],
+)
+def test_enrich_drops_items_with_unknown_id_or_bad_name_or_bad_tags_but_keeps_others(conn, cfg, bad_item):
+    good_item = {"id": 2, "readable_name": "Bom", "tags": ["carnes"], "content": None}
+    client = ScriptedLlmClient([_enrich_response({"products": [bad_item, good_item]})])
+    products = [Product(id=1, canonical_name="A"), Product(id=2, canonical_name="B")]
+
+    result = suggestions.enrich_products(conn, cfg, client, products, ["carnes"], MONTH)
+
+    assert 1 not in result
+    assert result[2].readable_name == "Bom"
+
+
+@pytest.mark.parametrize("content", [{"quantity": 500, "unit": "G"}, {"quantity": -1, "unit": "L"}])
+def test_enrich_invalid_content_keeps_item_with_content_none(conn, cfg, content):
+    payload = {"products": [{"id": 1, "readable_name": "X", "tags": ["carnes"], "content": content}]}
+    client = ScriptedLlmClient([_enrich_response(payload)])
+
+    result = suggestions.enrich_products(conn, cfg, client, [Product(id=1, canonical_name="A")], ["carnes"], MONTH)
+
+    assert result[1].content is None
+    assert result[1].readable_name == "X"
+
+
+def test_enrich_splits_into_batches_of_25(conn, cfg):
+    products = [Product(id=i, canonical_name=f"P{i}") for i in range(1, 61)]
+    responses = [
+        _enrich_response(
+            {"products": [{"id": i, "readable_name": f"N{i}", "tags": ["carnes"], "content": None} for i in ids]}
+        )
+        for ids in (range(1, 26), range(26, 51), range(51, 61))
+    ]
+    client = ScriptedLlmClient(responses)
+
+    result = suggestions.enrich_products(conn, cfg, client, products, ["carnes"], MONTH)
+
+    assert len(client.calls) == 3
+    assert [call[1].count(" | ") for call in client.calls] == [25, 25, 10]
+    assert len(result) == 60
+
+
+def test_enrich_failed_batch_only_loses_that_batch(conn, cfg):
+    products = [Product(id=i, canonical_name=f"P{i}") for i in range(1, 61)]
+    ok1 = _enrich_response(
+        {"products": [{"id": i, "readable_name": f"N{i}", "tags": ["carnes"], "content": None} for i in range(1, 26)]}
+    )
+    err = LlmResponse("", 0, 0, error="HTTP 500")
+    ok3 = _enrich_response(
+        {"products": [{"id": i, "readable_name": f"N{i}", "tags": ["carnes"], "content": None} for i in range(51, 61)]}
+    )
+    client = ScriptedLlmClient([ok1, err, err, ok3])
+
+    result = suggestions.enrich_products(conn, cfg, client, products, ["carnes"], MONTH)
+
+    assert set(result) == set(range(1, 26)) | set(range(51, 61))
+
+
+def test_enrich_max_tokens_formula(conn, cfg):
+    client = ScriptedLlmClient([_enrich_response({"products": []})])
+    products = [Product(id=i, canonical_name=f"P{i}") for i in range(1, 7)]
+    suggestions.enrich_products(conn, cfg, client, products, [], MONTH)
+    assert client.calls[0][2] == 920
+
+
+def test_enrich_unavailable_returns_empty_dict_without_calls(conn, cfg):
+    config = replace(cfg, ai_api_key=None)
+    client = ScriptedLlmClient([_enrich_response({"products": []})])
+
+    result = suggestions.enrich_products(conn, config, client, [Product(id=1, canonical_name="A")], [], MONTH)
+
+    assert result == {}
+    assert client.calls == []
+
+
+def test_match_products_returns_known_ids_in_order_without_duplicates(conn, cfg):
+    client = ScriptedLlmClient([LlmResponse(json.dumps({"ids": [61, 999, 60, 61]}), 10, 5)])
+    catalog = [(60, "A", ()), (61, "B", ("carnes",))]
+
+    assert suggestions.match_products(conn, cfg, client, "termo", catalog, MONTH) == [61, 60]
+
+
+def test_match_products_prompt_has_term_and_catalog_lines_with_tags(conn, cfg):
+    client = ScriptedLlmClient([LlmResponse(json.dumps({"ids": []}), 1, 1)])
+    catalog = [(60, "LING FGO", ("carnes",)), (61, "SEM TAG", ())]
+
+    suggestions.match_products(conn, cfg, client, "linguica", catalog, MONTH)
+
+    prompt = client.calls[0][1]
+    assert "termo: linguica" in prompt
+    assert "60 | LING FGO | carnes" in prompt
+    assert "61 | SEM TAG | " in prompt
+
+
+def test_match_products_empty_catalog_or_blank_term_does_not_call(conn, cfg):
+    client = ScriptedLlmClient([LlmResponse(json.dumps({"ids": []}), 1, 1)])
+    assert suggestions.match_products(conn, cfg, client, "termo", []) == []
+    assert suggestions.match_products(conn, cfg, client, "   ", [(1, "A", ())]) == []
+    assert client.calls == []
+
+
+def test_match_products_non_object_payload_returns_empty(conn, cfg):
+    client = ScriptedLlmClient([LlmResponse(json.dumps([1, 2, 3]), 1, 1)])
+    assert suggestions.match_products(conn, cfg, client, "termo", [(1, "A", ())], MONTH) == []

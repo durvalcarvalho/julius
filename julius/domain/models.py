@@ -98,10 +98,16 @@ class MergeSuggestion:
 class ContentSuggestion:
     quantity: float
     unit: ContentUnit
-    confidence: float
 
 
 @dataclass(frozen=True)
 class ProductComparison:
     text_similarity: float
     ai_suggestion: MergeSuggestion | None = None
+
+
+@dataclass(frozen=True)
+class ProductEnrichment:
+    readable_name: str
+    tags: tuple[str, ...]  # best first; len > 1 means the model was unsure
+    content: ContentSuggestion | None
