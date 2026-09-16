@@ -111,3 +111,25 @@ class ProductEnrichment:
     readable_name: str
     tags: tuple[str, ...]  # best first; len > 1 means the model was unsure
     content: ContentSuggestion | None
+
+
+@dataclass(frozen=True)
+class ProductProposal:
+    product_id: int
+    current_name: str
+    readable_name: str | None  # None => keep current (manually renamed before, or model kept it)
+    tags: tuple[str, ...]
+    tag_is_known: bool  # tags[0] exists in the tags table
+    content: ContentSuggestion | None
+
+    @property
+    def auto_tag(self) -> str | None:
+        return self.tags[0] if len(self.tags) == 1 and self.tag_is_known else None
+
+
+@dataclass(frozen=True)
+class DuplicateCandidate:
+    product_a: Product
+    product_b: Product
+    text_similarity: float
+    ai: MergeSuggestion | None
