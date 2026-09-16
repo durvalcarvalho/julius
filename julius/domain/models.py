@@ -83,6 +83,17 @@ class ImportResult:
 
 
 @dataclass(frozen=True)
+class SearchOutcome:
+    """What `consultar` did with free-text words: which word (if any) resolved to a tag
+    automatically, and whether an empty tag-filtered result was retried as a plain term search."""
+
+    records: tuple[PriceRecord, ...]
+    term: str | None
+    tag: str | None
+    detected_tag: str | None = None  # the candidate found, even if discarded by the retry
+
+
+@dataclass(frozen=True)
 class Hint:
     """A usage hint as data; the CLI owns the wording (see julius/cli/_hints.py)."""
 

@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from rapidfuzz import fuzz, process
 
-from julius.domain.models import PriceRecord
+from julius.domain.models import PriceRecord, SearchOutcome
 from julius.domain.normalization import normalize_text
 from julius.repositories import prices, products
 
@@ -34,6 +34,18 @@ receipts: "pikana" -> PICANHA 77 and "arros" -> ARR 75 stay in; "frango" -> FGO 
 "sabao" -> ARBO 67 stay out. Known false positive: "queijo" -> QUERO 73.
 """
 
+TAG_MATCH_CUTOFF = 75
+"""Minimum fuzz.ratio (0-100) for a free-text word to count as a tag (v2.1, natural `consultar`).
+
+Measured against the 13 seeded tags (see migration 0002) with fuzz.ratio on normalize_text: the
+71 unique descriptions of the 6 real fixtures plus common grocery words (leite, arroz, queijo,
+carne...). Worst real false positive is "PAPRICA" vs "PADARIA" = 71.4 ("TEMP" -> "TEMPEROS" and
+"DESC" -> "DOCES" both 66.7). Worst 1-edit typo that must still match is 80.0 ("FIROS"/"FROIS" ->
+"FRIOS", "AOCES" -> "DOCES"). 75 keeps margin on both sides. 2-edit typos (e.g. "AACES" vs
+"DOCES" = 60) fall outside any reasonable cutoff, same limitation already accepted by
+MATCH_SCORE_CUTOFF for product names. No two of the 13 tags score above 55 against each other.
+"""
+
 
 def search_prices(
     conn: sqlite3.Connection,
@@ -44,6 +56,47 @@ def search_prices(
     if term is None and tag is None:
         raise ValueError("term or tag is required")
     return records_for_products(conn, sorted(_candidate_ids(conn, term, tag)), limit)
+
+
+def detect_tag(conn: sqlite3.Connection, words: Sequence[str]) -> tuple[str | None, str | None]:
+    """Tests each word of `words` against the known tags; the single best-scoring word above
+    TAG_MATCH_CUTOFF (if any) is consumed as the tag, the rest re-joined as the term."""
+    tags = products.all_tag_names(conn)
+    if not tags or not words:
+        return " ".join(words) or None, None
+    normalized_tags = [normalize_text(t) for t in tags]
+    best_index: int | None = None
+    best_tag: str | None = None
+    best_score = -1.0
+    for index, word in enumerate(words):
+        match = process.extractOne(normalize_text(word), normalized_tags, scorer=fuzz.ratio, score_cutoff=TAG_MATCH_CUTOFF)
+        if match is not None and match[1] > best_score:
+            best_index, best_tag, best_score = index, tags[match[2]], match[1]
+    if best_index is None:
+        return " ".join(words) or None, None
+    remaining = [word for i, word in enumerate(words) if i != best_index]
+    return " ".join(remaining) or None, best_tag
+
+
+def search_free_text(
+    conn: sqlite3.Connection, words: Sequence[str], tag: str | None = None, limit: int = 20
+) -> SearchOutcome:
+    """Entry point for `consultar` with free-text words. If `tag` is given explicitly, tag
+    detection never runs. Otherwise, a word that matches a known tag is used as a filter
+    (intersected with the rest as the term); an empty intersection is retried as a plain term."""
+    if tag is not None:
+        term = " ".join(words) or None
+        return SearchOutcome(tuple(search_prices(conn, term=term, tag=tag, limit=limit)), term, tag)
+    remaining_term, detected_tag = detect_tag(conn, words)
+    if detected_tag is None:
+        records = search_prices(conn, term=remaining_term, tag=None, limit=limit)
+        return SearchOutcome(tuple(records), remaining_term, None)
+    records = search_prices(conn, term=remaining_term, tag=detected_tag, limit=limit)
+    if records:
+        return SearchOutcome(tuple(records), remaining_term, detected_tag, detected_tag)
+    full_term = " ".join(words) or None
+    records = search_prices(conn, term=full_term, tag=None, limit=limit)
+    return SearchOutcome(tuple(records), full_term, None, detected_tag)
 
 
 def records_for_products(conn: sqlite3.Connection, product_ids: Sequence[int], limit: int) -> list[PriceRecord]:

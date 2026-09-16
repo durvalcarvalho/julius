@@ -7,7 +7,14 @@ from julius.parsers.df import DFReceiptParser
 from julius.repositories.prices import insert_price
 from julius.repositories.products import add_tag, product_names, resolve_product_id
 from julius.repositories.stores import ensure_store
-from julius.services.search import catalog_for_matching, closest_names, records_for_products, search_prices
+from julius.services.search import (
+    catalog_for_matching,
+    closest_names,
+    detect_tag,
+    records_for_products,
+    search_free_text,
+    search_prices,
+)
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 STORE = "00000000000001"
@@ -166,3 +173,75 @@ def test_catalog_for_matching_returns_id_name_tags_sorted_by_id(conn):
     catalog = catalog_for_matching(conn)
     assert [row[0] for row in catalog] == sorted(row[0] for row in catalog)
     assert next(row for row in catalog if row[0] == cebola)[1:] == ("CEBOLA UNIAO kg", ("hortifruti",))
+
+
+def test_detect_tag_matches_single_word_with_typo(conn):
+    assert detect_tag(conn, ["leite", "laticinio"]) == ("leite", "laticinios")
+
+
+def test_detect_tag_matches_whole_query_as_pure_tag(conn):
+    assert detect_tag(conn, ["hortifruti"]) == (None, "hortifruti")
+
+
+def test_detect_tag_no_match_returns_joined_term(conn):
+    assert detect_tag(conn, ["frango", "assado"]) == ("frango assado", None)
+
+
+def test_detect_tag_empty_words(conn):
+    assert detect_tag(conn, []) == (None, None)
+
+
+def test_detect_tag_ignores_words_below_cutoff(conn):
+    assert detect_tag(conn, ["queijo"]) == ("queijo", None)
+
+
+def test_search_free_text_explicit_tag_skips_detection(conn):
+    _import(conn, "qrcode.html")
+    picanha = _id_of(conn, "PICANHA")
+    add_tag(conn, picanha, "carnes")
+    outcome = search_free_text(conn, ["picanha"], tag="carnes")
+    assert outcome.records == tuple(search_prices(conn, term="picanha", tag="carnes"))
+    assert outcome.tag == "carnes"
+    assert outcome.detected_tag is None
+
+
+def test_search_free_text_detects_tag_and_intersects(conn):
+    leite = _product(conn, "LEITE INTEGRAL 1L", "1")
+    condensado = _product(conn, "LEITE CONDENSADO", "2")
+    add_tag(conn, leite, "laticinios")
+    _price(conn, leite, "UN", 5.0, "2026-01-01T00:00:00", "k1")
+    _price(conn, condensado, "UN", 6.0, "2026-01-02T00:00:00", "k2")
+    outcome = search_free_text(conn, ["leite", "laticinios"])
+    assert {row.product_id for row in outcome.records} == {leite}
+    assert outcome.term == "leite"
+    assert outcome.tag == "laticinios"
+    assert outcome.detected_tag == "laticinios"
+
+
+def test_search_free_text_empty_intersection_retries_as_pure_term(conn):
+    suco = _product(conn, "BEBIDAS SUCO INTEGRAL", "1")
+    _price(conn, suco, "UN", 4.0, "2026-01-01T00:00:00", "k1")
+    outcome = search_free_text(conn, ["bebidas", "suco"])
+    assert outcome.records == tuple(search_prices(conn, term="bebidas suco", tag=None))
+    assert {row.product_id for row in outcome.records} == {suco}
+    assert outcome.tag is None
+    assert outcome.detected_tag == "bebidas"
+
+
+def test_search_free_text_pure_tag_query(conn):
+    _import(conn, "qrcode.html")
+    cebola, tomate = _id_of(conn, "CEBOLA"), _id_of(conn, "TOMATE")
+    add_tag(conn, cebola, "hortifruti")
+    add_tag(conn, tomate, "hortifruti")
+    outcome = search_free_text(conn, ["hortifruti"])
+    assert outcome.term is None
+    assert {row.product_id for row in outcome.records} == {cebola, tomate}
+
+
+def test_search_free_text_no_tag_detected_behaves_like_plain_term(conn):
+    frango = _product(conn, "FRANGO ASSADO", "1")
+    _price(conn, frango, "UN", 12.0, "2026-01-01T00:00:00", "k1")
+    outcome = search_free_text(conn, ["frango", "assado"])
+    assert outcome.records == tuple(search_prices(conn, term="frango assado", tag=None))
+    assert outcome.tag is None
+    assert outcome.detected_tag is None
