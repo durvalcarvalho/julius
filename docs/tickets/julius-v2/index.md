@@ -67,7 +67,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 125 | [CLI `mercados comparar`](125-cli-mercados-comparar.md) | 124 | M | aberto | tabela por grupo, contagem derivada, rodapé com `n` e período |
 | 126 | [comparison: extremos novos](126-comparison-new-extremes.md) | 119, 124 | M | aberto | `new_extremes`, `PriceExtreme`, escopo de grupo |
 | 127 | [CLI: sinal no importar + dia](127-cli-import-signal-weekday.md) | 122, 126 | M | aberto | "Nesta compra:" (máx. 5 linhas), coluna "Dia" no `consultar` |
-| 128 | [infra de arquivamento](128-receipt-files-infra.md) | — | M | aberto | `infra/receipt_files.py`, `Config.inbox_path`/`archive_path`, `ImportResult.access_key` |
+| 128 | [infra de arquivamento](128-receipt-files-infra.md) | — | M | feito | `infra/receipt_files.py`, `Config.inbox_path`/`archive_path`, `ImportResult.access_key` |
 | 129 | [CLI: entrada e arquivamento](129-cli-inbox-archive.md) | 128 | M | aberto | `importar` sem argumento, arquiva e descarta sidecar, `make inbox`, `.gitignore` |
 | 130 | [e2e + docs v2.2](130-e2e-docs-sync.md) | 117–129 | M | aberto | `test_e2e` do ciclo novo, `CLAUDE.md`/`README.md` (inclui a reversão do conteúdo confirmado) |
 

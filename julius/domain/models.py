@@ -82,6 +82,8 @@ class ImportResult:
     new_items: int
     existing_items: int
     new_product_ids: tuple[int, ...] = ()  # products first seen in this import, in receipt order
+    access_key: str = ""  # of the receipt, so the caller can archive the file without reparsing
+    purchased_at: str = ""
 
 
 @dataclass(frozen=True)

@@ -26,4 +26,6 @@ def import_receipt(conn: sqlite3.Connection, path: Path, parser: ReceiptParser) 
         new_items=new_items,
         existing_items=len(receipt.items) - new_items,
         new_product_ids=tuple(new_product_ids),
+        access_key=receipt.access_key,
+        purchased_at=receipt.issued_at,
     )

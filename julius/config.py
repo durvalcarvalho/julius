@@ -32,6 +32,14 @@ class Config:
     def query_log_path(self) -> Path:
         return self.db_path.parent / "query_log.jsonl"
 
+    @property
+    def inbox_path(self) -> Path:
+        return self.db_path.parent / "entrada"
+
+    @property
+    def archive_path(self) -> Path:
+        return self.inbox_path / "importados"
+
 
 def load(env: Mapping[str, str] | None = None) -> Config:
     env = os.environ if env is None else env

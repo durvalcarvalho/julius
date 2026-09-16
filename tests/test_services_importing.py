@@ -31,8 +31,17 @@ def test_import_single_receipt(conn):
 
 def test_reimport_is_idempotent(conn):
     _import(conn, "qrcode.html")
-    assert _import(conn, "qrcode.html") == ImportResult(new_items=0, existing_items=20)
+    again = _import(conn, "qrcode.html")
+    assert (again.new_items, again.existing_items, again.new_product_ids) == (0, 20, ())
     assert (_count(conn, "stores"), _count(conn, "products"), _count(conn, "prices")) == (1, 15, 20)
+
+
+def test_import_result_carries_access_key_and_purchased_at(conn):
+    result = _import(conn, "qrcode.html")
+    (key, purchased_at), = conn.execute("SELECT DISTINCT access_key, purchased_at FROM prices").fetchall()
+    assert (result.access_key, result.purchased_at) == (key, purchased_at)
+    assert result.purchased_at == "2026-09-12T13:09:16"
+    assert len(result.access_key) == 44
 
 
 def test_import_three_receipts_accumulates(conn):

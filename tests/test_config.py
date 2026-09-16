@@ -85,3 +85,9 @@ def test_ai_log_path_sits_next_to_db():
 def test_query_log_path_sits_next_to_db():
     cfg = config.load({"JULIUS_DB": "/x/y/prices.db"})
     assert cfg.query_log_path == Path("/x/y/query_log.jsonl")
+
+
+def test_inbox_and_archive_paths_sit_next_to_db():
+    cfg = config.load({"JULIUS_DB": "/x/y/prices.db"})
+    assert cfg.inbox_path == Path("/x/y/entrada")
+    assert cfg.archive_path == Path("/x/y/entrada/importados")
