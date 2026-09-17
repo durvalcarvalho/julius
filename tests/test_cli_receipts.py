@@ -726,3 +726,57 @@ def test_import_with_explicit_paths_still_archives(tmp_path):
     assert "arquivado como" in result.output
     assert not (loose / "qrcode.html").exists()
     assert len(list((tmp_path / "entrada" / "importados").iterdir())) == 1
+
+
+def _content(product_id: int, quantity: str, unit: str) -> None:
+    result = runner.invoke(app, ["produtos", "definir-conteudo", str(product_id), quantity, unit])
+    assert result.exit_code == 0, result.output
+
+
+def _consultar(*words: str) -> str:
+    result = runner.invoke(app, ["consultar", *words])
+    assert result.exit_code == 0, result.output
+    return result.output
+
+
+def test_consultar_prints_the_cheapest_per_litre():
+    _import("qrcode.html")
+    _content(1, "2", "L")
+    _content(2, "1.5", "L")
+
+    output = _consultar("refri")
+
+    assert "Mais barato por litro:" in output
+    assert "R$ 3,33/L" in output and "R$ 3,50/L" in output  # 4,99 / 1,5L beats 6,99 / 2L
+
+
+def test_consultar_says_unidade_for_un_content():
+    """The word comes from content_unit, so a pack of 2 vs a pack of 3 reads "por unidade"."""
+    _import("qrcode.html")
+    _content(1, "2", "UN")
+    _content(2, "3", "UN")
+    assert "Mais barato por unidade:" in _consultar("refri")
+
+
+def test_consultar_no_line_for_a_time_series():
+    _import("qrcode.html")
+    _content(12, "1", "KG")
+    assert "Mais barato por" not in _consultar("picanha")
+
+
+def test_consultar_no_line_for_kg_group():
+    _import("qrcode.html")
+    assert "Mais barato por" not in _consultar("tomate")
+
+
+def test_consultar_no_line_when_only_one_has_content():
+    _import("qrcode.html")
+    _content(1, "2", "L")
+    assert "Mais barato por" not in _consultar("refri")
+
+
+def test_consultar_no_line_when_prices_per_content_are_equal():
+    _import("qrcode.html")
+    _content(1, "6.99", "L")
+    _content(2, "4.99", "L")
+    assert "Mais barato por" not in _consultar("refri")

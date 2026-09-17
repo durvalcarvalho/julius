@@ -12,6 +12,7 @@ from julius import config
 from julius.cli import _review
 from julius.cli._common import HIGHLIGHT_STYLE, console, error_console, fail, money, open_db
 from julius.cli._hints import print_hints
+from julius.domain.comparison_basis import comparison_basis
 from julius.domain.models import ImportResult, PriceExtreme, PriceRecord, SearchOutcome
 from julius.infra import ai_log, receipt_files
 from julius.infra.llm_client import HttpLlmClient
@@ -141,7 +142,9 @@ def search(
     if not records and not hints:
         console.print("Nenhum resultado.")
     for unit in sorted({record.unit for record in records}):
-        console.print(_table(unit, [record for record in records if record.unit == unit]))
+        group = [record for record in records if record.unit == unit]
+        console.print(_table(unit, group))
+        _print_cheapest_per_content(group)
     print_hints(hints)
 
 
@@ -246,6 +249,29 @@ def _store_cell(record: PriceRecord) -> str | Text:
     if not record.store_address:
         return record.store_nickname
     return Text.assemble(record.store_nickname, "\n", (record.store_address, "dim"))
+
+
+_CONTENT_WORDS = {"L": "litro", "KG": "quilo", "UN": "unidade"}
+
+
+def _print_cheapest_per_content(records: list[PriceRecord]) -> None:
+    """States the ordering the table already computed, instead of leaving the user to read the
+    column. Not a verdict on the price itself: only which package of what was bought is cheaper."""
+    basis, participants = comparison_basis(records)
+    if basis != "price_per_content" or len(participants) < 2:
+        return
+    ranked = sorted((records[i] for i in participants), key=lambda record: record.price_per_content or 0.0)
+    cheapest, dearest = ranked[0], ranked[-1]
+    if cheapest.price_per_content == dearest.price_per_content:
+        return
+    word = _CONTENT_WORDS.get(cheapest.content_unit or "", "unidade")
+    # "contra" instead of an article: product names have any gender and no rule fits all.
+    console.print(
+        f"Mais barato por {word}: {cheapest.canonical_name} a {money(cheapest.price_per_content)}/"
+        f"{cheapest.content_unit} — contra {money(dearest.price_per_content)}/{dearest.content_unit} "
+        f"de {dearest.canonical_name}.",
+        style="dim",
+    )
 
 
 def _table(unit: str, records: list[PriceRecord]) -> Table:
