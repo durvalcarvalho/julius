@@ -16,7 +16,6 @@ from julius.cli._common import (
     console,
     date_cell,
     error_console,
-    fail,
     money,
     open_db,
     relative_age,
