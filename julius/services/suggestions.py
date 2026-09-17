@@ -22,7 +22,7 @@ from julius.repositories import ai_usage
 MAX_ATTEMPTS = 2  # one retry on transport error, empty response, or invalid JSON
 ENRICH_BATCH_SIZE = 25
 
-PROMPT_VERSIONS: dict[str, str] = {"enrich": "2", "merge": "2", "match": "1", "packaging": "1"}
+PROMPT_VERSIONS: dict[str, str] = {"enrich": "2", "merge": "2", "match": "1", "packaging": "1", "store": "1"}
 
 SYSTEM_PROMPTS: dict[str, str] = {
     "merge": (
@@ -97,6 +97,25 @@ SYSTEM_PROMPTS: dict[str, str] = {
         '{"quantity": número, "unit": "L"|"KG"|"UN"}. Lista vazia quando você não tiver palpite.\n'
         "Responda somente com json, um item por produto recebido, mesmos ids:\n"
         '{"packaging": [{"id": 1, "form": "unit", "candidates": [{"quantity": 1, "unit": "UN"}]}]}'
+    ),
+    # Measured with deepseek-flash, 3 identical runs, on 4 real stores plus 2 FABRICATED legal
+    # names as controls: it answered "Assaí Atacadista" for SENDAS DISTRIBUIDORA S/A (text absent
+    # from the input) and returned null for both fabricated companies — including one built to
+    # mimic the pattern of a real hit ("COMERCIAL DE ALIMENTOS <marca> LTDA"). The refusal is the
+    # only trustworthy signal this project has ever measured from the model, and it belongs to
+    # THIS text: editing the wording invalidates the measurement, same discipline as `packaging`.
+    # The "never reformat the legal name" rule is part of what was measured — keep it verbatim.
+    # See docs/requirements/store-branch-nickname.md §7.4.
+    "store": (
+        "Você identifica o nome fantasia pelo qual o consumidor brasileiro conhece uma loja, a partir da razão "
+        "social registrada e do endereço.\n"
+        "- \"trade_name\": o nome que está na fachada, o que um morador da região diria.\n"
+        "- Preencha SOMENTE quando você realmente reconhecer esta empresa. Se não tiver certeza, devolva null. "
+        "Um nome errado é muito pior que null: o usuário não consegue distinguir palpite de conhecimento.\n"
+        "- Nunca derive o nome fantasia reformatando a razão social. Se a única coisa que você consegue fazer é "
+        'tirar o "LTDA"/"S/A" ou arrumar a caixa das letras, devolva null.\n'
+        "Responda somente com json, um item por loja recebida, mesmos ids:\n"
+        '{"stores": [{"id": 1, "trade_name": "Assaí Atacadista"}]}'
     ),
     "match": (
         "O usuário digitou um termo de busca num catálogo pessoal de supermercado. Dado o catálogo (id | nome | "
@@ -425,6 +444,52 @@ def suggest_packaging(
         except Exception:
             continue
     return result
+
+
+def suggest_trade_names(
+    conn: sqlite3.Connection,
+    config: Config,
+    client: LlmClient,
+    stores: Sequence[tuple[str, str, str | None]],
+    month: str | None = None,
+) -> dict[str, str]:
+    """The trade name the model recognises, keyed by CNPJ. Stores it refuses are simply absent.
+
+    Called only for stores whose CNPJ registry has no trade name — measured at 1 in 5, which is
+    what keeps this inside the project's frequency rule. Never raises; no answer means no answer.
+    """
+    if not stores:
+        return {}
+    by_index = {index: cnpj for index, (cnpj, _, _) in enumerate(stores, start=1)}
+    result: dict[str, str] = {}
+    try:
+        lines = [
+            json.dumps(
+                {"id": index, "legal_name": legal_name, "address": address or ""},
+                ensure_ascii=False,
+            )
+            for index, (_, legal_name, address) in enumerate(stores, start=1)
+        ]
+        user_prompt = "lojas:\n" + "\n".join(lines)
+        data = _ask(
+            conn, config, client, "store", user_prompt, max_tokens=60 * len(stores) + 200, month=month
+        )
+        items = data.get("stores") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            return {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            index = item.get("id")
+            trade_name = item.get("trade_name")
+            if not isinstance(index, int) or isinstance(index, bool) or index not in by_index:
+                continue
+            if not isinstance(trade_name, str) or not trade_name.strip():
+                continue
+            result.setdefault(by_index[index], trade_name.strip())
+        return result
+    except Exception:
+        return {}
 
 
 def match_products(

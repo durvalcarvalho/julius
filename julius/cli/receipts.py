@@ -9,7 +9,7 @@ from rich.table import Table
 from rich.text import Text
 
 from julius import config
-from julius.cli import _review
+from julius.cli import _review, stores as stores_cli
 from julius.cli._common import HIGHLIGHT_STYLE, console, error_console, fail, money, open_db
 from julius.cli._hints import print_hints
 from julius.domain.comparison_basis import comparison_basis
@@ -18,6 +18,7 @@ from julius.infra import ai_log, receipt_files
 from julius.infra.llm_client import HttpLlmClient
 from julius.parsers.df import DFReceiptParser
 from julius.services import (
+    catalog,
     comparison as comparison_service,
     export as export_service,
     guidance,
@@ -67,6 +68,12 @@ def import_receipts(
             results.append(result)
 
         merged = _merge(results)
+        if results:
+            # Before the product review below, and independent of it: naming a store touches no
+            # product, and the documented ordering there (review assigns `kind`, then the extremes
+            # signal reads it) is left exactly as it was. Every unnamed store is named, not only
+            # this import's: a store the user cannot recognise is worth naming whenever it is seen.
+            _name_stores(conn, settings)
         reviewed = False
         if results and merged.new_product_ids:
             client = HttpLlmClient.from_config(settings)
@@ -294,3 +301,22 @@ def _table(unit: str, records: list[PriceRecord]) -> Table:
             row.append("" if record.price_per_content is None else money(record.price_per_content))
         table.add_row(*row, style=HIGHLIGHT_STYLE.get(record.highlight or ""))
     return table
+
+
+def _name_stores(conn, settings) -> None:
+    """Never lets a naming problem fail an import that already wrote its prices.
+
+    The registry only — no AI client is passed. Reimporting a receipt must not spend budget, and a
+    store nothing can name stays pending, so an AI call here would repeat on every import for as
+    long as it stays unknown. The paid source runs where the user asks for it: `mercados revisar`.
+    """
+    try:
+        namings = catalog.name_stores(conn, settings, None)
+    except Exception as error:
+        error_console.print(f"Apelidos: erro ao consultar nome fantasia — {error}")
+        return
+    if not namings:
+        return
+    stores_cli.log_namings(settings, namings)
+    console.print(f"{len(namings)} mercado(s) ganharam apelido:")
+    stores_cli.print_namings(namings)

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import datetime, timezone
 from typing import Annotated
 
 import typer
 from rich.table import Table
 
+from julius import config
 from julius.cli._common import HIGHLIGHT_STYLE, console, fail, money, open_db
-from julius.domain.models import KindComparison, StoreComparison
+from julius.domain.models import KindComparison, StoreComparison, StoreNaming
 from julius.domain.normalization import digits_only
+from julius.infra import ai_log
+from julius.infra.llm_client import HttpLlmClient
 from julius.services import catalog, comparison as comparison_service
 
 app = typer.Typer()
@@ -128,3 +132,58 @@ def _comparison_table(group: KindComparison, labels: dict[str, str]) -> Table:
         table.add_row(labels[entry.store_cnpj], money(entry.price), entry.purchased_at[:10], style=HIGHLIGHT_STYLE.get(highlight or ""))
     return table
 
+
+_SOURCE_LABELS = {"registry": "registro do CNPJ", "ai": "IA", "place": "endereço do cupom"}
+
+
+def log_namings(settings, namings: list[StoreNaming]) -> None:
+    """Same actions.jsonl the product curation writes to, so `produtos revisar --ultimas-acoes`
+    lists these too. The CNPJ goes in as a string on purpose: as an int, `06057223052643` silently
+    loses its leading zero and the undo command it prints stops matching any store."""
+    for naming in namings:
+        ai_log.append(
+            settings.action_log_path,
+            {
+                "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "product_id": naming.cnpj,
+                "field": "nickname",
+                "before": naming.before,
+                "after": naming.after,
+                "undo": f'julius mercados renomear {naming.cnpj} "{naming.before}"',
+            },
+        )
+
+
+def print_namings(namings: list[StoreNaming]) -> None:
+    table = Table("CNPJ", "Apelido", "Veio de")
+    for naming in namings:
+        table.add_row(naming.cnpj, naming.after, _SOURCE_LABELS.get(naming.source, naming.source))
+    console.print(table)
+
+
+@app.command("revisar")
+def review_stores() -> None:
+    """Dá apelido reconhecível aos mercados que ainda estão com a razão social."""
+    settings = config.load()
+    conn = open_db()
+    try:
+        pending = catalog.unnamed_stores(conn)
+        if not pending:
+            console.print("Todos os mercados já têm apelido.")
+            return
+        client = HttpLlmClient.from_config(settings)
+        namings = catalog.name_stores(conn, settings, client)
+    finally:
+        conn.close()
+    if not namings:
+        console.print(
+            f"{len(pending)} mercado(s) sem apelido, e nenhuma fonte soube o nome. "
+            'Dê o apelido à mão: julius mercados renomear CNPJ "Apelido"'
+        )
+        return
+    log_namings(settings, namings)
+    print_namings(namings)
+    missing = len(pending) - len(namings)
+    if missing:
+        console.print(f"{missing} mercado(s) continuam com a razão social — nenhuma fonte soube.", style="dim")
+    console.print("Errou algum? Desfaça com: julius produtos revisar --ultimas-acoes", style="dim")

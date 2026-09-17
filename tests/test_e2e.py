@@ -440,7 +440,8 @@ def test_v22_full_cycle(tmp_path, monkeypatch):
     conn.close()
 
     actions = [json.loads(line) for line in (tmp_path / "actions.jsonl").read_text(encoding="utf-8").splitlines()]
-    assert {action["field"] for action in actions} == {"name", "tag", "content", "kind"}
+    # "nickname" is the store naming that runs inside the import, from the receipt's own address.
+    assert {action["field"] for action in actions} == {"nickname", "name", "tag", "content", "kind"}
     assert list(inbox.glob("*.html")) == []
     archived = sorted(path.name for path in (inbox / "importados").iterdir())
     assert archived[0].startswith("2026-09-07_") and archived[1].startswith("2026-09-12_")

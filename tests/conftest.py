@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from julius.infra import db
+from julius.infra import cnpj_client, db
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -27,6 +27,13 @@ def _clean_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Isola os testes de credenciais reais de IA exportadas no shell do usuário."""
     for name in AI_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _no_cnpj_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nenhum teste consulta o registro de CNPJ de verdade: dar apelido a um mercado não pode
+    depender da rede numa rodada de teste. Um teste que queira uma resposta substitui isto."""
+    monkeypatch.setattr(cnpj_client, "fetch_trade_name", lambda cnpj, **kwargs: None)
 
 
 def copied_fixtures(tmp_path: Path) -> Path:

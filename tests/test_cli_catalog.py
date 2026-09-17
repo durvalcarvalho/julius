@@ -340,11 +340,16 @@ def test_comparar_says_how_many_products_still_have_no_kind():
 
 def test_comparar_disambiguates_two_stores_sharing_a_nickname():
     """Grouping by CNPJ means two branches can reach the same table under one nickname. Two
-    identical rows would be worse than the dropped group, so the CNPJ goes on the label."""
+    identical rows would be worse than the dropped group, so the CNPJ goes on the label.
+
+    Naming now gives each store its neighbourhood, so a collision no longer happens by itself —
+    it takes two branches in the same bairro, or, as here, the same name typed twice by hand.
+    """
     first, second = _tomatoes_in_two_stores()
     for product_id in (first, second):
         assert _run("produtos", "tipo", str(product_id), "tomate").exit_code == 0
-    assert _run("mercados", "renomear", "27289076001379", "DONA DE CASA S/A").exit_code == 0
+    for cnpj in ("27289076001379", "11832478000285"):
+        assert _run("mercados", "renomear", cnpj, "DONA DE CASA S/A").exit_code == 0
 
     result = _run("mercados", "comparar")
 

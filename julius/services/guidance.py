@@ -9,7 +9,7 @@ from typing import ParamSpec
 
 from julius.config import Config
 from julius.domain.models import Hint, ImportResult, PriceRecord, Store
-from julius.domain.normalization import UnknownUnitError
+from julius.domain.normalization import UnknownUnitError, is_unnamed
 from julius.parsers import ReceiptParseError
 from julius.repositories import products, stores
 from julius.services import search
@@ -69,7 +69,7 @@ def after_import(conn: sqlite3.Connection, result: ImportResult, *, reviewed: bo
     same_chain = _same_chain_hint(conn)
     if same_chain:
         hints.append(same_chain)
-    unnamed = sum(1 for store in stores.list_stores(conn) if store.nickname == store.legal_name)
+    unnamed = sum(1 for store in stores.list_stores(conn) if is_unnamed(store.nickname, store.legal_name, store.address))
     if unnamed:
         hints.append(Hint("FIRST_IMPORT_NAME_STORES", (str(unnamed),)))
     if not reviewed:
@@ -92,7 +92,7 @@ def _same_chain_hint(conn: sqlite3.Connection) -> Hint | None:
         groups.setdefault(store.cnpj[:8], []).append(store)
     for radical in sorted(groups):
         group = groups[radical]
-        if len(group) >= 2 and any(store.nickname == store.legal_name for store in group):
+        if len(group) >= 2 and any(is_unnamed(store.nickname, store.legal_name, store.address) for store in group):
             ordered = sorted(group, key=lambda store: store.cnpj)[:_MAX_NAMED_PRODUCTS]
             details = tuple(f"{store.cnpj} — {store.address or store.legal_name}" for store in ordered)
             return Hint("SAME_CHAIN_BRANCHES", details)

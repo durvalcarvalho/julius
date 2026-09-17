@@ -8,7 +8,13 @@ from julius.infra.llm_client import LlmResponse
 
 # Each JSON response format (design doc §6) has one distinctive key: look for it quoted in the
 # system prompt to tell which prompt a call belongs to.
-_KIND_MARKERS = {'"products"': "enrich", '"pairs"': "merge", '"ids"': "match", '"packaging"': "packaging"}
+_KIND_MARKERS = {
+    '"products"': "enrich",
+    '"pairs"': "merge",
+    '"ids"': "match",
+    '"packaging"': "packaging",
+    '"stores"': "store",
+}
 
 
 def _kind_of(system_prompt: str) -> str:

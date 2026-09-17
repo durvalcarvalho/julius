@@ -213,6 +213,23 @@ class AppliedAction:
 
 
 @dataclass(frozen=True)
+class StoreNaming:
+    """One store whose nickname the curation composed, and where the readable part came from.
+
+    `source` is worth carrying because the CNPJ registry and the model cover nearly disjoint sets
+    (measured: registry 4/5, model 2/5, union 5/5) — when a name looks wrong, the first question
+    is which of the two said it.
+    """
+
+    cnpj: str
+    before: str
+    after: str
+    trade_name: str | None
+    place: str | None
+    source: Literal["registry", "ai", "place"]
+
+
+@dataclass(frozen=True)
 class DuplicateCandidate:
     product_a: Product
     product_b: Product

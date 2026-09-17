@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from typing import get_args, get_type_hints
 from pathlib import Path
@@ -31,7 +32,15 @@ def _run(*args: str, **kwargs):
 def _import(*names: str):
     result = _run("importar", *(str(restore_fixture(FIXTURES, name)) for name in names))
     assert result.exit_code == 0, result.output
+    # Importing also gives the store a nickname, which writes its own line to actions.jsonl.
+    # That belongs to test_cli_store_naming.py; here the log has to start empty so these tests
+    # keep measuring what the *product* review logged.
+    _action_log().unlink(missing_ok=True)
     return result
+
+
+def _action_log() -> Path:
+    return Path(os.environ["JULIUS_DB"]).parent / "actions.jsonl"
 
 
 def _ai_env(monkeypatch, **extra):
