@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Sequence
 
 from julius.domain.models import ContentUnit, Product
 from julius.domain.normalization import normalize_text
@@ -123,6 +124,52 @@ def has_raw_name(conn: sqlite3.Connection, product_id: int) -> bool:
         (product_id,),
     ).fetchone()
     return row is not None
+
+
+def incomplete_product_ids(conn: sqlite3.Connection) -> list[int]:
+    """Pending = missing kind, tag or package content. Content only counts for something sold by
+    the unit: R$/kg is already a price per content, so a KG-only product would stay pending forever
+    with nothing to gain."""
+    rows = conn.execute(
+        """
+        SELECT id FROM products p
+        WHERE p.kind IS NULL
+           OR NOT EXISTS (SELECT 1 FROM product_tags WHERE product_id = p.id)
+           OR (p.content_quantity IS NULL
+               AND EXISTS (SELECT 1 FROM prices WHERE product_id = p.id AND unit = 'UN'))
+        ORDER BY id
+        """
+    )
+    return [row["id"] for row in rows]
+
+
+def sold_by_unit_ids(conn: sqlite3.Connection, product_ids: Sequence[int]) -> set[int]:
+    if not product_ids:
+        return set()
+    placeholders = ",".join("?" * len(product_ids))
+    rows = conn.execute(
+        f"SELECT DISTINCT product_id FROM prices WHERE unit = 'UN' AND product_id IN ({placeholders})",
+        tuple(product_ids),
+    )
+    return {row["product_id"] for row in rows}
+
+
+def receipt_descriptions(conn: sqlite3.Connection, product_ids: Sequence[int]) -> dict[int, str]:
+    if not product_ids:
+        return {}
+    placeholders = ",".join("?" * len(product_ids))
+    # SQLite takes `description` from the very row that matched the aggregate. That guarantee holds
+    # only while max() is the single aggregate of the query (no second aggregate, no ORDER BY
+    # tiebreaker) and purchased_at is ISO 8601, which sorts correctly as text.
+    rows = conn.execute(
+        f"""
+        SELECT product_id, description, max(purchased_at) FROM prices
+        WHERE product_id IN ({placeholders})
+        GROUP BY product_id
+        """,
+        tuple(product_ids),
+    )
+    return {row["product_id"]: row["description"] for row in rows}
 
 
 def reassign_skus(conn: sqlite3.Connection, source_id: int, target_id: int) -> None:

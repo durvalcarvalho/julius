@@ -27,6 +27,15 @@ def _count(conn, table: str) -> int:
     return conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
 
 
+def _add_price(conn, product_id: int, unit: str, purchased_at: str = "2026-09-12T13:09:16", description: str = "X"):
+    index = _count(conn, "prices") + 1
+    conn.execute(
+        "INSERT INTO prices (access_key, item_index, purchased_at, store_cnpj, product_id, product_code, "
+        "description, quantity, unit, unit_price, total_price) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 1, 1)",
+        ("k" * 44, index, purchased_at, STORE_A, product_id, str(product_id), description, unit),
+    )
+
+
 def test_resolve_creates_product_and_sku_on_first_sight(conn_with_stores):
     conn = conn_with_stores
     product_id = products.resolve_product_id(conn, STORE_A, "622", "REFRI PEPSI PET 2L")
@@ -255,3 +264,92 @@ def test_clear_content_clears_both_columns(conn_with_stores):
 def test_clear_content_unknown_product_raises(conn):
     with pytest.raises(LookupError):
         products.clear_content(conn, 999)
+
+
+def _complete_product(conn, code: str, name: str) -> int:
+    product_id = products.resolve_product_id(conn, STORE_A, code, name)
+    products.add_tag(conn, product_id, "mercearia")
+    products.set_kind(conn, product_id, "generico")
+    products.set_content(conn, product_id, 1, "UN")
+    return product_id
+
+
+def test_incomplete_includes_product_without_kind(conn_with_stores):
+    conn = conn_with_stores
+    product_id = _complete_product(conn, "1", "AGUA 500ML")
+    products.set_kind(conn, product_id, None)
+    assert products.incomplete_product_ids(conn) == [product_id]
+
+
+def test_incomplete_includes_product_without_tag(conn_with_stores):
+    conn = conn_with_stores
+    product_id = _complete_product(conn, "1", "AGUA 500ML")
+    products.remove_tag(conn, product_id, "mercearia")
+    assert products.incomplete_product_ids(conn) == [product_id]
+
+
+def test_incomplete_includes_un_product_without_content(conn_with_stores):
+    conn = conn_with_stores
+    product_id = _complete_product(conn, "1", "AGUA 500ML")
+    products.clear_content(conn, product_id)
+    _add_price(conn, product_id, "UN")
+    assert products.incomplete_product_ids(conn) == [product_id]
+
+
+def test_incomplete_excludes_kg_product_without_content(conn_with_stores):
+    conn = conn_with_stores
+    product_id = _complete_product(conn, "1", "TOMATE ITALIANO kg")
+    products.clear_content(conn, product_id)
+    _add_price(conn, product_id, "KG")
+    assert products.incomplete_product_ids(conn) == []
+
+
+def test_incomplete_includes_product_sold_by_un_in_any_store(conn_with_stores):
+    conn = conn_with_stores
+    product_id = _complete_product(conn, "1", "OVO BCO GRANDE C/30")
+    products.clear_content(conn, product_id)
+    _add_price(conn, product_id, "KG")
+    _add_price(conn, product_id, "UN")
+    assert products.incomplete_product_ids(conn) == [product_id]
+
+
+def test_incomplete_excludes_complete_product(conn_with_stores):
+    conn = conn_with_stores
+    first = _complete_product(conn, "1", "AGUA 500ML")
+    _add_price(conn, first, "UN")
+    _complete_product(conn, "2", "TOMATE ITALIANO kg")
+    assert products.incomplete_product_ids(conn) == []
+
+
+def test_incomplete_is_ordered_by_id(conn_with_stores):
+    conn = conn_with_stores
+    for product_id in (3, 1, 2):
+        conn.execute("INSERT INTO products (id, canonical_name) VALUES (?, ?)", (product_id, f"P{product_id}"))
+    assert products.incomplete_product_ids(conn) == [1, 2, 3]
+
+
+def test_sold_by_unit_ids(conn_with_stores):
+    conn = conn_with_stores
+    by_unit = products.resolve_product_id(conn, STORE_A, "1", "AGUA 500ML")
+    by_weight = products.resolve_product_id(conn, STORE_A, "2", "TOMATE ITALIANO kg")
+    _add_price(conn, by_unit, "UN")
+    _add_price(conn, by_weight, "KG")
+    assert products.sold_by_unit_ids(conn, [by_unit, by_weight, 999]) == {by_unit}
+    assert products.sold_by_unit_ids(conn, []) == set()
+
+
+def test_receipt_descriptions_returns_latest(conn_with_stores):
+    conn = conn_with_stores
+    product_id = products.resolve_product_id(conn, STORE_A, "1", "AGUA 500ML")
+    _add_price(conn, product_id, "UN", "2026-09-05T16:50:34", "AGUA MIN 500ML ANTIGA")
+    _add_price(conn, product_id, "UN", "2026-09-12T13:09:16", "AGUA MIN SF 500ML")
+    assert products.receipt_descriptions(conn, [product_id]) == {product_id: "AGUA MIN SF 500ML"}
+
+
+def test_receipt_descriptions_ignores_product_without_prices_and_empty_input(conn_with_stores):
+    conn = conn_with_stores
+    priced = products.resolve_product_id(conn, STORE_A, "1", "AGUA 500ML")
+    unpriced = products.resolve_product_id(conn, STORE_A, "2", "TOMATE")
+    _add_price(conn, priced, "UN", description="AGUA MIN SF 500ML")
+    assert products.receipt_descriptions(conn, [priced, unpriced]) == {priced: "AGUA MIN SF 500ML"}
+    assert products.receipt_descriptions(conn, []) == {}
