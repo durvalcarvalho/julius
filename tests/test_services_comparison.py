@@ -348,3 +348,33 @@ def test_compare_stores_names_the_cheapest_product_of_that_store(conn):
 
     store_a = next(entry for entry in comparison.entries if entry.store_nickname == "Loja 1")
     assert store_a.product_name == "UVA VITORIA BANDEJA 500G"
+
+
+def test_new_extremes_names_the_product_that_was_beaten(conn):
+    """Within a kind, the record can belong to another product — that is the whole reason the
+    signal needs the name: "menor preço já pago" over `vinho` compared two different wines."""
+    a = _product(conn, "VINHO MIORANZA FRISANTE 750ML", "1", STORE_A)
+    b = _product(conn, "VH NORTON 750 BC SV", "2", STORE_B)
+    for product_id in (a, b):
+        set_kind(conn, product_id, "vinho")
+        set_content(conn, product_id, 0.75, "L")
+    _price(conn, b, STORE_B, "UN", 34.90, "2026-09-04T10:00:00", "old")
+    _price(conn, a, STORE_A, "UN", 23.99, "2026-09-16T10:00:00", "new")
+
+    (extreme,) = new_extremes(conn, ["new"])
+
+    assert extreme.product_name == "VINHO MIORANZA FRISANTE 750ML"
+    assert extreme.previous_product_name == "VH NORTON 750 BC SV"
+
+
+def test_new_extremes_repeats_the_name_when_a_product_beats_itself(conn):
+    """The common case: same product, cheaper than last time. The CLI suppresses the repetition
+    (see test_cli_receipts), so the service must still report it rather than blank it out."""
+    a = _product(conn, "CEBOLA kg", "1", STORE_A)
+    set_kind(conn, a, "cebola")
+    _price(conn, a, STORE_A, "KG", 9.99, "2026-09-04T10:00:00", "old")
+    _price(conn, a, STORE_A, "KG", 7.89, "2026-09-16T10:00:00", "new")
+
+    (extreme,) = new_extremes(conn, ["new"])
+
+    assert extreme.previous_product_name == extreme.product_name == "CEBOLA kg"

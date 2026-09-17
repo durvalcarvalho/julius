@@ -216,7 +216,15 @@ def _extreme_line(extreme: PriceExtreme) -> str:
         suffix = f"/{extreme.content_unit} (por conteúdo)"
     else:
         suffix = f"/{extreme.unit}"
-    previous = f"era {money(extreme.previous_price)} em {extreme.previous_store}, {_day_month(extreme.previous_at)}"
+    # Naming the beaten product is the whole point when the scope is a kind: "menor preço já pago"
+    # over `vinho` compared two different wines. Same name means it beat itself, so saying it twice
+    # is noise — that is the common case, a product bought again cheaper than last time.
+    beaten = (
+        f" ({extreme.previous_product_name})"
+        if extreme.previous_product_name and extreme.previous_product_name != extreme.product_name
+        else ""
+    )
+    previous = f"era {money(extreme.previous_price)}{beaten} em {extreme.previous_store}, {_day_month(extreme.previous_at)}"
     return f"{arrow} {extreme.product_name}  {money(extreme.price)}{suffix}  {verdict} ({previous})"
 
 

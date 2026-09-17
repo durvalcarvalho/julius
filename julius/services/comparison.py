@@ -115,6 +115,7 @@ def new_extremes(conn: sqlite3.Connection, access_keys: Sequence[str]) -> list[P
                 previous_price=previous_value,
                 previous_store=previous_row.store_nickname,
                 previous_at=previous_row.purchased_at,
+                previous_product_name=previous_row.canonical_name,
                 scope=scope_name,
             )
         )

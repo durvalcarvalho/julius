@@ -494,6 +494,7 @@ def _extreme(name: str, highlight: str = "lowest", price: float = 1.0, **overrid
         previous_price=price * 2,
         previous_store="Outra",
         previous_at="2026-09-04T10:00:00",
+        previous_product_name=name,  # beat itself; pass an override to exercise the other branch
         scope=name,
     )
     values.update(overrides)
@@ -567,6 +568,30 @@ def test_import_signal_shows_per_content_suffix(monkeypatch):
     result = _import("qrcode-2.html")
 
     assert "R$ 2,46/L (por conteúdo)" in result.output
+
+
+def test_import_signal_names_the_beaten_product(monkeypatch):
+    """Over a kind, the record can belong to another product: the real 16/09 receipt announced
+    "menor preço já pago" for a frisante that beat a Norton, and said only the price."""
+    extreme = _extreme("Vinho Mioranza frisante", previous_product_name="Vinho Norton 750ml BC SV")
+    monkeypatch.setattr(receipts_cli.comparison_service, "new_extremes", lambda conn, keys: [extreme])
+
+    result = _import("qrcode-2.html")
+
+    assert "(Vinho Norton 750ml BC SV)" in result.output
+
+
+def test_import_signal_does_not_repeat_a_product_that_beat_itself(monkeypatch):
+    """The common case — bought again, cheaper than last time. `_extreme` defaults both names to
+    the same product, so this asserts the default path stays quiet."""
+    monkeypatch.setattr(
+        receipts_cli.comparison_service, "new_extremes", lambda conn, keys: [_extreme("Cebola")]
+    )
+
+    result = _import("qrcode-2.html")
+
+    assert "↓ Cebola" in result.output
+    assert "(Cebola)" not in result.output
 
 
 def test_import_no_signal_when_all_files_fail(monkeypatch, tmp_path):

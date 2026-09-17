@@ -199,6 +199,7 @@ class PriceExtreme:
     previous_price: float
     previous_store: str
     previous_at: str
+    previous_product_name: str  # the product this row beat; equal to product_name when it beat itself
     scope: str  # the kind, or the product's name when it has none
 
 
