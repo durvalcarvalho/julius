@@ -399,3 +399,122 @@ def test_group_of_an_unmerged_product_is_itself(conn_with_stores):
 def test_group_functions_reject_unknown_product(conn, call):
     with pytest.raises(LookupError):
         call(conn, 999) if call is not products.set_merged_into else call(conn, 999, None)
+
+
+def _merged_pair(conn, root_name="Raiz", absorbed_name="Absorvido"):
+    root = products.resolve_product_id(conn, STORE_A, "100", root_name)
+    absorbed = products.resolve_product_id(conn, STORE_A, "200", absorbed_name)
+    products.set_merged_into(conn, absorbed, root)
+    return root, absorbed
+
+
+def test_get_product_inherits_content_from_absorbed(conn_with_stores):
+    conn = conn_with_stores
+    root, absorbed = _merged_pair(conn)
+    products.set_content(conn, absorbed, 0.5, "KG")
+    group = products.get_product(conn, root)
+    assert (group.content_quantity, group.content_unit) == (0.5, "KG")
+
+    products.set_merged_into(conn, absorbed, None)
+    assert products.get_product(conn, root).content_quantity is None  # undo needs no reversal code
+
+
+def test_get_product_inherits_kind_from_absorbed(conn_with_stores):
+    conn = conn_with_stores
+    root, absorbed = _merged_pair(conn)
+    products.set_kind(conn, absorbed, "tomate")
+    assert products.get_product(conn, root).kind == "tomate"
+
+
+def test_get_product_keeps_root_value_when_both_have_one(conn_with_stores):
+    conn = conn_with_stores
+    root, absorbed = _merged_pair(conn)
+    products.set_content(conn, root, 1.5, "L")
+    products.set_content(conn, absorbed, 0.5, "L")
+    products.set_kind(conn, root, "agua")
+    products.set_kind(conn, absorbed, "refrigerante")
+    group = products.get_product(conn, root)
+    assert (group.content_quantity, group.kind) == (1.5, "agua")
+
+
+def test_get_product_prefers_the_readable_name(conn_with_stores):
+    conn = conn_with_stores
+    root = products.resolve_product_id(conn, STORE_A, "100", "AGUA CRYSTAL 500ML")
+    absorbed = products.resolve_product_id(conn, STORE_A, "200", "AGUA MIN CRYSTAL 500ML")
+    for pid, description in ((root, "AGUA CRYSTAL 500ML"), (absorbed, "AGUA MIN CRYSTAL 500ML")):
+        _add_price(conn, pid, "UN", description=description)
+    products.rename_product(conn, absorbed, "Água Crystal 500ml")
+    products.set_merged_into(conn, absorbed, root)
+    assert products.get_product(conn, root).canonical_name == "Água Crystal 500ml"
+
+
+def test_get_product_unions_tags(conn_with_stores):
+    conn = conn_with_stores
+    root, absorbed = _merged_pair(conn)
+    products.add_tag(conn, root, "bebidas")
+    products.add_tag(conn, absorbed, "mercearia")
+    assert products.get_product(conn, root).tags == ("bebidas", "mercearia")
+
+
+def test_get_product_resolves_any_member_to_the_group(conn_with_stores):
+    conn = conn_with_stores
+    root, absorbed = _merged_pair(conn)
+    assert products.get_product(conn, absorbed) == products.get_product(conn, root)
+    assert products.get_product(conn, absorbed).id == root
+
+
+def test_list_products_and_names_hide_absorbed(conn_with_stores):
+    conn = conn_with_stores
+    root, absorbed = _merged_pair(conn)
+    listed = products.list_products(conn)
+    assert [product.id for product in listed] == [root]
+    assert [pid for pid, _ in products.product_names(conn)] == [root]
+
+
+def test_untagged_product_ids_uses_the_group(conn_with_stores):
+    conn = conn_with_stores
+    root, absorbed = _merged_pair(conn)
+    assert products.untagged_product_ids(conn) == [root]
+    products.add_tag(conn, absorbed, "bebidas")  # tagged through the absorbed product
+    assert products.untagged_product_ids(conn) == []
+
+
+def test_product_ids_with_tag_returns_the_root_once(conn_with_stores):
+    conn = conn_with_stores
+    root, absorbed = _merged_pair(conn)
+    products.add_tag(conn, absorbed, "bebidas")
+    assert products.product_ids_with_tag(conn, "bebidas") == [root]
+    products.add_tag(conn, root, "bebidas")
+    assert products.product_ids_with_tag(conn, "bebidas") == [root]
+
+
+def test_has_raw_name_false_when_any_member_was_renamed(conn_with_stores):
+    conn = conn_with_stores
+    root = products.resolve_product_id(conn, STORE_A, "100", "AGUA CRYSTAL 500ML")
+    absorbed = products.resolve_product_id(conn, STORE_A, "200", "AGUA MIN 500ML")
+    for pid, description in ((root, "AGUA CRYSTAL 500ML"), (absorbed, "AGUA MIN 500ML")):
+        _add_price(conn, pid, "UN", description=description)
+    products.set_merged_into(conn, absorbed, root)
+    assert products.has_raw_name(conn, root) is True
+    products.rename_product(conn, absorbed, "Água Crystal 500ml")
+    assert products.has_raw_name(conn, root) is False  # the group shows the hand-edited name
+
+
+def test_incomplete_excludes_group_whose_absorbed_has_the_content(conn_with_stores):
+    conn = conn_with_stores
+    root, absorbed = _merged_pair(conn)
+    products.add_tag(conn, root, "mercearia")
+    products.set_kind(conn, root, "generico")
+    _add_price(conn, root, "UN")
+    assert products.incomplete_product_ids(conn) == [root]
+    products.set_content(conn, absorbed, 1, "UN")
+    assert products.incomplete_product_ids(conn) == []
+
+
+def test_receipt_descriptions_and_sold_by_unit_cover_the_whole_group(conn_with_stores):
+    conn = conn_with_stores
+    root, absorbed = _merged_pair(conn)
+    _add_price(conn, root, "KG", "2026-09-05T10:00:00", "RAIZ ANTIGA")
+    _add_price(conn, absorbed, "UN", "2026-09-12T10:00:00", "ABSORVIDO RECENTE")
+    assert products.sold_by_unit_ids(conn, [root]) == {root}
+    assert products.receipt_descriptions(conn, [root]) == {root: "ABSORVIDO RECENTE"}

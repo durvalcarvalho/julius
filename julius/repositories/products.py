@@ -7,6 +7,20 @@ from julius.domain.models import ContentUnit, Product
 from julius.domain.normalization import normalize_text
 
 
+_RAW_NAME_IDS = """
+SELECT DISTINCT pr.id FROM products pr JOIN prices px ON px.product_id = pr.id
+ WHERE px.description = pr.canonical_name
+"""
+
+_GROUP_MEMBERS = """
+SELECT 1 FROM products m JOIN product_group g ON g.product_id = m.id WHERE g.root_id = p.id
+"""
+
+_GROUP_HAS_TAG = """
+SELECT 1 FROM product_tags pt JOIN product_group g ON g.product_id = pt.product_id WHERE g.root_id = p.id
+"""
+
+
 def find_product_id(conn: sqlite3.Connection, store_cnpj: str, product_code: str) -> int | None:
     row = conn.execute(
         "SELECT product_id FROM product_skus WHERE store_cnpj = ? AND product_code = ?",
@@ -28,18 +42,19 @@ def resolve_product_id(conn: sqlite3.Connection, store_cnpj: str, product_code: 
 
 
 def get_product(conn: sqlite3.Connection, product_id: int) -> Product | None:
-    row = conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
-    return None if row is None else _to_product(conn, row)
+    row = conn.execute("SELECT 1 FROM products WHERE id = ?", (product_id,)).fetchone()
+    return None if row is None else _group_product(conn, group_root(conn, product_id))
 
 
 def list_products(conn: sqlite3.Connection) -> list[Product]:
-    rows = conn.execute("SELECT * FROM products ORDER BY canonical_name, id").fetchall()
-    # ponytail: one tag query per product; fine for a personal catalog of hundreds
-    return [_to_product(conn, row) for row in rows]
+    rows = conn.execute("SELECT id FROM products WHERE merged_into IS NULL ORDER BY canonical_name, id").fetchall()
+    raw = {row["id"] for row in conn.execute(_RAW_NAME_IDS)}
+    # ponytail: two queries per group — 21 ms for the real 105-product catalog; revisit at 10x
+    return [_group_product(conn, row["id"], raw) for row in rows]
 
 
 def product_names(conn: sqlite3.Connection) -> list[tuple[int, str]]:
-    return [(row["id"], row["canonical_name"]) for row in conn.execute("SELECT id, canonical_name FROM products")]
+    return [(product.id, product.canonical_name) for product in list_products(conn)]
 
 
 def rename_product(conn: sqlite3.Connection, product_id: int, name: str) -> None:
@@ -88,11 +103,18 @@ def add_tag(conn: sqlite3.Connection, product_id: int, tag_name: str) -> None:
 
 
 def product_ids_with_tag(conn: sqlite3.Connection, tag_name: str) -> list[int]:
+    """Roots, deduplicated: a tag that sits only on the absorbed product must bring its group,
+    or `consultar --tag` would stop finding what `produtos listar` shows as tagged."""
     rows = conn.execute(
-        "SELECT pt.product_id FROM product_tags pt JOIN tags t ON t.id = pt.tag_id WHERE t.name = ? ORDER BY pt.product_id",
+        """
+        SELECT DISTINCT g.root_id FROM product_tags pt
+          JOIN tags t ON t.id = pt.tag_id
+          JOIN product_group g ON g.product_id = pt.product_id
+        WHERE t.name = ? ORDER BY g.root_id
+        """,
         (tag_name,),
     )
-    return [row["product_id"] for row in rows]
+    return [row["root_id"] for row in rows]
 
 
 def all_tag_names(conn: sqlite3.Connection) -> list[str]:
@@ -110,20 +132,29 @@ def remove_tag(conn: sqlite3.Connection, product_id: int, tag_name: str) -> None
 
 
 def untagged_product_ids(conn: sqlite3.Connection) -> list[int]:
-    rows = conn.execute("SELECT id FROM products WHERE id NOT IN (SELECT product_id FROM product_tags) ORDER BY id")
+    rows = conn.execute(
+        f"""
+        SELECT p.id FROM products p
+        WHERE p.merged_into IS NULL AND NOT EXISTS ({_GROUP_HAS_TAG})
+        ORDER BY p.id
+        """
+    )
     return [row["id"] for row in rows]
 
 
 def has_raw_name(conn: sqlite3.Connection, product_id: int) -> bool:
+    """Whether the name the group shows is still a receipt description. False as soon as ANY member
+    has a hand-edited name, because that is the name the group shows (see _group_product) — so the
+    AI never overwrites a name a human chose, wherever in the group it lives."""
     row = conn.execute(
-        """
-        SELECT 1 FROM prices p JOIN products pr ON pr.id = p.product_id
-        WHERE pr.id = ? AND p.description = pr.canonical_name
-        LIMIT 1
+        f"""
+        SELECT 1 FROM products m JOIN product_group g ON g.product_id = m.id
+        WHERE g.root_id = (SELECT root_id FROM product_group WHERE product_id = ?)
+          AND m.id NOT IN ({_RAW_NAME_IDS}) LIMIT 1
         """,
         (product_id,),
     ).fetchone()
-    return row is not None
+    return row is None
 
 
 def incomplete_product_ids(conn: sqlite3.Connection) -> list[int]:
@@ -131,13 +162,15 @@ def incomplete_product_ids(conn: sqlite3.Connection) -> list[int]:
     the unit: R$/kg is already a price per content, so a KG-only product would stay pending forever
     with nothing to gain."""
     rows = conn.execute(
-        """
-        SELECT id FROM products p
-        WHERE p.kind IS NULL
-           OR NOT EXISTS (SELECT 1 FROM product_tags WHERE product_id = p.id)
-           OR (p.content_quantity IS NULL
-               AND EXISTS (SELECT 1 FROM prices WHERE product_id = p.id AND unit = 'UN'))
-        ORDER BY id
+        f"""
+        SELECT p.id FROM products p
+        WHERE p.merged_into IS NULL
+          AND (NOT EXISTS ({_GROUP_MEMBERS} AND m.kind IS NOT NULL)
+            OR NOT EXISTS ({_GROUP_HAS_TAG})
+            OR (NOT EXISTS ({_GROUP_MEMBERS} AND m.content_quantity IS NOT NULL)
+                AND EXISTS ({_GROUP_MEMBERS} AND EXISTS (
+                    SELECT 1 FROM prices WHERE product_id = m.id AND unit = 'UN'))))
+        ORDER BY p.id
         """
     )
     return [row["id"] for row in rows]
@@ -148,10 +181,13 @@ def sold_by_unit_ids(conn: sqlite3.Connection, product_ids: Sequence[int]) -> se
         return set()
     placeholders = ",".join("?" * len(product_ids))
     rows = conn.execute(
-        f"SELECT DISTINCT product_id FROM prices WHERE unit = 'UN' AND product_id IN ({placeholders})",
+        f"""
+        SELECT DISTINCT g.root_id FROM prices p JOIN product_group g ON g.product_id = p.product_id
+        WHERE p.unit = 'UN' AND g.root_id IN ({placeholders})
+        """,
         tuple(product_ids),
     )
-    return {row["product_id"] for row in rows}
+    return {row["root_id"] for row in rows}
 
 
 def receipt_descriptions(conn: sqlite3.Connection, product_ids: Sequence[int]) -> dict[int, str]:
@@ -163,13 +199,14 @@ def receipt_descriptions(conn: sqlite3.Connection, product_ids: Sequence[int]) -
     # tiebreaker) and purchased_at is ISO 8601, which sorts correctly as text.
     rows = conn.execute(
         f"""
-        SELECT product_id, description, max(purchased_at) FROM prices
-        WHERE product_id IN ({placeholders})
-        GROUP BY product_id
+        SELECT g.root_id, p.description, max(p.purchased_at) FROM prices p
+          JOIN product_group g ON g.product_id = p.product_id
+        WHERE g.root_id IN ({placeholders})
+        GROUP BY g.root_id
         """,
         tuple(product_ids),
     )
-    return {row["product_id"]: row["description"] for row in rows}
+    return {row["root_id"]: row["description"] for row in rows}
 
 
 def set_merged_into(conn: sqlite3.Connection, product_id: int, target_id: int | None) -> None:
@@ -199,6 +236,40 @@ def delete_product(conn: sqlite3.Connection, product_id: int) -> None:
     _require_exists(conn, product_id)
     conn.execute("DELETE FROM product_tags WHERE product_id = ?", (product_id,))
     conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
+
+
+def _group_product(conn: sqlite3.Connection, root_id: int, raw: set[int] | None = None) -> Product:
+    """The product a group shows. Nothing is copied to the root: the name, content and kind are
+    composed on read, which is what makes unmerging restore the previous state by construction."""
+    members = conn.execute(
+        """
+        SELECT m.* FROM products m JOIN product_group g ON g.product_id = m.id
+        WHERE g.root_id = ? ORDER BY (m.id <> ?), m.id
+        """,
+        (root_id, root_id),
+    ).fetchall()
+    root = members[0]
+    if raw is None:
+        raw = {row["id"] for row in conn.execute(_RAW_NAME_IDS)}
+    name = next((m["canonical_name"] for m in members if m["id"] not in raw), root["canonical_name"])
+    with_content = next((m for m in members if m["content_quantity"] is not None), root)
+    tags = conn.execute(
+        """
+        SELECT DISTINCT t.name FROM tags t
+          JOIN product_tags pt ON pt.tag_id = t.id
+          JOIN product_group g ON g.product_id = pt.product_id
+        WHERE g.root_id = ? ORDER BY t.name
+        """,
+        (root_id,),
+    )
+    return Product(
+        id=root["id"],
+        canonical_name=name,
+        content_quantity=with_content["content_quantity"],
+        content_unit=with_content["content_unit"],
+        tags=tuple(tag["name"] for tag in tags),
+        kind=next((m["kind"] for m in members if m["kind"] is not None), None),
+    )
 
 
 def _to_product(conn: sqlite3.Connection, row: sqlite3.Row) -> Product:

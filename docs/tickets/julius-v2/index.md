@@ -78,7 +78,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 136 | [e2e + docs v2.3](136-e2e-docs-v23.md) | 131–135 | M | feito | `test_e2e` do ciclo, rodada real, `CLAUDE.md`/`README.md` |
 
 | 137 | [Migração 0004 + view do grupo](137-product-merge-column-and-view.md) | — | S | feito | `products.merged_into`, view `product_group`, `set_merged_into`/`group_root`/`group_members` |
-| 138 | [Produto efetivo do grupo](138-group-effective-product.md) | 137 | M | aberto | só raízes nas listagens; nome/conteúdo/tipo/tags compostos na leitura |
+| 138 | [Produto efetivo do grupo](138-group-effective-product.md) | 137 | M | feito | só raízes nas listagens; nome/conteúdo/tipo/tags compostos na leitura |
 | 139 | [Preços do grupo + CSV](139-group-prices-and-export.md) | 137 | M | aberto | `prices_for_products` junta o grupo, `source_product_id`, `group_product_id`; remove `reassign_product` |
 | 140 | [catalog: fusão reversível](140-catalog-merge-rewrite.md) | 137, 139 | M | aberto | `merge_products` reescrita, `unmerge_product`, guarda de ciclo, `merge_inheritance` |
 | 141 | [CLI: `desfundir` + ação `merge`](141-cli-unmerge-and-merge-action.md) | 140 | M | aberto | `produtos desfundir`, `fundir` sem confirmação, `"merge"` no log e no desfazer |
