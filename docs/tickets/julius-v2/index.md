@@ -27,7 +27,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 
 ## Regras comuns a todo ticket
 
-1. Leia `CLAUDE.md` e o design da fase do ticket antes de começar; as seções citadas em cada ticket são o mínimo. Design por fase: 101–114 → `docs/design/ai-v2.md`; 115–116 → `docs/design/consultar-v2.1.md`; 117–130 → `docs/design/comparability-v2.2.md` (e `docs/requirements/comparability-closure.md`, que tem precedência sobre os outros requisitos da mesma data).
+1. Leia `CLAUDE.md` e o design da fase do ticket antes de começar; as seções citadas em cada ticket são o mínimo. Design por fase: 101–114 → `docs/design/ai-v2.md`; 115–116 → `docs/design/consultar-v2.1.md`; 117–130 → `docs/design/comparability-v2.2.md` (e `docs/requirements/comparability-closure.md`, que tem precedência sobre os outros requisitos da mesma data); 131–136 → `docs/design/review-scope-v2.3.md` (e `docs/requirements/review-scope-v2.3.md`).
 2. Só toque nos arquivos listados no ticket. Se precisar de algo de outra camada que não existe, **pare e anote** — não crie fora do escopo.
 3. `tests/test_architecture.py` é a fonte da verdade da DAG. Se ele falhar, o desenho está errado, não o teste.
 4. Teste de caminho feliz **e** triste para cada função pública. SQLite real em `tmp_path`; rede **sempre** substituída por `tests/_fakes.py::ScriptedLlmClient`; nenhum teste toca a API real.
@@ -70,6 +70,12 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 128 | [infra de arquivamento](128-receipt-files-infra.md) | — | M | feito | `infra/receipt_files.py`, `Config.inbox_path`/`archive_path`, `ImportResult.access_key` |
 | 129 | [CLI: entrada e arquivamento](129-cli-inbox-archive.md) | 128 | M | feito (sem `discard_sidecar` — veto pendente) | `importar` sem argumento, arquiva e descarta sidecar, `make inbox`, `.gitignore` |
 | 130 | [e2e + docs v2.2](130-e2e-docs-sync.md) | 117–129 | M | feito | `test_e2e` do ciclo novo, `CLAUDE.md`/`README.md` (inclui a reversão do conteúdo confirmado) |
+| 131 | [Repositório: pendência por campo](131-products-incomplete-queries.md) | — | S | aberto | `incomplete_product_ids`, `sold_by_unit_ids`, `receipt_descriptions` |
+| 132 | [curation: proposta completa](132-curation-proposal-reshape.md) | 131 | M | aberto | `ProductProposal.tag`/`receipt_description`/`sold_by_unit`; fim de `auto_tag` |
+| 133 | [suggestions: intuição de embalagem](133-suggestions-packaging.md) | — | M | aberto | `PackagingHint`, prompt `packaging` v1, marcador no fake |
+| 134 | [review: tabela honesta + categoria auto](134-review-table-and-auto-category.md) | 132 | M | aberto | colunas com valor atual em `dim`, cupom de verdade, fim do laço de categoria |
+| 135 | [review: pergunta de conteúdo](135-review-content-question.md) | 133, 134 | M | aberto | `_ask_content`, `_FORM_LABELS`, `--sim` redefinido |
+| 136 | [e2e + docs v2.3](136-e2e-docs-v23.md) | 131–135 | M | aberto | `test_e2e` do ciclo, rodada real, `CLAUDE.md`/`README.md` |
 
 Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum ticket L: o que ficaria L foi dividido (suggestions em 107/108; CLI em 111/112/113; na v2.2, serviço e CLI sempre em tickets separados — 124/125 e 126/127 — e a infra de arquivamento separada da CLI que a usa, 128/129).
 
@@ -92,6 +98,10 @@ Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum tic
 128 receipt_files ──► 129 importar sem argumento + arquivamento
 
 117–129 ──► 130 e2e + docs
+
+131 repo ──► 132 curation ──► 134 review/tabela ──┐
+                                                  ├──► 135 pergunta de conteúdo ──► 136 e2e + docs
+133 packaging ────────────────────────────────────┘
 ```
 
 Paralelizável desde o início: {101, 104, 105}. Depois: 102 e 106 em paralelo; 103 e 107; 110 e 108; 109 após 108; 111 e 112 em paralelo após 110 (111 precisa de 108; 112 de 109). 115/116 são independentes de todo o resto (não tocam IA, endereço nem curadoria) — podem rodar em paralelo com qualquer fase.
@@ -120,6 +130,14 @@ v2.2: **117 → 118 → 121 → 122 → 127 → 130** (a curadoria automática c
   - **H — arquivamento**: 128, 129 (`entrada/` como symlink, `importar` sem argumento, arquiva e limpa).
   - **I — fechamento**: 130.
 
+- **v2.3 — escopo da revisão e HITL de conteúdo** (`docs/design/review-scope-v2.3.md`): 131 → 132 → 134 → 135 → 136, com 133 em paralelo desde o início.
+  - **J — dado**: 131, 132 (pendência por campo faltando; proposta completa).
+  - **K — IA**: 133 (a segunda chamada, isolada, que ninguém consome até o 135).
+  - **L — tela**: 134, 135 (a tabela deixa de mentir; a pergunta muda de campo).
+  - **M — fechamento**: 136, com rodada real obrigatória contra cópia do banco.
+
+  **Restrição de ordem que é de princípio, não técnica:** 134 antes de 135. O 134 tira a pergunta de categoria e o 135 põe a de conteúdo; invertidos, existe um estado em que a revisão pergunta **as duas coisas** — mais atrito do que hoje, que é o problema que a fase existe para resolver.
+
   Depois de **F**, vale um teste real intermediário: `julius produtos revisar` contra uma cópia do banco, conferindo `actions.jsonl` e a coluna "Tipo" em `produtos listar` — é a primeira vez que a IA grava algo que não é nome nem categoria.
 
 Depois de **B**, vale um teste real intermediário: `julius produtos comparar 63 69` com a chave configurada — a primeira chamada de produção do projeto — e conferir `~/.local/share/julius/ai_calls.jsonl`.
@@ -139,6 +157,10 @@ Depois de **B**, vale um teste real intermediário: `julius produtos comparar 63
 - **v2.2 — tipos fragmentarem por singular/plural** (117) → `tomate`/`tomates` viram dois grupos silenciosamente. A regra de grafia do repositório resolve caixa e acento, não plural. Mitigação deliberada: nenhum corte fuzzy novo (seria um terceiro cutoff a medir sem evidência); detecção por `SELECT kind, count(*) ... GROUP BY kind`, correção por um `UPDATE`.
 - **v2.2 — mudança de comportamento no `highlight`** (119) → o mínimo/máximo passa a sair de grupos UN heterogêneos sem conteúdo. É correção de um erro medido (500ml marcada como mais barata que 1,5L), não regressão; os dois testes existentes de highlight continuam passando pelo ramo "mesmo `product_id`".
 - **v2.2 — reversão de "conteúdo sempre confirmado"** (122) → um agente futuro pode "restaurar" a confirmação achando que foi regressão. Mitigação: o 130 exige que o `CLAUDE.md` registre o **porquê** da reversão, não só o novo comportamento.
+- **v2.3 — a segunda chamada contaminar o `enrich`** (133) → o valor do arranjo todo está na recusa honesta do prompt de produção (`null` certo em 6 de 6). Mitigação: prompts, versões e validadores separados; `PROMPT_VERSIONS["enrich"]` não muda e o teste que prova o `null` continua verde.
+- **v2.3 — a intuição de varejo errar se dizendo certa** (133/135) → medido: `Filme PVC 30m x 28cm` virou `30 UN` com o campo de certeza marcado. Mitigação estrutural, não de prompt: a intuição nunca grava, só alimenta opções, e o humano pula. Conteúdo errado é o único campo cujo erro **não** aparece na saída normal — vira um R$/UN plausível.
+- **v2.3 — vocabulário de tags parar de crescer sozinho** (132) → efeito colateral desejado do "primeira categoria **conhecida**", que protege a medição de `TAG_MATCH_CUTOFF`. Custo zero na amostra (25 de 25 já eram conhecidas); quando acontecer, o produto fica pendente e reaparece.
+- **v2.3 — a primeira rodada ser grande** (136) → ~86 produtos contra 4 pelo critério antigo, ~4 chamadas, ~US$ 0,02. Decidido nos requisitos: roda inteira, sem teto e sem confirmação.
 - **v2.2 — apagar o `_files/` é a única operação destrutiva do sistema** (128) → três guardas exigidas por teste: nome derivado exato, precisa ser diretório real, nunca symlink. Pendente de veto do usuário; vetado, a função existe e não é chamada.
 
 ## Questões assumidas nos tickets (mudariam pouco se a resposta fosse outra)
