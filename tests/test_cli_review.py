@@ -98,7 +98,7 @@ def test_revisar_prints_table_with_cupom_and_new_name_columns(monkeypatch):
     assert "Linguiça de frango Aurora" in result.output
 
 
-def test_revisar_prompts_for_ambiguous_tag_and_applies_choice(monkeypatch):
+def test_revisar_applies_first_known_tag_without_asking(monkeypatch):
     _import("qrcode.html")
     _ai_env(monkeypatch)
     client = ScriptedLlmClient(
@@ -107,33 +107,17 @@ def test_revisar_prompts_for_ambiguous_tag_and_applies_choice(monkeypatch):
     _stub_client(monkeypatch, client)
     monkeypatch.setattr(_review, "_is_interactive", lambda: True)
 
-    result = _run("produtos", "revisar", input="1\n")
+    result = _run("produtos", "revisar")
 
     assert result.exit_code == 0, result.output
     assert "mercearia" in _run("produtos", "listar").output
 
 
-def test_revisar_other_option_creates_new_tag(monkeypatch):
+def test_revisar_unknown_candidates_apply_nothing_and_report_pending(monkeypatch):
     _import("qrcode.html")
     _ai_env(monkeypatch)
     client = ScriptedLlmClient(
-        by_kind={"enrich": _enrich([{"id": 8, "readable_name": "Chá Relaxa", "tags": ["mercearia", "bebidas"], "content": None}])}
-    )
-    _stub_client(monkeypatch, client)
-    monkeypatch.setattr(_review, "_is_interactive", lambda: True)
-
-    result = _run("produtos", "revisar", input="3\novos\n")
-
-    assert result.exit_code == 0, result.output
-    output = _run("produtos", "listar").output
-    assert "ovos" in output
-
-
-def test_revisar_enter_skips_and_reports_pending(monkeypatch):
-    _import("qrcode.html")
-    _ai_env(monkeypatch)
-    client = ScriptedLlmClient(
-        by_kind={"enrich": _enrich([{"id": 8, "readable_name": "Chá Relaxa", "tags": ["mercearia", "bebidas"], "content": None}])}
+        by_kind={"enrich": _enrich([{"id": 8, "readable_name": "Chá Relaxa", "tags": ["ovos"], "content": None}])}
     )
     _stub_client(monkeypatch, client)
     monkeypatch.setattr(_review, "_is_interactive", lambda: True)
@@ -142,6 +126,7 @@ def test_revisar_enter_skips_and_reports_pending(monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert "Pendentes: 1 produto(s) sem categoria." in result.output
+    assert "ovos" not in _run("produtos", "listar").output
 
 
 def test_revisar_applies_content_without_asking(monkeypatch):
@@ -279,7 +264,7 @@ def test_revisar_summary_omits_zero_counts(monkeypatch):
 
     result = _run("produtos", "revisar")
 
-    assert "Aplicado: 1 nome(s)." in result.output
+    assert "Aplicado: 1 nome(s), 1 categoria(s)." in result.output
     assert "conteúdo" not in result.output and "tipo(s)" not in result.output
 
 
@@ -298,7 +283,7 @@ def test_revisar_survives_unwritable_log(monkeypatch, tmp_path):
     assert "linguiça" in _run("produtos", "listar").output
 
 
-def test_revisar_non_interactive_without_sim_applies_only_auto_and_prints_content_commands(monkeypatch):
+def test_revisar_non_interactive_applies_known_categories_and_content(monkeypatch):
     _import("qrcode.html")
     _ai_env(monkeypatch)
     client = ScriptedLlmClient(
@@ -317,20 +302,20 @@ def test_revisar_non_interactive_without_sim_applies_only_auto_and_prints_conten
     result = _run("produtos", "revisar")
 
     assert result.exit_code == 0, result.output
-    assert "Pendentes: 1 produto(s) sem categoria." in result.output
+    assert "Pendentes:" not in result.output
     output = _run("produtos", "listar").output
-    assert "carnes" in output and "hortifruti" in output
+    assert "carnes" in output and "hortifruti" in output and "mercearia" in output
     assert "30 UN" in output
 
 
-def test_revisar_sim_applies_first_tag_even_if_unknown(monkeypatch):
+def test_revisar_sim_does_not_apply_unknown_tag(monkeypatch):
     _import("qrcode.html")
     _ai_env(monkeypatch)
     client = ScriptedLlmClient(
         by_kind={
             "enrich": _enrich(
                 [
-                    {"id": 8, "readable_name": "Chá Relaxa", "tags": ["mercearia", "bebidas"], "content": None},
+                    {"id": 8, "readable_name": "Chá Relaxa", "tags": ["ovos"], "content": None},
                     {"id": 5, "readable_name": "Ovo Grande", "tags": ["hortifruti"], "content": {"quantity": 30, "unit": "UN"}},
                 ]
             )
@@ -342,7 +327,8 @@ def test_revisar_sim_applies_first_tag_even_if_unknown(monkeypatch):
 
     assert result.exit_code == 0, result.output
     output = _run("produtos", "listar").output
-    assert "mercearia" in output
+    assert "ovos" not in output
+    assert "hortifruti" in output
     assert "30 UN" in output
 
 

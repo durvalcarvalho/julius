@@ -57,7 +57,7 @@ def _table(proposals: Sequence[ProductProposal]) -> Table:
     table = Table("ID", "Cupom", "Nome", "Categoria", "Tipo", "Conteúdo")
     for proposal in proposals:
         name = proposal.readable_name or proposal.current_name
-        category = proposal.auto_tag or ("? " + ", ".join(proposal.tags) if proposal.tags else "")
+        category = proposal.tag or ("? " + ", ".join(proposal.tags) if proposal.tags else "")
         content = f"{proposal.content.quantity:g} {proposal.content.unit}" if proposal.content else ""
         table.add_row(str(proposal.product_id), proposal.current_name, name, category, proposal.kind or "", content)
     return table
@@ -107,7 +107,7 @@ def review_products(
     # what left 32 of 79 UN products without content.
     applied: list[AppliedAction] = []
     for proposal in proposals:
-        applied += curation.apply(conn, proposal, tag=proposal.auto_tag, content=True, kind=True)
+        applied += curation.apply(conn, proposal, tag=proposal.tag, content=True, kind=True)
     _log_actions(settings, applied)
     counts = Counter(action.field for action in applied)
     summary = ", ".join(f"{counts[field]} {label}" for field, label in _FIELD_LABELS if counts[field])
@@ -117,13 +117,11 @@ def review_products(
 
     pending = 0
     for proposal in proposals:
-        if proposal.auto_tag is not None:
+        if proposal.tag is not None:
             continue
-        chosen: str | None = None
-        if interactive:
-            chosen = _ask_tag(proposal)
-        elif assume_yes:
-            chosen = proposal.tags[0]
+        # `--sim` no longer applies an unknown first candidate: creating vocabulary unattended is
+        # what would put the measured TAG_MATCH_CUTOFF at risk (ticket 132).
+        chosen = _ask_tag(proposal) if interactive else None
         if chosen:
             _log_actions(settings, curation.apply(conn, proposal, tag=chosen, content=False, kind=False))
         else:

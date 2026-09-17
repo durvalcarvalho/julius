@@ -138,15 +138,13 @@ class ProductEnrichment:
 class ProductProposal:
     product_id: int
     current_name: str
+    receipt_description: str  # what the coupon said; "" when the product has no price yet
     readable_name: str | None  # None => keep current (manually renamed before, or model kept it)
     tags: tuple[str, ...]
-    tag_is_known: bool  # tags[0] exists in the tags table
+    tag: str | None  # first candidate that already exists in the vocabulary; None => nothing to apply
     content: ContentSuggestion | None
     kind: str | None  # None => nothing to apply
-
-    @property
-    def auto_tag(self) -> str | None:
-        return self.tags[0] if len(self.tags) == 1 and self.tag_is_known else None
+    sold_by_unit: bool  # whether content is worth asking about at all
 
 
 @dataclass(frozen=True)

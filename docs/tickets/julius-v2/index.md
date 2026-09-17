@@ -71,7 +71,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 129 | [CLI: entrada e arquivamento](129-cli-inbox-archive.md) | 128 | M | feito (sem `discard_sidecar` — veto pendente) | `importar` sem argumento, arquiva e descarta sidecar, `make inbox`, `.gitignore` |
 | 130 | [e2e + docs v2.2](130-e2e-docs-sync.md) | 117–129 | M | feito | `test_e2e` do ciclo novo, `CLAUDE.md`/`README.md` (inclui a reversão do conteúdo confirmado) |
 | 131 | [Repositório: pendência por campo](131-products-incomplete-queries.md) | — | S | feito | `incomplete_product_ids`, `sold_by_unit_ids`, `receipt_descriptions` |
-| 132 | [curation: proposta completa](132-curation-proposal-reshape.md) | 131 | M | aberto | `ProductProposal.tag`/`receipt_description`/`sold_by_unit`; fim de `auto_tag` |
+| 132 | [curation: proposta completa](132-curation-proposal-reshape.md) | 131 | M | feito | `ProductProposal.tag`/`receipt_description`/`sold_by_unit`; fim de `auto_tag` |
 | 133 | [suggestions: intuição de embalagem](133-suggestions-packaging.md) | — | M | aberto | `PackagingHint`, prompt `packaging` v1, marcador no fake |
 | 134 | [review: tabela honesta + categoria auto](134-review-table-and-auto-category.md) | 132 | M | aberto | colunas com valor atual em `dim`, cupom de verdade, fim do laço de categoria |
 | 135 | [review: pergunta de conteúdo](135-review-content-question.md) | 133, 134 | M | aberto | `_ask_content`, `_FORM_LABELS`, `--sim` redefinido |

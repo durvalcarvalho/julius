@@ -17,7 +17,7 @@ MAX_DUPLICATE_PAIRS = 20  # one merge call per review
 
 
 def pending_product_ids(conn: sqlite3.Connection) -> list[int]:
-    return products.untagged_product_ids(conn)
+    return products.incomplete_product_ids(conn)
 
 
 def propose(
@@ -31,6 +31,8 @@ def propose(
         return []
     known = products.all_tag_names(conn)
     known_kinds = products.all_kinds(conn)
+    descriptions = products.receipt_descriptions(conn, [pid for pid, _ in found])
+    by_unit = products.sold_by_unit_ids(conn, [pid for pid, _ in found])
     enrichment = suggestions.enrich_products(
         conn, config, client, [product for _, product in found], known, known_kinds
     )
@@ -48,11 +50,13 @@ def propose(
             ProductProposal(
                 product_id=product_id,
                 current_name=product.canonical_name,
+                receipt_description=descriptions.get(product_id, ""),
                 readable_name=readable_name,
                 tags=item.tags,
-                tag_is_known=item.tags[0] in known,
+                tag=next((tag for tag in item.tags if tag in known), None),
                 content=content,
                 kind=_proposed_kind(product, item.kind),
+                sold_by_unit=product_id in by_unit,
             )
         )
     return proposals
