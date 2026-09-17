@@ -1,0 +1,20 @@
+docs/design/merge-and-unit-price-v2.4.md
+  s_e32683ed46ac18::t_85669d07338b75 1-294
+  s_e32683ed46ac18::t_b23f7e18818e8a 295-300
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ad6ad3ec6c97286809aa9db284d8e46dfee587d2",
+  "prompts": {},
+  "sessions": {
+    "s_e32683ed46ac18": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04c69812-c145-481d-872c-805dcef575c8",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
