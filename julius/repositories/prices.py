@@ -11,6 +11,7 @@ EXPORT_COLUMNS = (
     "store_nickname",
     "store_address",
     "product_id",
+    "group_product_id",
     "canonical_name",
     "product_code",
     "description",
@@ -24,11 +25,12 @@ EXPORT_COLUMNS = (
 
 _EXPORT_SQL = """
 SELECT p.purchased_at, p.store_cnpj, s.nickname AS store_nickname, s.address AS store_address,
-       p.product_id, pr.canonical_name, p.product_code, p.description, p.quantity, p.unit,
-       p.unit_price, p.total_price, p.access_key, p.item_index
+       p.product_id, g.root_id AS group_product_id, pr.canonical_name, p.product_code, p.description,
+       p.quantity, p.unit, p.unit_price, p.total_price, p.access_key, p.item_index
 FROM prices p
 JOIN stores s ON s.cnpj = p.store_cnpj
 JOIN products pr ON pr.id = p.product_id
+JOIN product_group g ON g.product_id = p.product_id
 ORDER BY p.purchased_at, p.access_key, p.item_index
 """
 
@@ -63,19 +65,22 @@ def prices_for_products(conn: sqlite3.Connection, product_ids: Sequence[int]) ->
     placeholders = ",".join("?" * len(product_ids))
     rows = conn.execute(
         f"""
-        SELECT p.product_id, pr.canonical_name, s.nickname, s.address, p.unit, p.unit_price, p.purchased_at,
-               pr.content_quantity, pr.content_unit, pr.kind, p.access_key
+        SELECT g.root_id, p.product_id AS source_product_id, root.canonical_name, s.nickname, s.address,
+               p.unit, p.unit_price, p.purchased_at, root.content_quantity, root.content_unit, root.kind,
+               p.access_key
         FROM prices p
+        JOIN product_group g ON g.product_id = p.product_id
+        JOIN products root ON root.id = g.root_id
         JOIN stores s ON s.cnpj = p.store_cnpj
-        JOIN products pr ON pr.id = p.product_id
-        WHERE p.product_id IN ({placeholders})
+        WHERE g.root_id IN ({placeholders})
         ORDER BY p.purchased_at DESC, p.unit_price
         """,
         tuple(product_ids),
     )
     return [
         PriceRecord(
-            product_id=row["product_id"],
+            product_id=row["root_id"],
+            source_product_id=row["source_product_id"],
             canonical_name=row["canonical_name"],
             store_nickname=row["nickname"],
             unit=row["unit"],
@@ -94,9 +99,6 @@ def prices_for_products(conn: sqlite3.Connection, product_ids: Sequence[int]) ->
 def export_rows(conn: sqlite3.Connection) -> list[dict[str, object]]:
     return [dict(zip(EXPORT_COLUMNS, row)) for row in conn.execute(_EXPORT_SQL)]
 
-
-def reassign_product(conn: sqlite3.Connection, source_id: int, target_id: int) -> None:
-    conn.execute("UPDATE prices SET product_id = ? WHERE product_id = ?", (target_id, source_id))
 
 
 def count(conn: sqlite3.Connection) -> int:

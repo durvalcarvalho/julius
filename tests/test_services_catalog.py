@@ -85,23 +85,22 @@ def test_rename_product_and_errors(conn):
         catalog.rename_product(conn, 9999, "X")
 
 
-def test_merge_moves_skus_prices_and_tags_then_deletes_source(conn):
+def test_merge_groups_the_history_without_moving_or_deleting_anything(conn):
     _import(conn, "qrcode.html")
     _import(conn, "qrcode-3.html")
     source_id, target_id = _tomato_ids(conn)
     catalog.tag_product(conn, source_id, "hortifruti")
     products_before = len(products.list_products(conn))
-    prices_before = prices.count(conn)
+    rows_before = dict(conn.execute("SELECT product_id, count(*) FROM prices GROUP BY product_id"))
 
     catalog.merge_products(conn, source_id, target_id)
 
     merged = prices.prices_for_products(conn, [target_id])
     assert {record.purchased_at[:10] for record in merged} == {"2026-09-12", "2026-09-07"}
-    assert products.get_product(conn, source_id) is None
     assert products.get_product(conn, target_id).tags == ("hortifruti",)
-    assert len(products.list_products(conn)) == products_before - 1
-    assert prices.count(conn) == prices_before
-    assert _tomato_ids(conn) == [target_id]
+    assert len(products.list_products(conn)) == products_before - 1  # the absorbed one is hidden
+    assert dict(conn.execute("SELECT product_id, count(*) FROM prices GROUP BY product_id")) == rows_before
+    assert conn.execute("SELECT count(*) FROM products WHERE id = ?", (source_id,)).fetchone()[0] == 1
 
 
 def test_merge_same_id_raises_value_error(conn):

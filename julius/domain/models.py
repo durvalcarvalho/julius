@@ -77,6 +77,7 @@ class PriceRecord:
     store_address: str | None = None
     kind: str | None = None  # of the product this row belongs to
     access_key: str = ""  # of the receipt this row came from; lets a caller tell new rows from history
+    source_product_id: int = 0  # the product this row was bought as; product_id is its group's root
 
 
 @dataclass(frozen=True)

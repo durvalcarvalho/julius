@@ -36,13 +36,7 @@ def merge_products(conn: sqlite3.Connection, source_id: int, target_id: int) -> 
     source = _require_product(conn, source_id)
     target = _require_product(conn, target_id)
     with conn:
-        products.reassign_skus(conn, source_id, target_id)
-        prices.reassign_product(conn, source_id, target_id)
-        for tag in source.tags:
-            products.add_tag(conn, target_id, tag)
-        if target.content_quantity is None and source.content_quantity is not None:
-            products.set_content(conn, target_id, source.content_quantity, source.content_unit)  # type: ignore[arg-type]
-        products.delete_product(conn, source_id)
+        products.set_merged_into(conn, source_id, target_id)
 
 
 def tag_product(conn: sqlite3.Connection, product_id: int, tag: str) -> None:

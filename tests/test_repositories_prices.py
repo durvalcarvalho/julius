@@ -146,21 +146,50 @@ def test_export_rows_has_exact_columns_in_order_and_is_sorted(conn):
     assert rows[0]["canonical_name"] == "REFRI PEPSI PET 2L"
 
 
-def test_reassign_product_moves_rows_and_leaves_others(conn):
+def test_prices_for_products_gathers_the_whole_group(conn):
     _insert(conn, _receipt(KEY_A, "2026-09-12T13:09:16", STORE_CNPJ, _item(code="7147", description="TOMATE ITALIANO kg")))
     _insert(conn, _receipt(KEY_B, "2026-09-07T18:18:30", OTHER_CNPJ, _item(code="22039", description="TOMATE ITALIANO UNIAO kg")))
     _insert(conn, _receipt("3" * 44, "2026-09-05T16:50:34", STORE_CNPJ, _item(code="3921", description="CONTRA FILE KG")))
     ids = {name: pid for pid, name in products.product_names(conn)}
-    source, target, other = ids["TOMATE ITALIANO kg"], ids["TOMATE ITALIANO UNIAO kg"], ids["CONTRA FILE KG"]
+    absorbed, root, other = ids["TOMATE ITALIANO kg"], ids["TOMATE ITALIANO UNIAO kg"], ids["CONTRA FILE KG"]
+    by_product_before = dict(conn.execute("SELECT product_id, count(*) FROM prices GROUP BY product_id"))
 
-    prices.reassign_product(conn, source, target)
+    products.set_merged_into(conn, absorbed, root)
 
-    assert prices.prices_for_products(conn, [source]) == []
-    assert len(prices.prices_for_products(conn, [target])) == 2
+    records = prices.prices_for_products(conn, [root])
+    assert len(records) == 2
+    assert {record.product_id for record in records} == {root}
+    assert {record.source_product_id for record in records} == {root, absorbed}
     assert len(prices.prices_for_products(conn, [other])) == 1
+    # the whole point: merging moved no price row
+    assert dict(conn.execute("SELECT product_id, count(*) FROM prices GROUP BY product_id")) == by_product_before
+
+
+def test_prices_for_products_names_the_group(conn):
+    _insert(conn, _receipt(KEY_A, "2026-09-12T13:09:16", STORE_CNPJ, _item(code="7147", description="TOMATE ITALIANO kg")))
+    _insert(conn, _receipt(KEY_B, "2026-09-07T18:18:30", OTHER_CNPJ, _item(code="22039", description="TOMATE ITALIANO UNIAO kg")))
+    ids = {name: pid for pid, name in products.product_names(conn)}
+    absorbed, root = ids["TOMATE ITALIANO kg"], ids["TOMATE ITALIANO UNIAO kg"]
+    products.set_merged_into(conn, absorbed, root)
+
+    assert {record.canonical_name for record in prices.prices_for_products(conn, [root])} == {"TOMATE ITALIANO UNIAO kg"}
 
 
 def test_count(conn):
     assert prices.count(conn) == 0
     _insert(conn, _receipt(KEY_A, "2026-09-12T13:09:16", STORE_CNPJ, _item(index=1), _item(index=2), _item(index=3)))
     assert prices.count(conn) == 3
+
+
+def test_export_has_group_product_id(conn):
+    _insert(conn, _receipt(KEY_A, "2026-09-12T13:09:16", STORE_CNPJ, _item(code="7147", description="TOMATE ITALIANO kg")))
+    _insert(conn, _receipt(KEY_B, "2026-09-07T18:18:30", OTHER_CNPJ, _item(code="22039", description="TOMATE ITALIANO UNIAO kg")))
+    ids = {name: pid for pid, name in products.product_names(conn)}
+    absorbed, root = ids["TOMATE ITALIANO kg"], ids["TOMATE ITALIANO UNIAO kg"]
+
+    unmerged = {row["product_id"]: row["group_product_id"] for row in prices.export_rows(conn)}
+    assert unmerged == {absorbed: absorbed, root: root}
+
+    products.set_merged_into(conn, absorbed, root)
+    merged = {row["product_id"]: row["group_product_id"] for row in prices.export_rows(conn)}
+    assert merged == {absorbed: root, root: root}  # the row keeps the product it was bought as
