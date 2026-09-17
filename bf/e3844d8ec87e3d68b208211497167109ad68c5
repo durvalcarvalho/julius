@@ -1,0 +1,31 @@
+docs/tickets/julius-v2/index.md
+  s_e32683ed46ac18::t_52456c08d1531f 89
+CLAUDE.md
+  s_e32683ed46ac18::t_976910ff596859 287-296,543,560-561,622
+  s_e32683ed46ac18::t_64a087b710a8a0 380-383,476-478
+  s_e32683ed46ac18::t_ba3d7e5d2f1352 299-311,313-317
+  s_e32683ed46ac18::t_01ef249c0ae603 27-30,225-244
+  s_e32683ed46ac18::t_4e2f7ac540c16f 245
+docs/tickets/julius-v2/146-e2e-docs-v24.md
+  s_e32683ed46ac18::t_52456c08d1531f 82-117
+README.md
+  s_e32683ed46ac18::t_64a087b710a8a0 147,185-186,195,265
+tests/test_e2e.py
+  s_e32683ed46ac18::t_5cbb8052c7441c 549-624
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bfe3844d8ec87e3d68b208211497167109ad68c5",
+  "prompts": {},
+  "sessions": {
+    "s_e32683ed46ac18": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04c69812-c145-481d-872c-805dcef575c8",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
