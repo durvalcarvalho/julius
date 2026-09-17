@@ -546,3 +546,79 @@ def test_v23_kg_product_never_asked_for_content(monkeypatch):
     assert result.exit_code == 0, result.output
     assert "— conteúdo" not in result.output
     assert [call for call in client.calls if '"packaging"' in call[0]] == []
+
+
+def test_v24_merge_cycle(monkeypatch, tmp_path):
+    """Merge, read the group as one product, unmerge, and find the pair offered again — with no
+    price row ever changing hands."""
+    _import("qrcode.html", "qrcode-3.html")
+    _ai_env(monkeypatch)
+    from julius.cli import _review
+
+    monkeypatch.setattr(_review, "_is_interactive", lambda: False)
+    absorbed = _product_id("TOMATE ITALIANO kg")
+    survivor = _product_id("TOMATE ITALIANO UNIAO kg")
+    assert survivor < absorbed  # the survivor is the lowest id
+    conn = db.connect(tmp_path / "prices.db")
+    rows_before = dict(conn.execute("SELECT product_id, count(*) FROM prices GROUP BY product_id"))
+    conn.close()
+
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich(
+                [{"id": absorbed, "readable_name": "Tomate italiano", "tags": ["hortifruti"], "content": None, "kind": "tomate"}]
+            ),
+            "merge": LlmResponse(json.dumps({"pairs": [{"id": 1, "rationale": "mesmo tomate", "same_product": True, "confidence": 0.7}]}), 10, 5),
+            "packaging": LlmResponse(json.dumps({"packaging": []}), 10, 5),
+        }
+    )
+    _stub_client(monkeypatch, client)
+
+    merged = _run("produtos", "revisar")
+
+    assert merged.exit_code == 0, merged.output
+    assert "Fundidos automaticamente (confira):" in merged.output
+    assert f"desfazer: julius produtos desfundir {absorbed}" in merged.output
+    actions = [json.loads(line) for line in (tmp_path / "actions.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert {"merge"} <= {action["field"] for action in actions}
+
+    # the group reads as one product, under one name
+    consulta = _run("consultar", "tomate").output
+    assert "2026-09-12" in consulta and "2026-09-07" in consulta
+    assert "TOMATE ITALIANO kg" not in consulta
+
+    # and not one price row moved
+    conn = db.connect(tmp_path / "prices.db")
+    assert dict(conn.execute("SELECT product_id, count(*) FROM prices GROUP BY product_id")) == rows_before
+    conn.close()
+
+    undone = _run("produtos", "desfundir", str(absorbed))
+
+    assert undone.exit_code == 0, undone.output
+    listar = _run("produtos", "listar").output
+    assert "Tomate italiano" in listar and "TOMATE ITALIANO UNIAO kg" in listar
+
+
+def test_v24_divergent_content_is_never_merged(monkeypatch):
+    """The measured guard: two declared and different contents mean the pair is not the same
+    product, so it never even reaches the AI."""
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    from julius.cli import _review
+
+    monkeypatch.setattr(_review, "_is_interactive", lambda: False)
+    assert _run("produtos", "definir-conteudo", "1", "2", "L").exit_code == 0
+    assert _run("produtos", "definir-conteudo", "2", "1.5", "L").exit_code == 0
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich([{"id": 1, "readable_name": "Refrigerante Pepsi 2L", "tags": ["bebidas"], "content": None}]),
+            "merge": LlmResponse(json.dumps({"pairs": [{"id": 1, "rationale": "x", "same_product": True, "confidence": 1.0}]}), 10, 5),
+        }
+    )
+    _stub_client(monkeypatch, client)
+
+    result = _run("produtos", "revisar")
+
+    assert result.exit_code == 0, result.output
+    output = _run("produtos", "listar").output
+    assert "Refrigerante Pepsi 2L" in output and "REFRI ANT GUARANA PET 1.5L" in output

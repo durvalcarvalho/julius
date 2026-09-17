@@ -86,7 +86,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 143 | [review: funde e avisa](143-review-auto-merge.md) | 141, 142 | M | feito | fusão automática do que a IA confirmou, com pedido de conferência |
 | 144 | [search: colapso + ordem](144-search-collapse-and-order.md) | — | M | feito | linhas idênticas colapsadas; ordem segue a base de comparação |
 | 145 | [CLI: mais barato por conteúdo](145-cli-cheapest-per-content-line.md) | 144 | S | feito | a frase que responde "qual embalagem compensa" |
-| 146 | [e2e + docs v2.4](146-e2e-docs-v24.md) | 137–145 | M | aberto | ciclo completo, rodada real, `CLAUDE.md`/`README.md` |
+| 146 | [e2e + docs v2.4](146-e2e-docs-v24.md) | 137–145 | M | feito | ciclo completo, rodada real, `CLAUDE.md`/`README.md` |
 
 Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum ticket L: o que ficaria L foi dividido (suggestions em 107/108; CLI em 111/112/113; na v2.2, serviço e CLI sempre em tickets separados — 124/125 e 126/127 — e a infra de arquivamento separada da CLI que a usa, 128/129).
 

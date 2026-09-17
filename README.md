@@ -144,6 +144,7 @@ julius consultar arroz -n 5            # só as 5 compras mais recentes por unid
 
 - Uma tabela por unidade de venda (`KG`, `UN`), com a data e o **dia da semana** (`seg`…`dom`) de cada compra — só o dado, sem nenhuma afirmação sobre padrão semanal.
 - Linhas mais recentes primeiro. A linha de **menor preço fica verde**, a de **maior fica vermelha** — e essas duas sempre aparecem, mesmo que sejam mais antigas que o `-n` pede.
+- **Uma linha responde qual embalagem compensa**: quando o grupo é comparado por conteúdo, a tabela sai ordenada pelo preço por litro/quilo/unidade e termina com a frase — *"Mais barato por litro: Água mineral Indaiá 1,5L a R$ 2,46/L — contra R$ 3,58/L de Água Crystal com gás 500ml"*. Linhas idênticas (mesmo produto, dia, mercado e preço) aparecem uma vez só.
 - **O destaque respeita a base de comparação**: por KG, o preço por quilo já é comparável; por UN, duas embalagens de tamanhos diferentes só se comparam pelo preço por conteúdo, e quem ainda não tem conteúdo definido fica **sem** destaque em vez de ganhar um destaque errado. É por isso que preencher conteúdo (ou deixar a IA preencher) vale tanto.
 - A célula do mercado mostra o apelido e, embaixo em cinza, o endereço do cupom (quando já foi importado com endereço).
 - Se o produto tem embalagem definida (veja `produtos definir-conteudo`), surge a coluna **Por L / Por KG / Por UN**.
@@ -181,8 +182,8 @@ julius produtos definir-conteudo 14 --remover    # desfaz o conteúdo
 julius produtos tipo 14 suco                    # grupo de comparação entre mercados
 julius produtos tipo 14 --remover               # desfaz o tipo
 julius produtos comparar 14 31                  # "são a mesma coisa?" — só opina
-julius produtos fundir 31 14                    # 31 desaparece, 14 fica com todo o histórico
-julius produtos fundir 31 14 --sim              # sem pedir confirmação
+julius produtos fundir 31 14                    # 31 passa a fazer parte de 14, que fica com o histórico
+julius produtos desfundir 31                    # desfaz: 31 volta a ser separado, com tudo que era dele
 julius produtos revisar                         # pede à IA nome/categoria/conteúdo/tipo dos pendentes
 julius produtos revisar --sim                   # não pergunta nada; conteúdo sem resposta fica pendente
 julius produtos revisar --ultimas-acoes         # o que a IA aplicou, com o comando pra desfazer
@@ -191,7 +192,7 @@ julius produtos revisar --ultimas-acoes         # o que a IA aplicou, com o coma
 - **Nome**: nasce igual à descrição do primeiro cupom (`SUCO INT PARREIRAS DO SUL GF 1.5L UVA`). Renomeie quando cansar de ler abreviação, ou deixe a IA propor em `produtos revisar`.
 - **Tag**: é o único jeito de agrupar por categoria. Busca por texto não sabe que "detergente" é "limpeza"; a tag sabe. `--remover` desfaz uma marcação errada (a categoria em si continua existindo pra outros produtos).
 - **Conteúdo**: habilita a coluna de preço por litro/quilo/unidade. `G` e `ML` são convertidos para `KG` e `L` na hora de gravar, para todo o catálogo falar a mesma língua.
-- **Fundir**: irreversível — por isso pede confirmação. Use quando o mesmo produto aparece com códigos diferentes em mercados diferentes.
+- **Fundir**: **reversível** desde a v2.4 — nada é apagado e nenhuma linha de preço muda de lugar; o produto absorvido só sai das listagens. Use quando o mesmo produto aparece com códigos diferentes em mercados diferentes, e `produtos desfundir ID` desfaz. Por ser reversível, não pede confirmação e imprime o comando de desfazer.
 - **Comparar**: dá similaridade de texto e, se a IA estiver configurada, uma opinião. Nunca funde sozinho.
 - **Tipo**: o grupo de comparação — "que tipo de coisa isso é" (`tomate`, `leite uht`). É o que faz `mercados comparar` e o sinal de preço do `importar` compararem entre lojas **sem fundir** produto nenhum. A IA propõe e grava sozinha; `--remover` desfaz, e a coluna "Tipo" em `produtos listar` mostra o que ela escolheu.
 - **Revisar**: a tela de curadoria assistida por IA. Entra na fila todo produto a que falta **categoria, tipo ou conteúdo** — conteúdo só é cobrado de quem é vendido por UN, porque R$/kg já é preço por conteúdo. Nome legível, categoria, tipo e o conteúdo que estava escrito no rótulo são aplicados **sem perguntar** (tudo reversível por comando). A única pergunta é o conteúdo que a IA se recusou a afirmar: ela sugere valores plausíveis pelo costume do varejo (`[1] 10 UN · pacote`), você escolhe, digita ou pula com Enter — pular deixa o produto pendente para a próxima rodada, nunca marca "não tem conteúdo". `--sim` não pergunta nada. `--ultimas-acoes` lista o que foi aplicado, uma linha por campo, com o comando de desfazer pronto pra copiar. Ver "IA opcional".
@@ -261,7 +262,7 @@ Julius foi desenhado para custar zero. A IA existe pra fazer a curadoria que nin
 | Produto vendido por UN cujo conteúdo a IA **recusou** afirmar | Uma segunda chamada (`suggest_packaging`) diz como o varejo brasileiro vende aquilo e oferece até 3 candidatos. Ela **nunca grava**: só vira opção numerada numa pergunta | você, escolhendo, digitando ou pulando; o que for gravado desfaz com `produtos definir-conteudo ID --remover` |
 | `consultar` não achou nada por nome — nem puro, nem depois de descartar uma tag detectada no texto — e sem `--tag` explícito | Tenta achar pela IA (`match_products`) antes de desistir | Nada a desfazer — é só uma tentativa a mais na mesma busca; a dica sugere renomear/marcar pra achar direto na próxima |
 | "Esses dois produtos são iguais?" | `produtos comparar` mostra a opinião dela | você, com `produtos fundir` (nunca automático) |
-| Possíveis duplicatas encontradas na revisão | Imprime o comando `produtos fundir A B` pronto pra copiar | você decide se roda |
+| Possíveis duplicatas encontradas na revisão | **Funde** o que ela confirma, diz o que fez e por quê, e pede pra você conferir | Desfazer: `produtos desfundir ID`, que a própria notificação imprime. Par com conteúdo declarado diferente nos dois lados nem chega a ser candidato |
 
 **Como o teto vira realidade, não promessa:**
 
