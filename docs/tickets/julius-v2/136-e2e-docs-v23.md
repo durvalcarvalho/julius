@@ -89,6 +89,28 @@ modificar docs/tickets/julius-v2/index.md
 - [ ] `grep -n "recusa" CLAUDE.md` encontra o registro de que a recusa é o único sinal confiável.
 - [ ] Nenhum identificador em português no código novo; nenhuma mensagem de usuário em inglês.
 
+## Rodada real (executada em 2026-09-16, contra cópia do banco de produção)
+
+```
+cp ~/.local/share/julius/prices.db <cópia>.db
+JULIUS_DB=<cópia>.db julius produtos revisar --sim      # metade automática
+JULIUS_DB=<cópia>.db julius produtos revisar            # metade interativa (num pty)
+```
+
+Modelo `deepseek-flash`, banco com 105 produtos e 132 preços.
+
+| Número | Medido | Esperado no ticket |
+|---|---|---|
+| Produtos na fila (`incomplete_product_ids`) | **86** (contra **4** por `untagged_product_ids`) | ~86 contra 4 |
+| Perguntas de conteúdo | **5** — Sacola reutilizável, Brócolis Ninja, Filme PVC, Prato descartável, Espátula | ~6–7 |
+| Custo | **US$ 0,0095** (4 `enrich` + 1 `merge` + 1 `packaging`) | ~US$ 0,02 |
+
+Aplicado sozinho na passada automática: 1 nome, 5 categorias, 18 conteúdos, 79 tipos.
+
+**Questão 5 dos requisitos, fechada:** `OVOS IANA 30UN MEDIO BCO` recebeu `30 UN` **automaticamente** — o rótulo é inequívoco, então o caso que motivou o preço por conteúdo se conserta sozinho, sem pergunta.
+
+**O contraexemplo apareceu como previsto, e o desenho segurou:** a pergunta do Filme PVC saiu com `[1] 30 UN · unidade` (o modelo lendo "30m x 28cm" como 30 unidades). Nada foi gravado, porque a resposta foi pular. Os candidatos úteis também apareceram: Brócolis `1 UN · unidade`, Prato `10 / 20 / 50 UN · pacote`.
+
 ## Notas para o agente
 - O ponto mais importante da documentação é **por que a intuição não grava**. Sem isso, alguém daqui a três meses vai achar que faltou automatizar e vai "terminar o trabalho" — e o erro dele só apareceria como um preço por conteúdo errado numa tabela, que é o tipo de erro que este projeto inteiro existe para não cometer.
 - Registre também a regra de decisão em uma frase, porque ela generaliza: **a IA pode gravar sozinha o que o usuário consegue ver que está errado.** Nome, categoria e tipo passam; conteúdo inferido não passa.

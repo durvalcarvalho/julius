@@ -463,3 +463,86 @@ def test_v22_full_cycle(tmp_path, monkeypatch):
     after_undo = _run("mercados", "comparar")
     assert after_undo.exit_code == 0, after_undo.output
     assert "tomate · por KG" not in after_undo.output
+
+
+def _packaging(items: list[dict]) -> LlmResponse:
+    return LlmResponse(json.dumps({"packaging": items}), 100, 50)
+
+
+def test_v23_review_cycle(monkeypatch, tmp_path):
+    """One pass of the v2.3 review: label content is written on sight, a KG product is never asked
+    about, and the one UN product the AI refused becomes the single question on screen."""
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    from julius.cli import _review
+
+    monkeypatch.setattr(_review, "_is_interactive", lambda: True)
+    assert _run("produtos", "renomear", "12", "Picanha bovina").exit_code == 0
+
+    enrich = _enrich(
+        [
+            # content read straight off the label: written without asking
+            {"id": 5, "readable_name": "Sal Parrilla Lebre 500g", "tags": ["temperos"],
+             "content": {"quantity": 0.5, "unit": "KG"}, "kind": "sal"},
+            # sold by UN, the AI refuses the content: this is the only question
+            {"id": 6, "readable_name": "Prato Redondo Descartável 21cm", "tags": ["utilidades"],
+             "content": None, "kind": "prato descartável"},
+            # sold by KG: content is not owed, so it is never asked about
+            {"id": 12, "readable_name": "Picanha bovina", "tags": ["carnes"], "content": None, "kind": "picanha"},
+        ]
+    )
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": enrich,
+            "packaging": _packaging(
+                [{"id": 6, "form": "pack", "candidates": [{"quantity": 10, "unit": "UN"}, {"quantity": 20, "unit": "UN"}]}]
+            ),
+            "merge": LlmResponse(json.dumps({"pairs": []}), 10, 5),
+        }
+    )
+    _stub_client(monkeypatch, client)
+
+    first = _run("produtos", "revisar", input="1\n")
+
+    assert first.exit_code == 0, first.output
+    assert "— categoria" not in first.output  # the category question is gone for good
+    assert "[1] 10 UN · pacote" in first.output and "[2] 20 UN · pacote" in first.output
+    assert "Picanha bovina — conteúdo" not in first.output  # KG product, nothing to ask
+    # the coupon text and the readable name are different columns
+    renamed_row = _row_containing(first.output, "PICANHA BOV FAT kg PROMO")
+    assert "Picanha bovina" in renamed_row
+
+    listar = _run("produtos", "listar").output
+    assert "0,5 KG" in _row_containing(listar, "Sal Parrilla Lebre 500g")  # label content, no question
+    assert "10 UN" in _row_containing(listar, "Prato Redondo Descartável 21cm")  # the answered question
+
+    actions = [json.loads(line) for line in (tmp_path / "actions.jsonl").read_text(encoding="utf-8").splitlines()]
+    answered = [action for action in actions if action["field"] == "content" and action["product_id"] == 6]
+    assert answered[-1]["undo"] == "julius produtos definir-conteudo 6 --remover"
+
+    second = _run("produtos", "revisar", input="\n")
+
+    assert second.exit_code == 0, second.output
+    assert "Prato Redondo Descartável 21cm — conteúdo" not in second.output  # resolved, gone from the queue
+
+
+def test_v23_kg_product_never_asked_for_content(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    from julius.cli import _review
+
+    monkeypatch.setattr(_review, "_is_interactive", lambda: True)
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich([{"id": 11, "readable_name": "Linguiça Aurora", "tags": ["carnes"], "content": None}]),
+            "packaging": _packaging([{"id": 11, "form": "weight", "candidates": [{"quantity": 1, "unit": "KG"}]}]),
+            "merge": LlmResponse(json.dumps({"pairs": []}), 10, 5),
+        }
+    )
+    _stub_client(monkeypatch, client)
+
+    result = _run("produtos", "revisar")  # no input at all: nothing may block
+
+    assert result.exit_code == 0, result.output
+    assert "— conteúdo" not in result.output
+    assert [call for call in client.calls if '"packaging"' in call[0]] == []

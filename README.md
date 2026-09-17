@@ -119,7 +119,7 @@ Todos os comandos têm `--help`. Nomes em português porque são a interface; o 
 ```bash
 julius importar                                  # sem argumento: varre entrada/*.html
 julius importar cupom1.html cupom2.html          # ou vários caminhos de uma vez
-julius importar cupom.html --sim                 # aplica sugestões da IA sem perguntar
+julius importar cupom.html --sim                 # não pergunta nada (nem o conteúdo que a IA não soube)
 ```
 
 - Sem argumento, importa os `.html` da pasta de entrada (`entrada/`, veja `make inbox` acima). A varredura não é recursiva, então `entrada/importados/` fica invisível — é isso que faz `julius importar` significar "importe o que é novo".
@@ -184,7 +184,7 @@ julius produtos comparar 14 31                  # "são a mesma coisa?" — só 
 julius produtos fundir 31 14                    # 31 desaparece, 14 fica com todo o histórico
 julius produtos fundir 31 14 --sim              # sem pedir confirmação
 julius produtos revisar                         # pede à IA nome/categoria/conteúdo/tipo dos pendentes
-julius produtos revisar --sim                   # aplica sem perguntar também a categoria em dúvida
+julius produtos revisar --sim                   # não pergunta nada; conteúdo sem resposta fica pendente
 julius produtos revisar --ultimas-acoes         # o que a IA aplicou, com o comando pra desfazer
 ```
 
@@ -194,7 +194,7 @@ julius produtos revisar --ultimas-acoes         # o que a IA aplicou, com o coma
 - **Fundir**: irreversível — por isso pede confirmação. Use quando o mesmo produto aparece com códigos diferentes em mercados diferentes.
 - **Comparar**: dá similaridade de texto e, se a IA estiver configurada, uma opinião. Nunca funde sozinho.
 - **Tipo**: o grupo de comparação — "que tipo de coisa isso é" (`tomate`, `leite uht`). É o que faz `mercados comparar` e o sinal de preço do `importar` compararem entre lojas **sem fundir** produto nenhum. A IA propõe e grava sozinha; `--remover` desfaz, e a coluna "Tipo" em `produtos listar` mostra o que ela escolheu.
-- **Revisar**: a tela de curadoria assistida por IA — nome legível, categoria com um único candidato, conteúdo e tipo são aplicados sem perguntar (tudo reversível por comando); categoria em dúvida pergunta, ou fica pendente sem terminal. `--ultimas-acoes` lista o que foi aplicado, uma linha por campo, com o comando de desfazer pronto pra copiar. Ver "IA opcional".
+- **Revisar**: a tela de curadoria assistida por IA. Entra na fila todo produto a que falta **categoria, tipo ou conteúdo** — conteúdo só é cobrado de quem é vendido por UN, porque R$/kg já é preço por conteúdo. Nome legível, categoria, tipo e o conteúdo que estava escrito no rótulo são aplicados **sem perguntar** (tudo reversível por comando). A única pergunta é o conteúdo que a IA se recusou a afirmar: ela sugere valores plausíveis pelo costume do varejo (`[1] 10 UN · pacote`), você escolhe, digita ou pula com Enter — pular deixa o produto pendente para a próxima rodada, nunca marca "não tem conteúdo". `--sim` não pergunta nada. `--ultimas-acoes` lista o que foi aplicado, uma linha por campo, com o comando de desfazer pronto pra copiar. Ver "IA opcional".
 
 ### `exportar` — levar para a planilha
 
@@ -257,7 +257,8 @@ Julius foi desenhado para custar zero. A IA existe pra fazer a curadoria que nin
 
 | Situação | O que a IA faz | Quem grava / desfaz |
 |---|---|---|
-| Produto novo sem nome legível, categoria ou conteúdo | `produtos revisar` / `importar` chamam `enrich_products`: nome e categoria com um único candidato conhecido são aplicados **sem perguntar**; o resto pergunta (ou fica pendente, sem terminal); conteúdo nunca é gravado sem confirmação | Desfazer: `produtos renomear` / `produtos tag ID TAG --remover` |
+| Produto sem nome legível, categoria, tipo ou conteúdo | `produtos revisar` / `importar` chamam `enrich_products`: nome legível, a primeira categoria **já conhecida**, tipo e conteúdo **lido de rótulo inequívoco** são aplicados sem perguntar | Desfazer: `produtos renomear` / `produtos tag ID TAG --remover` / `produtos tipo ID --remover` / `produtos definir-conteudo ID --remover` |
+| Produto vendido por UN cujo conteúdo a IA **recusou** afirmar | Uma segunda chamada (`suggest_packaging`) diz como o varejo brasileiro vende aquilo e oferece até 3 candidatos. Ela **nunca grava**: só vira opção numerada numa pergunta | você, escolhendo, digitando ou pulando; o que for gravado desfaz com `produtos definir-conteudo ID --remover` |
 | `consultar` não achou nada por nome — nem puro, nem depois de descartar uma tag detectada no texto — e sem `--tag` explícito | Tenta achar pela IA (`match_products`) antes de desistir | Nada a desfazer — é só uma tentativa a mais na mesma busca; a dica sugere renomear/marcar pra achar direto na próxima |
 | "Esses dois produtos são iguais?" | `produtos comparar` mostra a opinião dela | você, com `produtos fundir` (nunca automático) |
 | Possíveis duplicatas encontradas na revisão | Imprime o comando `produtos fundir A B` pronto pra copiar | você decide se roda |
