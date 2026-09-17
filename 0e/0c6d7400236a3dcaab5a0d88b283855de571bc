@@ -1,0 +1,45 @@
+julius/cli/stores.py
+  s_b9350510fd756b::t_caa6133e8a68eb 128,132-138
+julius/services/comparison.py
+  s_b9350510fd756b::t_caa6133e8a68eb 49
+docs/requirements/differentiated-kinds.md
+  s_766f3b974b40c9::t_48998e32182c6a 28,150
+  s_b9350510fd756b::t_acdd1b3329d251 6,9-12,29-32,64-83,85-86,102-103,139,141-142,144
+  s_b9350510fd756b::t_a0e29b6098a044 2,13,15-17,33-34,36,38,40,42,91,96,115,117,119,121,123,125,127,129,131,133,143,145
+  s_b9350510fd756b::t_a3009c1808e2ae 1,3-5,7-8,14,18-27,35,37,39,41,43-63,84,87-90,92-95,97-101,104-114,116,118,120,122,124,126,128,130,132,134-138,140,146-149,151
+docs/design/differentiated-kinds.md
+  s_b9350510fd756b::t_2fb0cb2e5fc5f5 1-30,32-34,40-81,83-85,87,90-113,115-137,139,141-169
+  s_b9350510fd756b::t_6a174214e2b287 82,86,88-89,114,138,140
+  s_b9350510fd756b::t_2265f20f581384 31,35-36
+  s_b9350510fd756b::t_7c200d6a1b1ef4 37-39
+julius/domain/models.py
+  s_b9350510fd756b::t_caa6133e8a68eb 170
+tests/test_services_comparison.py
+  s_b9350510fd756b::t_2a8b9d9e15f88b 313-350
+tests/test_cli_catalog.py
+  s_b9350510fd756b::t_74f8c39c455335 374-386
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0e0c6d7400236a3dcaab5a0d88b283855de571bc",
+  "prompts": {},
+  "sessions": {
+    "s_766f3b974b40c9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4173796a-19bd-4f8e-ab60-b914b5dfeed1",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    },
+    "s_b9350510fd756b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ecb50120-f8f3-4865-91b5-87e0df07f6bc",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
