@@ -1,0 +1,19 @@
+docs/requirements/review-scope-v2.3.md
+  s_9897d2094c6052::t_d914cb8f8823a8 1-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5ee85d96dc42885150d7ed4f24e36450e32fbb4f",
+  "prompts": {},
+  "sessions": {
+    "s_9897d2094c6052": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "864f6773-d792-4392-aff4-08e50f62bd9e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
