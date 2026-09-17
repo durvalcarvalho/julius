@@ -107,9 +107,10 @@ def test_revisar_applies_first_known_tag_without_asking(monkeypatch):
     _stub_client(monkeypatch, client)
     monkeypatch.setattr(_review, "_is_interactive", lambda: True)
 
-    result = _run("produtos", "revisar")
+    result = _run("produtos", "revisar", input="\n")
 
     assert result.exit_code == 0, result.output
+    assert "— categoria" not in result.output
     assert "mercearia" in _run("produtos", "listar").output
 
 
@@ -548,11 +549,11 @@ def test_table_shows_category_and_discarded_candidates(monkeypatch):
     assert "?" not in output
 
 
-def test_revisar_asks_nothing_at_all(monkeypatch):
+def test_revisar_asks_nothing_for_a_kg_product(monkeypatch):
     _import("qrcode.html")
     _ai_env(monkeypatch)
     client = ScriptedLlmClient(
-        by_kind={"enrich": _enrich([{"id": 8, "readable_name": "Chá Relaxa", "tags": ["mercearia", "bebidas"], "content": None}])}
+        by_kind={"enrich": _enrich([{"id": 11, "readable_name": "Linguiça", "tags": ["carnes", "frios"], "content": None}])}
     )
     _stub_client(monkeypatch, client)
     monkeypatch.setattr(_review, "_is_interactive", lambda: True)
@@ -560,6 +561,7 @@ def test_revisar_asks_nothing_at_all(monkeypatch):
     result = _run("produtos", "revisar")  # no input= at all: nothing may block on stdin
 
     assert result.exit_code == 0, result.output
+    assert "— categoria" not in result.output and "— conteúdo" not in result.output
 
 
 def test_revisar_no_pending_line_when_nothing_pending(monkeypatch):
@@ -575,3 +577,144 @@ def test_revisar_no_pending_line_when_nothing_pending(monkeypatch):
     _stub_client(monkeypatch, client)
 
     assert "Pendentes:" not in _run("produtos", "revisar").output  # sold by KG: content is not owed
+
+
+def _packaging(items: list[dict], input_tokens: int = 100, output_tokens: int = 50) -> LlmResponse:
+    return LlmResponse(json.dumps({"packaging": items}), input_tokens, output_tokens)
+
+
+TEA = [{"id": 8, "readable_name": "Chá Relaxa", "tags": ["mercearia"], "content": None}]
+
+
+def _tea_review(monkeypatch, packaging: LlmResponse | None = None, *, args: tuple[str, ...] = (), input: str = ""):
+    """The tea is sold by UN and the AI refuses its content: the one case that reaches the question."""
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    by_kind = {"enrich": _enrich(TEA)}
+    if packaging is not None:
+        by_kind["packaging"] = packaging
+    client = ScriptedLlmClient(by_kind=by_kind)
+    _stub_client(monkeypatch, client)
+    monkeypatch.setattr(_review, "_is_interactive", lambda: True)
+    return client, _run("produtos", "revisar", *args, input=input)
+
+
+def _packaging_calls(client) -> list[tuple[str, str, int]]:
+    return [call for call in client.calls if '"packaging"' in call[0]]
+
+
+def test_content_question_offers_candidates(monkeypatch):
+    hint = _packaging([{"id": 8, "form": "pack", "candidates": [{"quantity": 10, "unit": "UN"}, {"quantity": 20, "unit": "UN"}]}])
+    _, result = _tea_review(monkeypatch, hint, input="1\n")
+
+    assert result.exit_code == 0, result.output
+    assert "[1] 10 UN · pacote" in result.output and "[2] 20 UN · pacote" in result.output
+    assert "10 UN" in _run("produtos", "listar").output
+
+
+def test_content_question_typed_value(monkeypatch):
+    hint = _packaging([{"id": 8, "form": "pack", "candidates": [{"quantity": 10, "unit": "UN"}]}])
+    _, result = _tea_review(monkeypatch, hint, input="2\n500 G\n")
+
+    assert result.exit_code == 0, result.output
+    assert "0,5 KG" in _run("produtos", "listar").output
+
+
+def test_content_question_enter_skips_and_stays_pending(monkeypatch):
+    hint = _packaging([{"id": 8, "form": "pack", "candidates": [{"quantity": 10, "unit": "UN"}]}])
+    _, result = _tea_review(monkeypatch, hint, input="\n")
+
+    assert "Pendentes: 1 produto(s) sem conteúdo." in result.output
+    assert "10 UN" not in _run("produtos", "listar").output
+
+
+@pytest.mark.parametrize("answer", ["xyz\n", "2\n500 OZ\n", "9\n"])
+def test_content_question_invalid_input_is_treated_as_skip(monkeypatch, answer):
+    hint = _packaging([{"id": 8, "form": "pack", "candidates": [{"quantity": 10, "unit": "UN"}]}])
+    _, result = _tea_review(monkeypatch, hint, input=answer)
+
+    assert result.exit_code == 0, result.output
+    assert "Pendentes: 1 produto(s) sem conteúdo." in result.output
+
+
+def test_content_question_suppresses_candidates_for_weight_form(monkeypatch):
+    hint = _packaging([{"id": 8, "form": "weight", "candidates": [{"quantity": 500, "unit": "KG"}]}])
+    _, result = _tea_review(monkeypatch, hint, input="\n")
+
+    assert "500 KG" not in result.output
+    assert "[1] digitar" in result.output
+
+
+def test_content_question_without_packaging_call_still_asks(monkeypatch):
+    _, result = _tea_review(monkeypatch, LlmResponse("", 10, 0, error="HTTP 500"), input="\n")
+
+    assert result.exit_code == 0, result.output
+    assert "— conteúdo" in result.output and "[1] digitar" in result.output
+
+
+def test_content_question_skipped_for_kg_product(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={"enrich": _enrich([{"id": 11, "readable_name": "Linguiça", "tags": ["carnes"], "content": None}])}
+    )
+    _stub_client(monkeypatch, client)
+    monkeypatch.setattr(_review, "_is_interactive", lambda: True)
+
+    result = _run("produtos", "revisar")
+
+    assert "— conteúdo" not in result.output
+    assert _packaging_calls(client) == []
+
+
+def test_content_question_not_asked_without_tty(monkeypatch):
+    hint = _packaging([{"id": 8, "form": "pack", "candidates": [{"quantity": 10, "unit": "UN"}]}])
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(by_kind={"enrich": _enrich(TEA), "packaging": hint})
+    _stub_client(monkeypatch, client)
+
+    result = _run("produtos", "revisar")
+
+    assert "— conteúdo" not in result.output
+    assert _packaging_calls(client) == []
+    assert "Pendentes: 1 produto(s) sem conteúdo." in result.output
+
+
+def test_sim_asks_nothing_and_leaves_pending(monkeypatch):
+    hint = _packaging([{"id": 8, "form": "pack", "candidates": [{"quantity": 10, "unit": "UN"}]}])
+    client, result = _tea_review(monkeypatch, hint, args=("--sim",))
+
+    assert result.exit_code == 0, result.output
+    assert "— conteúdo" not in result.output
+    assert _packaging_calls(client) == []
+    assert "Pendentes: 1 produto(s) sem conteúdo." in result.output
+
+
+def test_content_answer_is_logged_with_undo(monkeypatch, tmp_path):
+    hint = _packaging([{"id": 8, "form": "pack", "candidates": [{"quantity": 10, "unit": "UN"}]}])
+    _tea_review(monkeypatch, hint, input="1\n")
+
+    (action,) = [line for line in _actions(tmp_path) if line["field"] == "content"]
+    assert action["after"] == "10 UN"
+    assert action["undo"] == "julius produtos definir-conteudo 8 --remover"
+
+
+def test_ai_refusal_is_the_only_trigger(monkeypatch):
+    """A product whose enrich DID return content is never asked, packaging candidates or not."""
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich([{"id": 8, "readable_name": "Chá Relaxa", "tags": ["mercearia"], "content": {"quantity": 10, "unit": "UN"}}]),
+            "packaging": _packaging([{"id": 8, "form": "pack", "candidates": [{"quantity": 99, "unit": "UN"}]}]),
+        }
+    )
+    _stub_client(monkeypatch, client)
+    monkeypatch.setattr(_review, "_is_interactive", lambda: True)
+
+    result = _run("produtos", "revisar")
+
+    assert "— conteúdo" not in result.output
+    assert _packaging_calls(client) == []
+    assert "10 UN" in _run("produtos", "listar").output

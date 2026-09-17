@@ -36,7 +36,11 @@ def import_receipts(
             help="Arquivos HTML de NFC-e salvos da Receita/DF. Sem argumento, importa os HTML da pasta de entrada."
         ),
     ] = None,
-    yes: Annotated[bool, typer.Option("--sim", "-y", help="Aplicar as sugestões da IA sem perguntar.")] = False,
+    yes: Annotated[bool, typer.Option(
+            "--sim",
+            "-y",
+            help="Não perguntar nada; conteúdo que a IA não soube fica pendente para a próxima revisão.",
+        )] = False,
 ) -> None:
     """Importa um ou mais recibos NFC-e para a base de preços."""
     settings = config.load()

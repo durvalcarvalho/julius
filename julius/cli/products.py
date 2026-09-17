@@ -190,7 +190,11 @@ def compare_products(
 
 @app.command("revisar")
 def review(
-    yes: Annotated[bool, typer.Option("--sim", "-y", help="Aplicar as sugestões da IA sem perguntar.")] = False,
+    yes: Annotated[bool, typer.Option(
+            "--sim",
+            "-y",
+            help="Não perguntar nada; conteúdo que a IA não soube fica pendente para a próxima revisão.",
+        )] = False,
     last_actions: Annotated[
         bool,
         typer.Option("--ultimas-acoes", help="Mostra as últimas ações que a IA aplicou, com o comando para desfazer."),

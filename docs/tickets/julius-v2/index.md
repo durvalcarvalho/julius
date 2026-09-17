@@ -74,7 +74,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 132 | [curation: proposta completa](132-curation-proposal-reshape.md) | 131 | M | feito | `ProductProposal.tag`/`receipt_description`/`sold_by_unit`; fim de `auto_tag` |
 | 133 | [suggestions: intuição de embalagem](133-suggestions-packaging.md) | — | M | feito | `PackagingHint`, prompt `packaging` v1, marcador no fake |
 | 134 | [review: tabela honesta + categoria auto](134-review-table-and-auto-category.md) | 132 | M | feito | colunas com valor atual em `dim`, cupom de verdade, fim do laço de categoria |
-| 135 | [review: pergunta de conteúdo](135-review-content-question.md) | 133, 134 | M | aberto | `_ask_content`, `_FORM_LABELS`, `--sim` redefinido |
+| 135 | [review: pergunta de conteúdo](135-review-content-question.md) | 133, 134 | M | feito | `_ask_content`, `_FORM_LABELS`, `--sim` redefinido |
 | 136 | [e2e + docs v2.3](136-e2e-docs-v23.md) | 131–135 | M | aberto | `test_e2e` do ciclo, rodada real, `CLAUDE.md`/`README.md` |
 
 Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum ticket L: o que ficaria L foi dividido (suggestions em 107/108; CLI em 111/112/113; na v2.2, serviço e CLI sempre em tickets separados — 124/125 e 126/127 — e a infra de arquivamento separada da CLI que a usa, 128/129).

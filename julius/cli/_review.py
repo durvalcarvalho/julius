@@ -3,19 +3,31 @@ from __future__ import annotations
 import sys
 from collections import Counter
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import datetime, timezone
 
+import typer
 from rich.table import Table
 from rich.text import Text
 
 from julius.cli._common import console, content_text
 from julius.config import Config
-from julius.domain.models import AppliedAction, Product, ProductProposal
+from julius.domain.models import AppliedAction, ContentSuggestion, PackagingForm, PackagingHint, Product, ProductProposal
+from julius.domain.normalization import normalize_content
 from julius.infra import ai_log
 from julius.infra.llm_client import LlmClient
 from julius.services import catalog, curation, suggestions
 
 _FIELD_LABELS = (("name", "nome(s)"), ("tag", "categoria(s)"), ("content", "conteúdo(s)"), ("kind", "tipo(s)"))
+
+# The AI's own words never reach the screen: `form` is data, this is the vocabulary the user reads.
+_FORM_LABELS: dict[PackagingForm, str] = {
+    "unit": "unidade",
+    "pack": "pacote",
+    "volume": "volume",
+    "weight": "peso",
+    "unknown": "",
+}
 
 
 def _is_interactive() -> bool:
@@ -93,6 +105,67 @@ def _needs_content(proposal: ProductProposal, products_by_id: dict[int, Product]
     return proposal.content is None and proposal.sold_by_unit and product is not None and product.content_quantity is None
 
 
+def _ask_content(proposal: ProductProposal, hint: PackagingHint | None) -> ContentSuggestion | None:
+    """Retail intuition only fills the options; a keystroke is what writes anything. Candidates of a
+    product the model called "weight" are dropped: that is exactly where it produced 500 KG of bacon."""
+    candidates: tuple[ContentSuggestion, ...] = ()
+    if hint is not None and hint.form not in ("weight", "unknown"):
+        candidates = hint.candidates
+    label = _FORM_LABELS[hint.form] if hint is not None else ""
+    options = [f"[{i}] {content_text(c.quantity, c.unit)}" + (f" · {label}" if label else "")
+               for i, c in enumerate(candidates, start=1)]
+    options.append(f"[{len(candidates) + 1}] digitar")
+    options.append("[Enter] pular")
+    name = proposal.readable_name or proposal.current_name
+    answer = typer.prompt(
+        f"{proposal.product_id} · {name} — conteúdo  {'  '.join(options)}", default="", show_default=False
+    ).strip()
+    if not answer.isdigit():
+        return None
+    index = int(answer)
+    if 1 <= index <= len(candidates):
+        return candidates[index - 1]
+    if index != len(candidates) + 1:
+        return None
+    return _typed_content()
+
+
+def _typed_content() -> ContentSuggestion | None:
+    typed = typer.prompt("    quantidade e unidade (ex.: 500 G)", default="", show_default=False).strip().split()
+    if len(typed) != 2:
+        console.print("  Valor ignorado: escreva quantidade e unidade, como 500 G.")
+        return None
+    try:
+        quantity, unit = normalize_content(float(typed[0].replace(",", ".")), typed[1])
+    except ValueError as error:
+        console.print(f"  Valor ignorado: {error}")
+        return None
+    return ContentSuggestion(quantity, unit)
+
+
+def _ask_pending_content(
+    conn, settings: Config, client: LlmClient, pending: Sequence[ProductProposal]
+) -> list[ProductProposal]:
+    """Asks about every product whose content the AI refused to state, and returns what is still
+    missing afterwards."""
+    hints: dict[int, PackagingHint] = {}
+    if suggestions.is_available(conn, settings):
+        catalog_products = [
+            Product(id=p.product_id, canonical_name=p.readable_name or p.current_name) for p in pending
+        ]
+        with console.status(f"Consultando IA sobre a embalagem de {len(pending)} produto(s)…"):
+            hints = suggestions.suggest_packaging(conn, settings, client, catalog_products)
+    still_missing: list[ProductProposal] = []
+    for proposal in pending:
+        chosen = _ask_content(proposal, hints.get(proposal.product_id))
+        if chosen is None:
+            still_missing.append(proposal)
+            continue
+        answered = replace(proposal, readable_name=None, content=chosen)
+        _log_actions(settings, curation.apply(conn, answered, tag=None, content=True, kind=False))
+    return still_missing
+
+
 def review_products(
     conn,
     settings: Config,
@@ -128,6 +201,8 @@ def review_products(
         console.print("Desfazer ou auditar: julius produtos revisar --ultimas-acoes")
 
     pending = [p for p in proposals if _needs_content(p, products_by_id)]
+    if pending and interactive and not assume_yes:
+        pending = _ask_pending_content(conn, settings, client, pending)
 
     candidates = curation.duplicate_candidates(conn, product_ids)
     duplicates = curation.judge_duplicates(conn, settings, client, candidates)
