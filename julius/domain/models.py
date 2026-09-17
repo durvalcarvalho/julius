@@ -120,6 +120,18 @@ class ContentSuggestion:
     unit: ContentUnit
 
 
+PackagingForm = Literal["unit", "pack", "weight", "volume", "unknown"]
+
+
+@dataclass(frozen=True)
+class PackagingHint:
+    """How Brazilian retail usually sells this. Never written anywhere: it only feeds the options
+    of a question a human answers (ticket 135)."""
+
+    form: PackagingForm
+    candidates: tuple[ContentSuggestion, ...]  # best first, at most 3; empty when the model had none
+
+
 @dataclass(frozen=True)
 class ProductComparison:
     text_similarity: float

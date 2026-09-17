@@ -5,7 +5,7 @@ import pytest
 
 from _fakes import RaisingLlmClient, ScriptedLlmClient
 from julius.config import Config
-from julius.domain.models import ContentSuggestion, MergeSuggestion, Product, ProductEnrichment
+from julius.domain.models import ContentSuggestion, MergeSuggestion, PackagingHint, Product, ProductEnrichment
 from julius.infra.llm_client import LlmResponse
 from julius.repositories import ai_usage
 from julius.services import suggestions
@@ -382,3 +382,126 @@ def test_match_products_empty_catalog_or_blank_term_does_not_call(conn, cfg):
 def test_match_products_non_object_payload_returns_empty(conn, cfg):
     client = ScriptedLlmClient([LlmResponse(json.dumps([1, 2, 3]), 1, 1)])
     assert suggestions.match_products(conn, cfg, client, "termo", [(1, "A", ())], MONTH) == []
+
+
+def _packaging_response(items: list[dict], input_tokens: int = 100, output_tokens: int = 50) -> LlmResponse:
+    return LlmResponse(json.dumps({"packaging": items}), input_tokens, output_tokens)
+
+
+def _products(count: int, start: int = 60) -> list[Product]:
+    return [Product(id=start + i, canonical_name=f"P{start + i}") for i in range(count)]
+
+
+def test_packaging_parses_form_and_candidates(conn, cfg):
+    client = ScriptedLlmClient(
+        [
+            _packaging_response(
+                [{"id": 60, "form": "pack", "candidates": [{"quantity": 10, "unit": "UN"}, {"quantity": 20, "unit": "UN"}]}]
+            )
+        ]
+    )
+    hints = suggestions.suggest_packaging(conn, cfg, client, _products(1), MONTH)
+    assert hints == {60: PackagingHint("pack", (ContentSuggestion(10.0, "UN"), ContentSuggestion(20.0, "UN")))}
+
+
+@pytest.mark.parametrize("form", [None, "tray", 123])
+def test_packaging_unknown_form_falls_back(conn, cfg, form):
+    item = {"id": 60, "candidates": []} if form is None else {"id": 60, "form": form, "candidates": []}
+    client = ScriptedLlmClient([_packaging_response([item])])
+    assert suggestions.suggest_packaging(conn, cfg, client, _products(1), MONTH) == {60: PackagingHint("unknown", ())}
+
+
+def test_packaging_drops_invalid_candidate_keeps_the_rest(conn, cfg):
+    client = ScriptedLlmClient(
+        [
+            _packaging_response(
+                [
+                    {
+                        "id": 60,
+                        "form": "pack",
+                        "candidates": [
+                            {"quantity": 10, "unit": "UN"},
+                            {"quantity": 1, "unit": "OZ"},
+                            {"quantity": 0, "unit": "UN"},
+                        ],
+                    }
+                ]
+            )
+        ]
+    )
+    hints = suggestions.suggest_packaging(conn, cfg, client, _products(1), MONTH)
+    assert hints[60].candidates == (ContentSuggestion(10.0, "UN"),)
+
+
+def test_packaging_caps_at_three_candidates(conn, cfg):
+    candidates = [{"quantity": n, "unit": "UN"} for n in (1, 2, 3, 4, 5)]
+    client = ScriptedLlmClient([_packaging_response([{"id": 60, "form": "pack", "candidates": candidates}])])
+    hints = suggestions.suggest_packaging(conn, cfg, client, _products(1), MONTH)
+    assert [c.quantity for c in hints[60].candidates] == [1.0, 2.0, 3.0]
+
+
+def test_packaging_empty_candidates_is_valid(conn, cfg):
+    client = ScriptedLlmClient([_packaging_response([{"id": 60, "form": "weight", "candidates": []}])])
+    assert suggestions.suggest_packaging(conn, cfg, client, _products(1), MONTH) == {60: PackagingHint("weight", ())}
+
+
+def test_packaging_ignores_unknown_id(conn, cfg):
+    client = ScriptedLlmClient(
+        [
+            _packaging_response(
+                [
+                    {"id": 999, "form": "unit", "candidates": [{"quantity": 1, "unit": "UN"}]},
+                    {"id": 61, "form": "unit", "candidates": []},
+                ]
+            )
+        ]
+    )
+    hints = suggestions.suggest_packaging(conn, cfg, client, _products(2), MONTH)
+    assert set(hints) == {61}
+
+
+def test_packaging_prompt_lists_id_and_name_only(conn, cfg):
+    client = ScriptedLlmClient([_packaging_response([])])
+    suggestions.suggest_packaging(conn, cfg, client, [Product(id=60, canonical_name="LING FGO RESF AURORA kg")], MONTH)
+    prompt = client.calls[0][1]
+    assert "60 | LING FGO RESF AURORA kg" in prompt
+    assert "categorias:" not in prompt and "tipos:" not in prompt
+
+
+def test_packaging_prompt_version_is_1(conn, cfg):
+    client = ScriptedLlmClient([_packaging_response([])])
+    suggestions.suggest_packaging(conn, cfg, client, _products(1), MONTH)
+    (line,) = _lines(cfg)
+    assert (line["prompt_version"], line["call_kind"]) == ("1", "packaging")
+
+
+def test_packaging_max_tokens_formula(conn, cfg):
+    client = ScriptedLlmClient([_packaging_response([])])
+    suggestions.suggest_packaging(conn, cfg, client, _products(6), MONTH)
+    assert client.calls[0][2] == 620
+
+
+def test_packaging_batches_isolate_failures(conn, cfg):
+    client = ScriptedLlmClient(
+        [
+            LlmResponse("", 10, 0, error="HTTP 500"),
+            LlmResponse("", 10, 0, error="HTTP 500"),
+            _packaging_response([{"id": 85, "form": "unit", "candidates": []}]),
+        ]
+    )
+    hints = suggestions.suggest_packaging(conn, cfg, client, _products(30), MONTH)
+    assert set(hints) == {85}
+
+
+def test_packaging_unavailable_returns_empty_dict_without_calls(conn, cfg):
+    client = ScriptedLlmClient([_packaging_response([{"id": 60, "form": "unit", "candidates": []}])])
+    assert suggestions.suggest_packaging(conn, replace(cfg, ai_api_key=None), client, _products(1), MONTH) == {}
+    assert client.calls == []
+    assert suggestions.suggest_packaging(conn, cfg, client, [], MONTH) == {}
+    assert client.calls == []
+
+
+@pytest.mark.parametrize("payload", ["não é json", json.dumps({"packaging": "x"})])
+def test_packaging_never_raises_on_garbage(conn, cfg, payload):
+    client = ScriptedLlmClient([LlmResponse(payload, 10, 5)])
+    assert suggestions.suggest_packaging(conn, cfg, client, _products(1), MONTH) == {}

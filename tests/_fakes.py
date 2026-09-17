@@ -6,9 +6,9 @@ from collections.abc import Mapping, Sequence
 
 from julius.infra.llm_client import LlmResponse
 
-# The three JSON response formats (design doc §6) each have one distinctive key: look for it
-# quoted in the system prompt to tell which prompt a call belongs to.
-_KIND_MARKERS = {'"products"': "enrich", '"pairs"': "merge", '"ids"': "match"}
+# Each JSON response format (design doc §6) has one distinctive key: look for it quoted in the
+# system prompt to tell which prompt a call belongs to.
+_KIND_MARKERS = {'"products"': "enrich", '"pairs"': "merge", '"ids"': "match", '"packaging"': "packaging"}
 
 
 def _kind_of(system_prompt: str) -> str:

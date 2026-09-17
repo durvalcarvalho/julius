@@ -7,7 +7,14 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from julius.config import Config
-from julius.domain.models import ContentSuggestion, MergeSuggestion, Product, ProductEnrichment
+from julius.domain.models import (
+    ContentSuggestion,
+    MergeSuggestion,
+    PackagingForm,
+    PackagingHint,
+    Product,
+    ProductEnrichment,
+)
 from julius.infra import ai_log
 from julius.infra.llm_client import LlmClient, LlmResponse
 from julius.repositories import ai_usage
@@ -15,7 +22,7 @@ from julius.repositories import ai_usage
 MAX_ATTEMPTS = 2  # one retry on transport error, empty response, or invalid JSON
 ENRICH_BATCH_SIZE = 25
 
-PROMPT_VERSIONS: dict[str, str] = {"enrich": "2", "merge": "2", "match": "1"}
+PROMPT_VERSIONS: dict[str, str] = {"enrich": "2", "merge": "2", "match": "1", "packaging": "1"}
 
 SYSTEM_PROMPTS: dict[str, str] = {
     "merge": (
@@ -79,6 +86,17 @@ SYSTEM_PROMPTS: dict[str, str] = {
         ' {"id": 4, "readable_name": "AC MASC F TER ES 1kg", "tags": ["mercearia"], '
         '"content": {"quantity": 1, "unit": "KG"}, "kind": null}\n'
         "]}"
+    ),
+    "packaging": (
+        "Você conhece o varejo de supermercado brasileiro. Para cada produto, diga COMO ele é vendido, "
+        "usando conhecimento de mercado — não só o que está escrito no nome.\n"
+        '- "form": "unit" (a embalagem É a unidade de compra, ex.: uma alface, uma espátula), '
+        '"pack" (vem N unidades juntas), "weight" (vendido a granel ou por peso), '
+        '"volume" (líquido) ou "unknown".\n'
+        '- "candidates": de 1 a 3 valores de conteúdo plausíveis, o mais provável primeiro, no formato '
+        '{"quantity": número, "unit": "L"|"KG"|"UN"}. Lista vazia quando você não tiver palpite.\n'
+        "Responda somente com json, um item por produto recebido, mesmos ids:\n"
+        '{"packaging": [{"id": 1, "form": "unit", "candidates": [{"quantity": 1, "unit": "UN"}]}]}'
     ),
     "match": (
         "O usuário digitou um termo de busca num catálogo pessoal de supermercado. Dado o catálogo (id | nome | "
@@ -349,6 +367,61 @@ def enrich_products(
                 product_id, enrichment = parsed
                 if product_id not in result:
                     result[product_id] = enrichment
+        except Exception:
+            continue
+    return result
+
+
+_PACKAGING_FORMS = ("unit", "pack", "weight", "volume", "unknown")
+
+
+def _valid_packaging(item: object, valid_ids: set[int]) -> tuple[int, PackagingHint] | None:
+    if not isinstance(item, dict):
+        return None
+    product_id = item.get("id")
+    if not isinstance(product_id, int) or isinstance(product_id, bool) or product_id not in valid_ids:
+        return None
+    raw_form = item.get("form")
+    form: PackagingForm = raw_form if raw_form in _PACKAGING_FORMS else "unknown"  # type: ignore[assignment]
+    raw = item.get("candidates")
+    candidates: list[ContentSuggestion] = []
+    if isinstance(raw, list):
+        for entry in raw:
+            content = _valid_content(entry)
+            if content is not None:
+                candidates.append(content)
+    return product_id, PackagingHint(form=form, candidates=tuple(candidates[:3]))
+
+
+def suggest_packaging(
+    conn: sqlite3.Connection,
+    config: Config,
+    client: LlmClient,
+    products: Sequence[Product],
+    month: str | None = None,
+) -> dict[int, PackagingHint]:
+    """Retail intuition: what the model guesses a package holds. It never refuses, so it is never
+    written — the CLI turns it into options a human picks from (design §4)."""
+    if not products:
+        return {}
+    result: dict[int, PackagingHint] = {}
+    for start in range(0, len(products), ENRICH_BATCH_SIZE):
+        batch = products[start : start + ENRICH_BATCH_SIZE]
+        try:
+            user_prompt = "produtos:\n" + "\n".join(f"{p.id} | {p.canonical_name}" for p in batch)
+            max_tokens = 70 * len(batch) + 200
+            data = _ask(conn, config, client, "packaging", user_prompt, max_tokens=max_tokens, month=month)
+            items = data.get("packaging") if isinstance(data, dict) else None
+            if not isinstance(items, list):
+                continue
+            valid_ids = {p.id for p in batch}
+            for item in items:
+                parsed = _valid_packaging(item, valid_ids)
+                if parsed is None:
+                    continue
+                product_id, hint = parsed
+                if product_id not in result:
+                    result[product_id] = hint
         except Exception:
             continue
     return result
