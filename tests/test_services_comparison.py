@@ -310,3 +310,41 @@ def test_compare_stores_keeps_two_branches_that_share_a_nickname(conn):
         (branch_b, 0.30),
     ]
     assert {entry.store_nickname for entry in comparison.entries} == {"Dona de Casa"}
+
+
+def test_compare_stores_names_the_product_behind_each_price(conn):
+    """The group label is a kind, so two stores can be represented by different products: the
+    wine group compared a frisante with a Norton and the table said only "vinho"."""
+    a = _product(conn, "VINHO MIORANZA FRISANTE 750ML", "1", STORE_A)
+    b = _product(conn, "VH NORTON 750 BC SV", "2", STORE_B)
+    for product_id in (a, b):
+        set_kind(conn, product_id, "vinho")
+        set_content(conn, product_id, 0.75, "L")
+    _price(conn, a, STORE_A, "UN", 23.99, "2026-09-16T10:00:00", "k1")
+    _price(conn, b, STORE_B, "UN", 34.90, "2026-09-04T10:00:00", "k2")
+
+    (comparison,) = compare_stores(conn).comparisons
+
+    assert [entry.product_name for entry in comparison.entries] == [
+        "VINHO MIORANZA FRISANTE 750ML",
+        "VH NORTON 750 BC SV",
+    ]
+
+
+def test_compare_stores_names_the_cheapest_product_of_that_store(conn):
+    """A store is represented by the cheapest row it charged in the group. With two products in
+    one store, the name has to follow the price that won the slot, not the first row seen."""
+    cheap = _product(conn, "UVA VITORIA BANDEJA 500G", "1", STORE_A)
+    dear = _product(conn, "UVA GREEN DREAMS BANDEJA 500G", "2", STORE_A)
+    other = _product(conn, "UVA BRANCA BANDEJA 500G", "3", STORE_B)
+    for product_id in (cheap, dear, other):
+        set_kind(conn, product_id, "uva")
+        set_content(conn, product_id, 0.5, "KG")
+    _price(conn, dear, STORE_A, "UN", 14.99, "2026-09-16T10:00:00", "k1")
+    _price(conn, cheap, STORE_A, "UN", 5.95, "2026-09-16T11:00:00", "k2")
+    _price(conn, other, STORE_B, "UN", 6.99, "2026-09-04T10:00:00", "k3")
+
+    (comparison,) = compare_stores(conn).comparisons
+
+    store_a = next(entry for entry in comparison.entries if entry.store_nickname == "Loja 1")
+    assert store_a.product_name == "UVA VITORIA BANDEJA 500G"

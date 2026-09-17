@@ -46,7 +46,7 @@ def compare_stores(conn: sqlite3.Connection) -> StoreComparison:
         if len(cheapest) < 2:
             continue
         entries = tuple(
-            StorePrice(record.store_nickname, value, record.purchased_at, cnpj)
+            StorePrice(record.store_nickname, value, record.purchased_at, record.canonical_name, cnpj)
             for cnpj, (value, record) in sorted(cheapest.items(), key=lambda item: (item[1][0], item[1][1].store_nickname, item[0]))
         )
         kind, unit = key

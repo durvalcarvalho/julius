@@ -167,6 +167,7 @@ class StorePrice:
     store_nickname: str
     price: float  # on the comparison basis
     purchased_at: str
+    product_name: str  # the product whose price represents this store; the group label is a kind, not a product
     store_cnpj: str = ""  # what the store was grouped by; two branches can share a nickname
 
 

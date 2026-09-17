@@ -371,6 +371,19 @@ def test_comparar_prints_table_and_orders_cheapest_first():
     assert "DONA DE CASA" in rows[1]
 
 
+def test_comparar_names_the_product_of_each_row():
+    """The group label is a kind, so a row's price can belong to a product the user would never
+    compare — measured on the real database with `vinho`. The name is what makes that visible."""
+    first, second = _tomatoes_in_two_stores()
+    for product_id in (first, second):
+        assert _run("produtos", "tipo", str(product_id), "tomate").exit_code == 0
+
+    result = _run("mercados", "comparar")
+
+    assert "Produto" in result.output
+    assert "UNIAO" in result.output  # only one of the two tomatoes carries the supplier
+
+
 def test_comparar_footer_shows_group_count_and_period():
     first, second = _tomatoes_in_two_stores()
     for product_id in (first, second):

@@ -125,11 +125,17 @@ def _comparison_table(group: KindComparison, labels: dict[str, str]) -> Table:
         basis = f"por {group.content_unit} (por conteúdo)"
     else:
         basis = f"por {group.unit}"
-    table = Table("Mercado", "Preço", "Data", title=f"{group.kind} · {basis}")
+    table = Table("Mercado", "Produto", "Preço", "Data", title=f"{group.kind} · {basis}")
     cheapest, dearest = group.entries[0].price, group.entries[-1].price
     for entry in group.entries:
         highlight = "lowest" if entry.price == cheapest else "highest" if entry.price == dearest else None
-        table.add_row(labels[entry.store_cnpj], money(entry.price), entry.purchased_at[:10], style=HIGHLIGHT_STYLE.get(highlight or ""))
+        table.add_row(
+            labels[entry.store_cnpj],
+            entry.product_name,
+            money(entry.price),
+            entry.purchased_at[:10],
+            style=HIGHLIGHT_STYLE.get(highlight or ""),
+        )
     return table
 
 
