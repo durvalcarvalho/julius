@@ -1,0 +1,21 @@
+docs/requirements/auto-merge-and-unit-price-v2.4.md
+  s_e32683ed46ac18::t_9ff290469c6213 1-89
+docs/requirements/auto-merge-clusters.md
+  s_e32683ed46ac18::t_871ad5901ee51e 3-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1428be204af7cb137977759f3dbd5ccc662aeb66",
+  "prompts": {},
+  "sessions": {
+    "s_e32683ed46ac18": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04c69812-c145-481d-872c-805dcef575c8",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
