@@ -1,0 +1,24 @@
+julius/services/curation.py
+  s_e32683ed46ac18::t_e2edff9af94c9b 128-129,138-145
+  s_e32683ed46ac18::t_81397795e48f7c 146-147
+tests/test_services_curation.py
+  s_e32683ed46ac18::t_75ad852f30ef8d 421-472
+docs/tickets/julius-v2/index.md
+  s_e32683ed46ac18::t_ccbb9ed3ae23a4 85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9ae6353866345488dfb24b94f463d948e4f77dbe",
+  "prompts": {},
+  "sessions": {
+    "s_e32683ed46ac18": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04c69812-c145-481d-872c-805dcef575c8",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
