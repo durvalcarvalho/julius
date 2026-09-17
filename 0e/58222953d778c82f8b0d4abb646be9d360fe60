@@ -1,0 +1,31 @@
+docs/tickets/julius-v2/132-curation-proposal-reshape.md
+  s_9897d2094c6052::t_cb288ab80ebe09 1-109
+docs/tickets/julius-v2/135-review-content-question.md
+  s_9897d2094c6052::t_539a5512fa5296 1-113
+docs/tickets/julius-v2/134-review-table-and-auto-category.md
+  s_9897d2094c6052::t_91fd4ab7d1f794 1-97
+docs/tickets/julius-v2/131-products-incomplete-queries.md
+  s_9897d2094c6052::t_b0f86ff3d93d77 1-85
+docs/tickets/julius-v2/index.md
+  s_9897d2094c6052::t_dca7dac8fac3e3 30,73-78,101-104,133-140,160-163
+docs/tickets/julius-v2/136-e2e-docs-v23.md
+  s_9897d2094c6052::t_0b66178c1cef7f 1-95
+docs/tickets/julius-v2/133-suggestions-packaging.md
+  s_9897d2094c6052::t_f3e5376b1403a1 1-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0e58222953d778c82f8b0d4abb646be9d360fe60",
+  "prompts": {},
+  "sessions": {
+    "s_9897d2094c6052": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "864f6773-d792-4392-aff4-08e50f62bd9e",
+        "model": "unknown"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
