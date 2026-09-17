@@ -48,9 +48,8 @@ def get_product(conn: sqlite3.Connection, product_id: int) -> Product | None:
 
 def list_products(conn: sqlite3.Connection) -> list[Product]:
     rows = conn.execute("SELECT id FROM products WHERE merged_into IS NULL ORDER BY canonical_name, id").fetchall()
-    raw = {row["id"] for row in conn.execute(_RAW_NAME_IDS)}
-    # ponytail: two queries per group — 21 ms for the real 105-product catalog; revisit at 10x
-    return [_group_product(conn, row["id"], raw) for row in rows]
+    # ponytail: three queries per group — 30 ms for the real 105-product catalog; revisit at 10x
+    return [_group_product(conn, row["id"]) for row in rows]
 
 
 def product_names(conn: sqlite3.Connection) -> list[tuple[int, str]]:
@@ -230,7 +229,7 @@ def group_members(conn: sqlite3.Connection, root_id: int) -> list[int]:
 
 
 
-def _group_product(conn: sqlite3.Connection, root_id: int, raw: set[int] | None = None) -> Product:
+def _group_product(conn: sqlite3.Connection, root_id: int) -> Product:
     """The product a group shows. Nothing is copied to the root: the name, content and kind are
     composed on read, which is what makes unmerging restore the previous state by construction."""
     members = conn.execute(
@@ -241,9 +240,9 @@ def _group_product(conn: sqlite3.Connection, root_id: int, raw: set[int] | None 
         (root_id, root_id),
     ).fetchall()
     root = members[0]
-    if raw is None:
-        raw = {row["id"] for row in conn.execute(_RAW_NAME_IDS)}
-    name = next((m["canonical_name"] for m in members if m["id"] not in raw), root["canonical_name"])
+    name = conn.execute(
+        "SELECT canonical_name FROM product_group_name WHERE root_id = ?", (root_id,)
+    ).fetchone()["canonical_name"]
     with_content = next((m for m in members if m["content_quantity"] is not None), root)
     tags = conn.execute(
         """

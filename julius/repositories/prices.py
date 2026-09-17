@@ -65,12 +65,13 @@ def prices_for_products(conn: sqlite3.Connection, product_ids: Sequence[int]) ->
     placeholders = ",".join("?" * len(product_ids))
     rows = conn.execute(
         f"""
-        SELECT g.root_id, p.product_id AS source_product_id, root.canonical_name, s.nickname, s.address,
+        SELECT g.root_id, p.product_id AS source_product_id, n.canonical_name, s.nickname, s.address,
                p.unit, p.unit_price, p.purchased_at, root.content_quantity, root.content_unit, root.kind,
                p.access_key
         FROM prices p
         JOIN product_group g ON g.product_id = p.product_id
         JOIN products root ON root.id = g.root_id
+        JOIN product_group_name n ON n.root_id = g.root_id
         JOIN stores s ON s.cnpj = p.store_cnpj
         WHERE g.root_id IN ({placeholders})
         ORDER BY p.purchased_at DESC, p.unit_price

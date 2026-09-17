@@ -65,17 +65,17 @@ def test_pending_migration_backs_up_existing_db_then_applies_it(db_path, tmp_pat
     conn = db.connect(db_path)
     conn.execute("INSERT INTO stores (cnpj, legal_name, nickname) VALUES ('1', 'Legal', 'Nick')")
     conn.commit()
-    extra = tmp_path / "0005_add_notes.sql"
+    extra = tmp_path / "0099_add_notes.sql"
     extra.write_text("CREATE TABLE notes (id INTEGER PRIMARY KEY);", encoding="utf-8")
 
-    db.apply_migrations(conn, db_path, db.available_migrations() + [(5, extra)])
+    db.apply_migrations(conn, db_path, db.available_migrations() + [(99, extra)])
 
-    assert db.schema_version(conn) == 5
+    assert db.schema_version(conn) == 99
     assert "notes" in _tables(conn)
     assert conn.execute("SELECT count(*) FROM stores").fetchone()[0] == 1
 
-    backup = sqlite3.connect(db_path.with_name("prices.db.bak-v4"))
-    assert db.schema_version(backup) == 4
+    backup = sqlite3.connect(db_path.with_name(f"prices.db.bak-v{_latest()}"))
+    assert db.schema_version(backup) == _latest()
     assert "notes" not in _tables(backup)
 
 
@@ -160,3 +160,16 @@ def test_migration_0004_adds_merged_into_and_the_group_view(conn):
         conn.execute("INSERT INTO products (canonical_name) VALUES (?)", (name,))
     assert conn.execute("SELECT count(*) FROM product_group").fetchone()[0] == 2
     assert [tuple(row) for row in conn.execute("SELECT * FROM product_group ORDER BY product_id")] == [(1, 1), (2, 2)]
+
+
+def test_migration_0005_names_the_group_by_its_readable_name(conn):
+    """The rule lives in one place: products.py composes the group and prices.py names its rows,
+    and the DAG forbids one repository importing the other."""
+    conn.execute("INSERT INTO stores (cnpj, legal_name, nickname) VALUES ('1', 'L', 'N')")
+    conn.execute("INSERT INTO products (id, canonical_name) VALUES (1, 'TOMATE ITALIANO kg')")
+    conn.execute("INSERT INTO products (id, canonical_name, merged_into) VALUES (2, 'Tomate italiano', 1)")
+    conn.execute(INSERT_PRICE, ("k", 1, "2026-09-12T13:09:16", "1", 1, "c", "TOMATE ITALIANO kg", 1, "KG", 1, 1))
+    conn.execute(INSERT_PRICE, ("k", 2, "2026-09-12T13:09:16", "1", 2, "c", "TOMATE ITALIANO UNIAO kg", 1, "KG", 1, 1))
+
+    (name,) = conn.execute("SELECT canonical_name FROM product_group_name WHERE root_id = 1").fetchone()
+    assert name == "Tomate italiano"  # the root's own name is still the raw coupon text
