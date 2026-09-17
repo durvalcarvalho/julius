@@ -353,3 +353,49 @@ def test_receipt_descriptions_ignores_product_without_prices_and_empty_input(con
     _add_price(conn, priced, "UN", description="AGUA MIN SF 500ML")
     assert products.receipt_descriptions(conn, [priced, unpriced]) == {priced: "AGUA MIN SF 500ML"}
     assert products.receipt_descriptions(conn, []) == {}
+
+
+def _three_products(conn) -> list[int]:
+    return [products.resolve_product_id(conn, STORE_A, str(i), f"P{i}") for i in (1, 2, 3)]
+
+
+def test_group_root_resolves_a_chain(conn_with_stores):
+    conn = conn_with_stores
+    a, b, c = _three_products(conn)
+    products.set_merged_into(conn, a, b)
+    products.set_merged_into(conn, b, c)
+    assert [products.group_root(conn, pid) for pid in (a, b, c)] == [c, c, c]
+
+
+def test_group_members_lists_root_and_absorbed_in_id_order(conn_with_stores):
+    conn = conn_with_stores
+    a, b, c = _three_products(conn)
+    products.set_merged_into(conn, b, a)
+    products.set_merged_into(conn, c, a)
+    assert products.group_members(conn, a) == sorted([a, b, c])
+    assert products.group_members(conn, c) == sorted([a, b, c])  # any member resolves to the group
+
+
+def test_unmerging_the_middle_restores_the_previous_parent(conn_with_stores):
+    """Why the column stores the direct target and not the root: otherwise the leaf would stay
+    hanging on the root after the middle level is undone, and that is not the previous state."""
+    conn = conn_with_stores
+    a, b, c = _three_products(conn)
+    products.set_merged_into(conn, a, b)
+    products.set_merged_into(conn, b, c)
+    products.set_merged_into(conn, b, None)
+    assert products.group_root(conn, a) == b
+    assert products.group_root(conn, c) == c
+
+
+def test_group_of_an_unmerged_product_is_itself(conn_with_stores):
+    conn = conn_with_stores
+    pid = products.resolve_product_id(conn, STORE_A, "1", "P")
+    assert products.group_root(conn, pid) == pid
+    assert products.group_members(conn, pid) == [pid]
+
+
+@pytest.mark.parametrize("call", [products.set_merged_into, products.group_root, products.group_members])
+def test_group_functions_reject_unknown_product(conn, call):
+    with pytest.raises(LookupError):
+        call(conn, 999) if call is not products.set_merged_into else call(conn, 999, None)

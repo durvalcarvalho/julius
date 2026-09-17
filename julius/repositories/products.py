@@ -172,6 +172,25 @@ def receipt_descriptions(conn: sqlite3.Connection, product_ids: Sequence[int]) -
     return {row["product_id"]: row["description"] for row in rows}
 
 
+def set_merged_into(conn: sqlite3.Connection, product_id: int, target_id: int | None) -> None:
+    """Raw writer for the merge relation. The cycle guard is domain rule and lives in
+    `services/catalog.py`: a cycle makes the product_group recursion never return."""
+    _require_exists(conn, product_id)
+    conn.execute("UPDATE products SET merged_into = ? WHERE id = ?", (target_id, product_id))
+
+
+def group_root(conn: sqlite3.Connection, product_id: int) -> int:
+    _require_exists(conn, product_id)
+    row = conn.execute("SELECT root_id FROM product_group WHERE product_id = ?", (product_id,)).fetchone()
+    return product_id if row is None else row["root_id"]
+
+
+def group_members(conn: sqlite3.Connection, root_id: int) -> list[int]:
+    root = group_root(conn, root_id)
+    rows = conn.execute("SELECT product_id FROM product_group WHERE root_id = ? ORDER BY product_id", (root,))
+    return [row["product_id"] for row in rows]
+
+
 def reassign_skus(conn: sqlite3.Connection, source_id: int, target_id: int) -> None:
     conn.execute("UPDATE product_skus SET product_id = ? WHERE product_id = ?", (target_id, source_id))
 
