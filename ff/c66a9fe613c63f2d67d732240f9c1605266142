@@ -1,0 +1,54 @@
+tests/test_cli_review.py
+  s_7fd02e386af754::t_f748708ae3c4d1 4,208-210,829-844
+julius/cli/stores.py
+  s_7fd02e386af754::t_ddcf9cfe2d56f8 11,92
+  s_7fd02e386af754::t_11a9df63e20bba 132
+  s_7fd02e386af754::t_0c3ab5d1f765b9 4,149-152
+docs/requirements/readable-dates.md
+  s_7fd02e386af754::t_01890a6108430b 15,30
+  s_7fd02e386af754::t_dc4bb3e0579ca3 36-39,41,44-46
+  s_7fd02e386af754::t_b8a094860b2edd 1-14,16-27,31-35,47-71
+  s_7fd02e386af754::t_4026cdf51c4355 28-29,40,42-43
+julius/cli/_common.py
+  s_7fd02e386af754::t_256eda99a556ed 4,9,24-61
+  s_7fd02e386af754::t_51a74efa47dfd7 62-63
+docs/design/readable-dates.md
+  s_7fd02e386af754::t_70899daa624e6b 11
+  s_7fd02e386af754::t_b9073ed047e19f 3,138-149
+  s_7fd02e386af754::t_b2ae16be57aaab 118,128
+  s_7fd02e386af754::t_63384815812c26 1-2,4-10,12-53,56-63,65-74,77-107,112,114-117,119-127,131-137
+  s_7fd02e386af754::t_255deb12d4395c 54-55,64,129-130
+  s_7fd02e386af754::t_0498d6e5aa0af3 75-76,108-111,113
+julius/cli/products.py
+  s_7fd02e386af754::t_0c3ab5d1f765b9 3,11,244,246-253,261
+  s_7fd02e386af754::t_03d926c716c835 245
+julius/cli/receipts.py
+  s_7fd02e386af754::t_ddcf9cfe2d56f8 13-23,310
+  s_7fd02e386af754::t_11a9df63e20bba 237-239
+julius/cli/_review.py
+  s_7fd02e386af754::t_0c3ab5d1f765b9 7,76-79
+tests/test_cli_catalog.py
+  s_7fd02e386af754::t_dd24b634abb23b 394
+tests/test_e2e.py
+  s_7fd02e386af754::t_dd24b634abb23b 150,323,461,588
+tests/test_cli_common.py
+  s_7fd02e386af754::t_f8f217cfbb88e1 1-76
+tests/test_cli_receipts.py
+  s_7fd02e386af754::t_dd24b634abb23b 544
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ffc66a9fe613c63f2d67d732240f9c1605266142",
+  "prompts": {},
+  "sessions": {
+    "s_7fd02e386af754": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01285a93-3587-477d-9640-99f579c1e4e0",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
