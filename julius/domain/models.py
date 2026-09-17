@@ -79,6 +79,7 @@ class PriceRecord:
     kind: str | None = None  # of the product this row belongs to
     access_key: str = ""  # of the receipt this row came from; lets a caller tell new rows from history
     source_product_id: int = 0  # the product this row was bought as; product_id is its group's root
+    store_cnpj: str = ""  # the store's identity; nickname is a label two branches can share
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,7 @@ class StorePrice:
     store_nickname: str
     price: float  # on the comparison basis
     purchased_at: str
+    store_cnpj: str = ""  # what the store was grouped by; two branches can share a nickname
 
 
 @dataclass(frozen=True)

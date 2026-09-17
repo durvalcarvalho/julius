@@ -286,3 +286,27 @@ def test_new_extremes_empty_access_keys(conn):
     _price(conn, product, STORE_A, "KG", 5.0, "2026-09-16T10:00:00", "new")
     assert new_extremes(conn, []) == []
     assert new_extremes(conn, ["inexistente"]) == []
+
+
+def test_compare_stores_keeps_two_branches_that_share_a_nickname(conn):
+    """Two CNPJs of one chain are two stores. They share a nickname until the user renames them,
+    and keying the group by nickname collapsed them into one — dropping the group as single-store
+    (measured on the real database: 6 groups had two CNPJs, only 5 survived)."""
+    branch_a, branch_b = "11832478000285", "11832478000366"
+    ensure_store(conn, branch_a, "Dona de Casa")
+    ensure_store(conn, branch_b, "Dona de Casa")
+    a = resolve_product_id(conn, branch_a, "1", "SACOLA REUTILIZAVEL UND")
+    b = resolve_product_id(conn, branch_b, "2", "SACOLA REUTILIZAVEL UND")
+    for product_id in (a, b):
+        set_kind(conn, product_id, "sacola reutilizável")
+        set_content(conn, product_id, 1.0, "UN")
+    _price(conn, a, branch_a, "UN", 0.22, "2026-09-07T10:00:00", "k1")
+    _price(conn, b, branch_b, "UN", 0.30, "2026-09-10T10:00:00", "k2")
+
+    (comparison,) = compare_stores(conn).comparisons
+
+    assert [(entry.store_cnpj, entry.price) for entry in comparison.entries] == [
+        (branch_a, 0.22),
+        (branch_b, 0.30),
+    ]
+    assert {entry.store_nickname for entry in comparison.entries} == {"Dona de Casa"}

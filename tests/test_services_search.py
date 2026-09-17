@@ -7,6 +7,7 @@ from julius.parsers.df import DFReceiptParser
 from julius.repositories.prices import insert_price
 from julius.repositories.products import add_tag, product_names, resolve_product_id, set_content
 from julius.repositories.stores import ensure_store
+from julius.services.catalog import merge_products
 from julius.services.search import (
     catalog_for_matching,
     closest_names,
@@ -361,3 +362,22 @@ def test_rows_without_content_go_last_in_content_order(conn):
 
     assert [row.price_per_content is None for row in rows] == [False, False, True]
     assert rows[0].highlight == "lowest"  # 4,99 / 1,5L = 3,33/L beats 6,99 / 2L = 3,50/L
+
+
+def test_collapse_keeps_two_branches_that_share_a_nickname(conn):
+    """Two branches of one chain, same merged product, same day, same price: two real purchases,
+    not one receipt line repeated. The collapse keyed on the nickname the branches share, so the
+    second row vanished. Needs the merge — unmerged, the two rows already differ by product."""
+    branch_a, branch_b = "11832478000285", "11832478000366"
+    ensure_store(conn, branch_a, "Dona de Casa")
+    ensure_store(conn, branch_b, "Dona de Casa")
+    a = resolve_product_id(conn, branch_a, "1", "SACOLA REUTILIZAVEL UND")
+    b = resolve_product_id(conn, branch_b, "2", "SACOLA REUTILIZAVEL UND")
+    for product_id, cnpj, key in ((a, branch_a, "k1"), (b, branch_b, "k2")):
+        receipt = Receipt(access_key=key, issued_at="2026-09-10T10:00:00", store_cnpj=cnpj, store_legal_name="S", items=())
+        assert insert_price(conn, receipt, ReceiptItem(1, "c", "SACOLA REUTILIZAVEL UND", 1.0, "UN", 0.22, 0.22), product_id)
+    merge_products(conn, b, a)
+
+    records = search_prices(conn, "sacola")
+
+    assert sorted(record.store_cnpj for record in records) == [branch_a, branch_b]

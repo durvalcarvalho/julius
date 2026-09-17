@@ -326,6 +326,32 @@ def test_comparar_message_when_no_shared_kind():
     assert "sem base para comparar" in result.output
 
 
+def test_comparar_says_how_many_products_still_have_no_kind():
+    """Coverage, not existence: one typed product used to silence the nudge entirely, which is
+    exactly the state that makes the comparison come back empty."""
+    _import("qrcode.html")
+    assert _run("produtos", "tipo", "1", "refrigerante").exit_code == 0
+
+    result = _run("mercados", "comparar")
+
+    assert "14 dos 15 produtos ainda não têm tipo" in result.output
+    assert "julius produtos revisar" in result.output
+
+
+def test_comparar_disambiguates_two_stores_sharing_a_nickname():
+    """Grouping by CNPJ means two branches can reach the same table under one nickname. Two
+    identical rows would be worse than the dropped group, so the CNPJ goes on the label."""
+    first, second = _tomatoes_in_two_stores()
+    for product_id in (first, second):
+        assert _run("produtos", "tipo", str(product_id), "tomate").exit_code == 0
+    assert _run("mercados", "renomear", "27289076001379", "DONA DE CASA S/A").exit_code == 0
+
+    result = _run("mercados", "comparar")
+
+    assert "DONA DE CASA S/A · 27289076001379" in result.output
+    assert "DONA DE CASA S/A · 11832478000285" in result.output
+
+
 def test_comparar_prints_table_and_orders_cheapest_first():
     first, second = _tomatoes_in_two_stores()
     for product_id in (first, second):

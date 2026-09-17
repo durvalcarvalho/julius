@@ -177,7 +177,9 @@ def _collapse(records: list[PriceRecord]) -> list[PriceRecord]:
     Has to happen before the highlight, or the limit is spent on repetition."""
     seen: dict[tuple[int, str, str, float], PriceRecord] = {}
     for record in records:
-        seen.setdefault((record.product_id, record.purchased_at, record.store_nickname, record.unit_price), record)
+        # By CNPJ: two branches of one chain share a nickname, and collapsing them would hide a
+        # second real purchase behind the first.
+        seen.setdefault((record.product_id, record.purchased_at, record.store_cnpj, record.unit_price), record)
     return list(seen.values())
 
 

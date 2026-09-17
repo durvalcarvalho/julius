@@ -7,7 +7,7 @@ import typer
 from rich.table import Table
 
 from julius.cli._common import HIGHLIGHT_STYLE, console, fail, money, open_db
-from julius.domain.models import KindComparison
+from julius.domain.models import KindComparison, StoreComparison
 from julius.domain.normalization import digits_only
 from julius.services import catalog, comparison as comparison_service
 
@@ -54,24 +54,34 @@ def compare_stores() -> None:
     conn = open_db()
     try:
         comparison = comparison_service.compare_stores(conn)
-        has_kinds = any(product.kind for product in catalog.list_products(conn))
+        products = catalog.list_products(conn)
     finally:
         conn.close()
+    typed = sum(1 for product in products if product.kind)
     if not comparison.comparisons:
-        if not has_kinds:
+        if not typed:
             console.print("Nenhum produto tem tipo ainda. Rode: julius produtos revisar")
         else:
             console.print("Nenhum tipo de produto foi comprado em dois mercados ainda — sem base para comparar.")
+            # Coverage, not existence: one typed product out of a hundred used to silence this,
+            # and a half-curated catalogue is the likeliest reason there is nothing to compare.
+            if typed < len(products):
+                missing = len(products) - typed
+                console.print(
+                    f"{missing} dos {len(products)} produtos ainda não têm tipo. Rode: julius produtos revisar",
+                    style="dim",
+                )
         return
 
+    labels = _labels(comparison)
     for group in comparison.comparisons:
-        console.print(_comparison_table(group))
+        console.print(_comparison_table(group, labels))
 
-    appearances = Counter(entry.store_nickname for group in comparison.comparisons for entry in group.entries)
-    wins = Counter(group.entries[0].store_nickname for group in comparison.comparisons)
-    width = max(len(store) for store in appearances)
-    for store, total in sorted(appearances.items(), key=lambda item: (-wins[item[0]] / item[1], item[0])):
-        console.print(f"{store.ljust(width)}  mais barato em {wins[store]} de {total} {_plural(total)}")
+    appearances = Counter(entry.store_cnpj for group in comparison.comparisons for entry in group.entries)
+    wins = Counter(group.entries[0].store_cnpj for group in comparison.comparisons)
+    width = max(len(labels[cnpj]) for cnpj in appearances)
+    for cnpj, total in sorted(appearances.items(), key=lambda item: (-wins[item[0]] / item[1], labels[item[0]])):
+        console.print(f"{labels[cnpj].ljust(width)}  mais barato em {wins[cnpj]} de {total} {_plural(total)}")
 
     first, last = comparison.first_purchase, comparison.last_purchase
     count = len(comparison.comparisons)
@@ -87,7 +97,26 @@ def _day_month(purchased_at: str) -> str:
     return f"{purchased_at[8:10]}/{purchased_at[5:7]}"
 
 
-def _comparison_table(group: KindComparison) -> Table:
+def _labels(comparison: StoreComparison) -> dict[str, str]:
+    """A name per CNPJ. Two branches of one chain carry the same nickname until the user renames
+    them, and two identical rows in a table is the one thing worse than dropping the group — so a
+    shared nickname gets its CNPJ appended. `julius mercados listar` shows which address is which."""
+    by_nickname: dict[str, set[str]] = {}
+    for group in comparison.comparisons:
+        for entry in group.entries:
+            by_nickname.setdefault(entry.store_nickname, set()).add(entry.store_cnpj)
+    return {
+        entry.store_cnpj: (
+            f"{entry.store_nickname} · {entry.store_cnpj}"
+            if len(by_nickname[entry.store_nickname]) > 1
+            else entry.store_nickname
+        )
+        for group in comparison.comparisons
+        for entry in group.entries
+    }
+
+
+def _comparison_table(group: KindComparison, labels: dict[str, str]) -> Table:
     if group.basis == "price_per_content":
         basis = f"por {group.content_unit} (por conteúdo)"
     else:
@@ -96,5 +125,6 @@ def _comparison_table(group: KindComparison) -> Table:
     cheapest, dearest = group.entries[0].price, group.entries[-1].price
     for entry in group.entries:
         highlight = "lowest" if entry.price == cheapest else "highest" if entry.price == dearest else None
-        table.add_row(entry.store_nickname, money(entry.price), entry.purchased_at[:10], style=HIGHLIGHT_STYLE.get(highlight or ""))
+        table.add_row(labels[entry.store_cnpj], money(entry.price), entry.purchased_at[:10], style=HIGHLIGHT_STYLE.get(highlight or ""))
     return table
+

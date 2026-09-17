@@ -35,16 +35,19 @@ def compare_stores(conn: sqlite3.Connection) -> StoreComparison:
         group = groups[key]
         basis, participants = comparison_basis(group)
         priced = [(value, group[index]) for index in participants if (value := basis_value(group[index], basis)) is not None]
-        cheapest: dict[str, tuple[float, str]] = {}
+        # Keyed by CNPJ, never by nickname: two branches of one chain are distinct stores with
+        # distinct prices, and they share a nickname until the user renames them (measured: both
+        # Dona de Casa branches sell the same bag, and the group was being dropped as single-store).
+        cheapest: dict[str, tuple[float, PriceRecord]] = {}
         for value, record in priced:
-            current = cheapest.get(record.store_nickname)
-            if current is None or value < current[0] or (value == current[0] and record.purchased_at > current[1]):
-                cheapest[record.store_nickname] = (value, record.purchased_at)
+            current = cheapest.get(record.store_cnpj)
+            if current is None or value < current[0] or (value == current[0] and record.purchased_at > current[1].purchased_at):
+                cheapest[record.store_cnpj] = (value, record)
         if len(cheapest) < 2:
             continue
         entries = tuple(
-            StorePrice(store, value, purchased_at)
-            for store, (value, purchased_at) in sorted(cheapest.items(), key=lambda item: (item[1][0], item[0]))
+            StorePrice(record.store_nickname, value, record.purchased_at, cnpj)
+            for cnpj, (value, record) in sorted(cheapest.items(), key=lambda item: (item[1][0], item[1][1].store_nickname, item[0]))
         )
         kind, unit = key
         content_unit = priced[0][1].content_unit if basis == "price_per_content" else None
