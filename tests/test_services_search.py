@@ -282,3 +282,30 @@ def test_search_free_text_no_tag_detected_behaves_like_plain_term(conn):
     assert outcome.records == tuple(search_prices(conn, term="frango assado", tag=None))
     assert outcome.tag is None
     assert outcome.detected_tag is None
+
+
+def test_word_in_a_long_name_matches_and_a_lookalike_substring_does_not(conn):
+    """Regression: fuzz.WRatio penalized a short term against a long name, so "pao" scored 60
+    against a real bread (dropped) and 72 against "...UNIAO" (kept) — the ranking was inverted."""
+    bread = _product(conn, "PAO DE FORMA BAUDUCCO TRADICIONAL 390G", "1")
+    fruit = _product(conn, "LARANJA PERA UNIAO kg", "2")
+    _price(conn, bread, "UN", 7.49, "2026-01-01T00:00:00", "k1")
+    _price(conn, fruit, "KG", 2.49, "2026-01-02T00:00:00", "k2")
+
+    assert [row.product_id for row in search_prices(conn, "pao")] == [bread]
+
+
+def test_abbreviated_term_matches_by_prefix(conn):
+    product = _product(conn, "REFRIGERANTE PEPSI PET 2L", "1")
+    _price(conn, product, "UN", 6.99, "2026-01-01T00:00:00", "k1")
+
+    assert [row.product_id for row in search_prices(conn, "refri")] == [product]
+
+
+def test_every_word_of_a_multi_word_term_must_match(conn):
+    alho = _product(conn, "PAO DE ALHO PRADELLA 400G PICANTE", "1")
+    queijo = _product(conn, "PAO DE QUEIJO BENI TRADICIONAL 800G", "2")
+    _price(conn, alho, "UN", 13.99, "2026-01-01T00:00:00", "k1")
+    _price(conn, queijo, "UN", 15.99, "2026-01-02T00:00:00", "k2")
+
+    assert [row.product_id for row in search_prices(conn, "pao de alho")] == [alho]

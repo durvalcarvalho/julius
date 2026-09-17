@@ -11,28 +11,32 @@ from julius.domain.models import PriceRecord, SearchOutcome
 from julius.domain.normalization import normalize_text
 from julius.repositories import prices, products
 
-MATCH_SCORE_CUTOFF = 70
-"""Minimum WRatio (0-100) for a product name to count as a match.
+MATCH_SCORE_CUTOFF = 80
+"""Minimum _name_score (0-100) for a product name to count as a match.
 
-Measured on real names: "PCANHA" vs "PICANHA BOV FAT KG PROMO" scores 75.00000000000001, so 75
-only passed by floating-point luck; unrelated words ("HORTIFRUTI", "XYZABC") score 27-38.
-70 keeps one-letter typos in with margin and unrelated words out.
+Measured on the real catalog (105 products, AI-written names): every whole-word or prefix hit
+scores 100 ("pao" -> the 5 "Pão ..." products, "refri" -> both "Refrigerante ..."), and a
+one-edit typo on a short word scores 80 ("arros" -> "Arroz", "pcanha" -> "Picanha" 92). The
+false positives that survive at 80 all score exactly 80 and are the price of that typo
+tolerance: "pao" -> "Cacau em pó", "vinho" -> "Pão Zinho", "queijo" -> "Requeijão",
+"refri" -> "Resfriada". 81 would drop them and every one-edit typo with them.
 
-Known false positive (v2, different constant/function than the "queijo" one below):
-"carne" vs "PAO DE ALHO PRADELLA 400G PICANTE" scores 72 — crosses the cutoff, so `julius
-consultar carne` matches garlic bread deterministically and never reaches the AI fallback in
-`cli/receipts.py`. "carnes" (65) correctly misses instead; tests use "carnes" for this reason.
+This replaced fuzz.WRatio, which was measured inverting the ranking: WRatio penalizes a short
+term against a long name, so "pao" scored 60 against "Pão de forma Bauducco tradicional 390g"
+(dropped) and 72 against "Laranja pera União" (kept, via partial match on "UNIAO"). `consultar
+pao` returned 12 fruits and 1 bread; no cutoff value fixes that, only a different scorer.
+Two-edit typos stay out, same limitation already accepted by TAG_MATCH_CUTOFF ("pikana" ->
+"Picanha" is 77).
 """
 
 NEAR_MISS_CUTOFF = 70
 """Minimum fuzz.ratio (0-100) between the term and a single word of a non-matching name for a
 "did you mean" suggestion.
 
-WRatio cannot do this job: a short term against a long name bottoms out at 45-60 for any input
-("xyzabc" scores 45 against "CHA LEAO RELAXA...", "leite" 67.5 against "PAO ZINHO ... BAGUETE"),
-so a WRatio band below MATCH_SCORE_CUTOFF is all noise. Word-level ratio measured on the 5 real
-receipts: "pikana" -> PICANHA 77 and "arros" -> ARR 75 stay in; "frango" -> FGO 67 and
-"sabao" -> ARBO 67 stay out. Known false positive: "queijo" -> QUERO 73.
+Same word-level comparison as MATCH_SCORE_CUTOFF, minus the prefix bonus, so this is simply the
+band just below a match: 70-80. Measured on the 5 real receipts: "pikana" -> PICANHA 77 and
+"arros" -> ARR 75 stay in; "frango" -> FGO 67 and "sabao" -> ARBO 67 stay out. Known false
+positive: "queijo" -> QUERO 73.
 """
 
 TAG_MATCH_CUTOFF = 75
@@ -132,12 +136,27 @@ def closest_names(conn: sqlite3.Connection, term: str, limit: int = 3) -> list[t
     return sorted(scores.items(), key=lambda item: -item[1])[:limit]
 
 
-def _matching_ids(conn: sqlite3.Connection, term: str) -> set[int]:
-    names = {product_id: normalize_text(name) for product_id, name in products.product_names(conn)}
-    matches = process.extract(
-        normalize_text(term), names, scorer=fuzz.WRatio, score_cutoff=MATCH_SCORE_CUTOFF, limit=None
+def _name_score(term_words: Sequence[str], name_words: Sequence[str]) -> float:
+    """Every word of the term has to find a close word in the name: min over the term's words of
+    the best per-word score. The prefix comparison is what keeps an abbreviated term matching
+    ("refri" -> "REFRIGERANTE") without letting a substring anywhere in the name count, which is
+    how "PAO" used to match "UNIAO". It only works in that direction: an abbreviation in the
+    *name* ("LING" for linguiça) still misses, and the durable fix for that is the AI rename."""
+    if not term_words or not name_words:
+        return 0.0
+    return min(
+        max(max(fuzz.ratio(word, other), fuzz.ratio(word, other[: len(word)])) for other in name_words)
+        for word in term_words
     )
-    return {product_id for _, _, product_id in matches}
+
+
+def _matching_ids(conn: sqlite3.Connection, term: str) -> set[int]:
+    term_words = normalize_text(term).split()
+    return {
+        product_id
+        for product_id, name in products.product_names(conn)
+        if _name_score(term_words, normalize_text(name).split()) >= MATCH_SCORE_CUTOFF
+    }
 
 
 def _candidate_ids(conn: sqlite3.Connection, term: str | None, tag: str | None) -> set[int]:
