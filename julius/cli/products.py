@@ -7,7 +7,7 @@ from rich.table import Table
 
 from julius import config
 from julius.cli import _review
-from julius.cli._common import console, fail, open_db
+from julius.cli._common import console, content_text, fail, open_db
 from julius.cli._hints import print_hints
 from julius.domain.models import Product
 from julius.infra import ai_log
@@ -244,4 +244,4 @@ def _name_of(conn, product_id: int) -> str:
 def _content(product: Product) -> str:
     if product.content_quantity is None:
         return ""
-    return f"{product.content_quantity:g}".replace(".", ",") + f" {product.content_unit}"
+    return content_text(product.content_quantity, product.content_unit)

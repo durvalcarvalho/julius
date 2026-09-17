@@ -19,6 +19,10 @@ def money(value: float) -> str:
     return f"R$ {value:.2f}".replace(".", ",")
 
 
+def content_text(quantity: float, unit: str) -> str:
+    return f"{quantity:g}".replace(".", ",") + f" {unit}"
+
+
 def open_db() -> sqlite3.Connection:
     return db.connect(config.load().db_path)
 

@@ -5,15 +5,15 @@ from collections import Counter
 from collections.abc import Sequence
 from datetime import datetime, timezone
 
-import typer
 from rich.table import Table
+from rich.text import Text
 
-from julius.cli._common import console
+from julius.cli._common import console, content_text
 from julius.config import Config
-from julius.domain.models import AppliedAction, ProductProposal
+from julius.domain.models import AppliedAction, Product, ProductProposal
 from julius.infra import ai_log
 from julius.infra.llm_client import LlmClient
-from julius.services import curation, suggestions
+from julius.services import catalog, curation, suggestions
 
 _FIELD_LABELS = (("name", "nome(s)"), ("tag", "categoria(s)"), ("content", "conteúdo(s)"), ("kind", "tipo(s)"))
 
@@ -53,33 +53,44 @@ def _log_actions(settings: Config, actions: Sequence[AppliedAction]) -> None:
         )
 
 
-def _table(proposals: Sequence[ProductProposal]) -> Table:
+def _category_cell(proposal: ProductProposal) -> Text:
+    """The applied category in normal weight, the discarded candidates dim beside it."""
+    discarded = [tag for tag in proposal.tags if tag != proposal.tag]
+    if proposal.tag is None:
+        return Text(" · ".join(discarded), style="dim")
+    return Text.assemble(proposal.tag, (" · " + " · ".join(discarded) if discarded else "", "dim"))
+
+
+def _or_current(proposed: str, current: str) -> str | Text:
+    """An empty cell means one thing only: neither the AI nor the catalog has the value."""
+    return proposed if proposed else Text(current, style="dim")
+
+
+def _current_content(product: Product | None) -> str:
+    if product is None or product.content_quantity is None:
+        return ""
+    return content_text(product.content_quantity, product.content_unit)  # type: ignore[arg-type]
+
+
+def _table(proposals: Sequence[ProductProposal], products_by_id: dict[int, Product]) -> Table:
     table = Table("ID", "Cupom", "Nome", "Categoria", "Tipo", "Conteúdo")
     for proposal in proposals:
-        name = proposal.readable_name or proposal.current_name
-        category = proposal.tag or ("? " + ", ".join(proposal.tags) if proposal.tags else "")
-        content = f"{proposal.content.quantity:g} {proposal.content.unit}" if proposal.content else ""
-        table.add_row(str(proposal.product_id), proposal.current_name, name, category, proposal.kind or "", content)
+        product = products_by_id.get(proposal.product_id)
+        proposed_content = content_text(proposal.content.quantity, proposal.content.unit) if proposal.content else ""
+        table.add_row(
+            str(proposal.product_id),
+            proposal.receipt_description,
+            proposal.readable_name or proposal.current_name,
+            _category_cell(proposal),
+            _or_current(proposal.kind or "", product.kind if product and product.kind else ""),
+            _or_current(proposed_content, _current_content(product)),
+        )
     return table
 
 
-def _ask_tag(proposal: ProductProposal) -> str | None:
-    options = "  ".join(
-        [f"[{i}] {tag}" for i, tag in enumerate(proposal.tags, start=1)]
-        + [f"[{len(proposal.tags) + 1}] outra", "[Enter] pular"]
-    )
-    name = proposal.readable_name or proposal.current_name
-    answer = typer.prompt(f"{proposal.product_id} · {name} — categoria  {options}", default="", show_default=False)
-    answer = answer.strip()
-    if not answer.isdigit():
-        return None
-    index = int(answer)
-    if 1 <= index <= len(proposal.tags):
-        return proposal.tags[index - 1]
-    if index == len(proposal.tags) + 1:
-        new_tag = typer.prompt("    nova categoria").strip()
-        return new_tag or None
-    return None
+def _needs_content(proposal: ProductProposal, products_by_id: dict[int, Product]) -> bool:
+    product = products_by_id.get(proposal.product_id)
+    return proposal.content is None and proposal.sold_by_unit and product is not None and product.content_quantity is None
 
 
 def review_products(
@@ -100,7 +111,8 @@ def review_products(
             console.print(f"IA não respondeu (veja {settings.ai_log_path}).")
         return False
 
-    console.print(_table(proposals))
+    products_by_id = {product.id: product for product in catalog.list_products(conn)}
+    console.print(_table(proposals, products_by_id))
 
     # Content and kind are applied without asking: both are reversible by a command that already
     # exists (ticket 118) and a wrong value shows up in `produtos listar`/`consultar`. Asking is
@@ -115,17 +127,7 @@ def review_products(
         console.print(f"Aplicado: {summary}.")
         console.print("Desfazer ou auditar: julius produtos revisar --ultimas-acoes")
 
-    pending = 0
-    for proposal in proposals:
-        if proposal.tag is not None:
-            continue
-        # `--sim` no longer applies an unknown first candidate: creating vocabulary unattended is
-        # what would put the measured TAG_MATCH_CUTOFF at risk (ticket 132).
-        chosen = _ask_tag(proposal) if interactive else None
-        if chosen:
-            _log_actions(settings, curation.apply(conn, proposal, tag=chosen, content=False, kind=False))
-        else:
-            pending += 1
+    pending = [p for p in proposals if _needs_content(p, products_by_id)]
 
     candidates = curation.duplicate_candidates(conn, product_ids)
     duplicates = curation.judge_duplicates(conn, settings, client, candidates)
@@ -140,6 +142,6 @@ def review_products(
             )
 
     if pending:
-        console.print(f"Pendentes: {pending} produto(s) sem categoria.")
+        console.print(f"Pendentes: {len(pending)} produto(s) sem conteúdo.")
 
     return True

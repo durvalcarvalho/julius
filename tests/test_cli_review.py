@@ -113,7 +113,7 @@ def test_revisar_applies_first_known_tag_without_asking(monkeypatch):
     assert "mercearia" in _run("produtos", "listar").output
 
 
-def test_revisar_unknown_candidates_apply_nothing_and_report_pending(monkeypatch):
+def test_revisar_does_not_apply_unknown_category(monkeypatch):
     _import("qrcode.html")
     _ai_env(monkeypatch)
     client = ScriptedLlmClient(
@@ -125,7 +125,7 @@ def test_revisar_unknown_candidates_apply_nothing_and_report_pending(monkeypatch
     result = _run("produtos", "revisar", input="\n")
 
     assert result.exit_code == 0, result.output
-    assert "Pendentes: 1 produto(s) sem categoria." in result.output
+    assert "categoria  [" not in result.output
     assert "ovos" not in _run("produtos", "listar").output
 
 
@@ -265,7 +265,7 @@ def test_revisar_summary_omits_zero_counts(monkeypatch):
     result = _run("produtos", "revisar")
 
     assert "Aplicado: 1 nome(s), 1 categoria(s)." in result.output
-    assert "conteúdo" not in result.output and "tipo(s)" not in result.output
+    assert "conteúdo(s)" not in result.output and "tipo(s)" not in result.output
 
 
 def test_revisar_survives_unwritable_log(monkeypatch, tmp_path):
@@ -302,7 +302,7 @@ def test_revisar_non_interactive_applies_known_categories_and_content(monkeypatc
     result = _run("produtos", "revisar")
 
     assert result.exit_code == 0, result.output
-    assert "Pendentes:" not in result.output
+    assert "Pendentes: 1 produto(s) sem conteúdo." in result.output  # the tea, sold by UN, got none
     output = _run("produtos", "listar").output
     assert "carnes" in output and "hortifruti" in output and "mercearia" in output
     assert "30 UN" in output
@@ -482,3 +482,96 @@ def test_review_summary_points_to_flag(monkeypatch):
     result = _run("produtos", "revisar")
 
     assert "julius produtos revisar --ultimas-acoes" in result.output
+
+
+def test_table_shows_receipt_description_not_renamed_name(monkeypatch):
+    _import("qrcode.html")
+    assert _run("produtos", "renomear", "11", "Linguiça Aurora").exit_code == 0
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={"enrich": _enrich([{"id": 11, "readable_name": "Outro Nome", "tags": ["carnes"], "content": None}])}
+    )
+    _stub_client(monkeypatch, client)
+
+    output = _run("produtos", "revisar").output
+
+    assert "LING FGO RESF AURORA kg" in output  # Cupom
+    assert "Linguiça Aurora" in output  # Nome (renamed by hand, the AI never overwrites it)
+
+
+def test_table_shows_current_content_dim_when_nothing_to_propose(monkeypatch):
+    _import("qrcode.html")
+    assert _run("produtos", "definir-conteudo", "12", "500", "G").exit_code == 0
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich(
+                [
+                    {"id": 12, "readable_name": "Picanha", "tags": ["carnes"], "content": None},
+                    {"id": 13, "readable_name": "Fraldinha", "tags": ["carnes"], "content": None},
+                ]
+            )
+        }
+    )
+    _stub_client(monkeypatch, client)
+
+    output = _run("produtos", "revisar").output
+
+    picanha, fraldinha = (line for line in output.splitlines() if "Picanha" in line or "Fraldinha" in line)
+    assert "0,5 KG" in picanha
+    assert "0,5 KG" not in fraldinha
+
+
+def test_table_shows_current_kind_when_nothing_to_propose(monkeypatch):
+    _import("qrcode.html")
+    assert _run("produtos", "tipo", "12", "picanha").exit_code == 0
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={"enrich": _enrich([{"id": 12, "readable_name": "Picanha", "tags": ["carnes"], "content": None}])}
+    )
+    _stub_client(monkeypatch, client)
+
+    assert "picanha" in _run("produtos", "revisar").output
+
+
+def test_table_shows_category_and_discarded_candidates(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={"enrich": _enrich([{"id": 8, "readable_name": "Chá Relaxa", "tags": ["mercearia", "bebidas"], "content": None}])}
+    )
+    _stub_client(monkeypatch, client)
+
+    output = _run("produtos", "revisar").output
+
+    assert "mercearia" in output and "bebidas" in output
+    assert "?" not in output
+
+
+def test_revisar_asks_nothing_at_all(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={"enrich": _enrich([{"id": 8, "readable_name": "Chá Relaxa", "tags": ["mercearia", "bebidas"], "content": None}])}
+    )
+    _stub_client(monkeypatch, client)
+    monkeypatch.setattr(_review, "_is_interactive", lambda: True)
+
+    result = _run("produtos", "revisar")  # no input= at all: nothing may block on stdin
+
+    assert result.exit_code == 0, result.output
+
+
+def test_revisar_no_pending_line_when_nothing_pending(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich(
+                [{"id": 11, "readable_name": "Linguiça", "tags": ["carnes"], "content": None, "kind": "linguiça"}]
+            )
+        }
+    )
+    _stub_client(monkeypatch, client)
+
+    assert "Pendentes:" not in _run("produtos", "revisar").output  # sold by KG: content is not owed
