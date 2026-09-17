@@ -751,7 +751,8 @@ def test_consultar_prints_the_cheapest_per_litre():
 
 
 def test_consultar_says_unidade_for_un_content():
-    """The word comes from content_unit, so a pack of 2 vs a pack of 3 reads "por unidade"."""
+    """The word comes from content_unit, not from the product. A 2L bottle with content "2 UN" is
+    nonsense on purpose: it is the shortest way to exercise the UN branch with the real fixtures."""
     _import("qrcode.html")
     _content(1, "2", "UN")
     _content(2, "3", "UN")
