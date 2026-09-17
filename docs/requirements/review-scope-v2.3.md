@@ -2,6 +2,7 @@
 
 > Brainstorm de 2026-09-16 (`/sc:brainstorm`), disparado pelo primeiro `julius produtos revisar` real depois da v2.2, no banco de produção. Duas observações do usuário: (1) "vários itens não têm conteúdo definido, mesmo tendo a quantidade no nome — por que não pegamos essa informação?"; (2) "nessa sequência de tags tudo é sempre a primeira opção, então por que não fazer isso automático?".
 > Insumos: `~/.local/share/julius/prices.db` e `~/.local/share/julius/ai_calls.jsonl` reais, lidos nesta sessão; respostas do usuário às perguntas do brainstorm.
+> **Segunda rodada de brainstorm, mesmo dia** (§6–§8): o usuário perguntou se o sistema teria como saber, por intuição de varejo brasileiro, que "brócolis é quase sempre bandeja, prato de plástico é pacote com N, espátula é uma unidade" — ou se isso foge demais. Resposta medida: não foge, desde que a intuição nunca grave sozinha. Emenda o RF2.
 > Próximo passo: `/sc:design` → tickets (131+).
 
 ## 0. Ponto de partida — fatos medidos
@@ -84,3 +85,65 @@ Com o critério novo, a primeira execução alcança ~86 produtos (a maioria por
 - **Teto de produtos por execução** e **confirmação antes de gastar**: recusados (RF4).
 - **Mexer no prompt para pedir uma categoria só**: avaliado e não escolhido. RF2 resolve o atrito sem tocar no prompt, e manter 2 candidatos preserva a informação na tabela.
 - Qualquer mudança em `consultar`, `mercados comparar`, fusão ou base de comparação.
+
+
+## 6. Segunda rodada — intuição de varejo e HITL para conteúdo
+
+### 6.1 Fatos medidos
+
+Sonda executada nesta sessão contra o provedor real (`deepseek-flash`), 9 produtos, 1 chamada, **US$ 0,00073**. O prompt da sonda pediu algo que o prompt de produção **não** pede: como o produto é vendido no varejo brasileiro (`unidade` / `pacote` / `peso` / `volume`), até 3 candidatos de conteúdo, e se o número veio do rótulo ou do costume. Script no scratchpad, não versionado (mesma convenção do smoke test da v2); o resultado é este:
+
+| # | Fato | Evidência |
+|---|---|---|
+| F13 | **A intuição de varejo existe e acerta a maioria.** 5 dos 7 produtos-UN sem conteúdo receberam candidato útil: Sacola, Brócolis Ninja, Espátula e Alface como `1 UN` ("a embalagem é a unidade"), e Ovos Iana como `30 UN`. | Saída da sonda. |
+| F14 | **O caso dos Ovos (F8) se resolve com essa pergunta:** o modelo respondeu `30 UN` marcando que o número veio do próprio nome. | Saída da sonda × F8. |
+| F15 | **Quando não sabe o número, o modelo sabe que não sabe — e propõe alternativas.** `Prato Redondo Descartável 21cm` veio como `forma: pacote`, candidatos `10 UN` e `20 UN`, número **não** vindo do rótulo. É o formato exato de uma pergunta ao humano. | Saída da sonda. |
+| F16 | **O erro perigoso é o mesmo de sempre, agora com auto-certeza.** `Filme PVC Wyda 30m x 28cm` virou `30 UN` **com o campo "número veio do rótulo" marcado como verdadeiro** — os 30 metros lidos como 30 unidades. É a armadilha `PRATO 21CM` que o projeto rejeitou duas vezes, e o modelo se declarou certo dela. | Saída da sonda. |
+| F17 | **Terceira falha consecutiva de auto-relato de confiança.** `confidence` (v2, rejeitado), número de tags (F9/F12), e agora "o número veio do rótulo" (F16). O **único** sinal honesto medido é o modelo **recusar responder**: o prompt de produção acertou `null` em 6 de 6 (F2). | F2, F12, F16. |
+| F18 | **No formato "dê candidatos", o modelo nunca declina.** Em 9 produtos não devolveu lista vazia nem `desconhecido` uma única vez — chuta sempre. Nos controles vendidos por peso produziu lixo dimensional: Bacon tablete `500 KG`, Queijo brie `200 KG`. | Saída da sonda. |
+| F19 | O lixo de F18 é inofensivo **porque o RF1 já não pergunta conteúdo de produto vendido por KG**. A sonda incluiu esses dois como controle negativo, e eles confirmam o valor do filtro. | RF1 (F6) × F18. |
+
+### 6.2 RF5 — Conteúdo recusado pela IA vira pergunta ao humano, com candidatos
+
+Quando o enriquecimento devolve `null` para o conteúdo de um produto vendido por UN, o sistema **pergunta ao usuário**, oferecendo os candidatos mais prováveis para escolha por número, com opção de digitar outro valor e de pular.
+
+- **O gatilho é a recusa da IA, não um score** (RF6). Binário, sem constante nova, sem calibragem periódica.
+- Pular (ou rodar sem terminal) deixa o produto pendente; ele **volta na próxima rodada**. Nenhum estado novo, nenhuma decisão permanente tomada por inércia — mesma escolha já feita para os nulos legítimos em §2/RF1.
+- É esta a exceção interativa que o usuário aceitou: "deve ser a exceção", e é — são ~6 produtos hoje, e só produto novo depois.
+
+### 6.3 RF6 — A intuição de varejo alimenta a pergunta e nunca grava
+
+O conhecimento de "como isso é vendido no Brasil" pode ser consultado, mas **só para gerar as opções** apresentadas no RF5. Nenhum valor vindo de intuição é gravado sem uma tecla do usuário — nem `1 UN`, que foi 4/4 correto na amostra.
+
+Justificativa, com o contraexemplo medido: a mesma intuição que acerta `Brócolis → 1 UN` erra `Filme PVC → 30 UN` **e se declara certa** (F16). Como conteúdo errado não fica evidente — vira um R$/UN plausível na tabela de `consultar` e entra no preço por conteúdo de `mercados comparar` —, ele **não passa** na condição (2) do teste de duas condições (`comparability-closure.md` §4): o erro precisa ser visível na saída normal. Nome, tag e tipo passam; conteúdo **inferido por costume** não passa. Conteúdo lido de rótulo inequívoco continua passando e continua automático — essa é a diferença que separa os dois casos.
+
+Consequência aceita: a comparação bandeja-contra-bandeja (Brócolis entre duas lojas) só é destravada depois que o usuário confirma. Uma tecla por produto, uma vez na vida do produto.
+
+### 6.4 Emenda ao RF2 — a revisão não fica 100% não-interativa
+
+§2/RF2 dizia que a revisão passaria a "não perguntar nada". Isso continua valendo **para categoria** — e só. Estado final:
+
+| Campo | Comportamento |
+|---|---|
+| Nome legível | aplica sozinho (produto ainda com nome cru) |
+| Categoria | aplica a primeira sugestão, sempre, sem perguntar (RF2) |
+| Tipo | aplica sozinho |
+| Conteúdo **lido do rótulo** | aplica sozinho |
+| Conteúdo **que a IA recusou** | **pergunta**, com candidatos de intuição (RF5/RF6) |
+
+O laço interativo não desaparece: ele **muda de campo**. Sai da categoria, onde o modelo sempre responde e sempre acerta a primeira (25/25), e entra no conteúdo, onde o modelo honestamente declina.
+
+Para categoria, o "threshold" pedido pelo usuário é vazio na prática: não houve um caso sequer em que a IA não soubesse propor uma primeira categoria conhecida (F9). Se algum dia devolver **nenhuma** categoria, esse é o gatilho natural para perguntar — mesma regra do RF5, mesmo sinal (a recusa).
+
+## 7. Questões em aberto acrescentadas por esta rodada
+
+6. **Uma chamada ou duas?** A intuição (`forma`/`candidatos`) pode virar campos extras do mesmo item de `enrich`, ou uma segunda chamada só para os produtos recusados. A segunda opção custa ~US$ 0,0007 por rodada e mantém o prompt de produção intacto — inclusive a recusa confiável, que é o ativo mais valioso aqui (F17). Risco de juntar: contaminar o `null` honesto com o hábito de chutar (F18).
+7. **Como rotular o candidato na pergunta.** `[1] 1 UN (bandeja)` — a explicação entre parênteses vem do campo `forma` e ajuda a decidir, mas é texto vindo da IA aparecendo direto na interface.
+8. **Produto vendido por UN cujo `forma` a IA diz ser "peso"** (ex.: um queijo em peça que o cupom marcou como UN): perguntar mesmo assim, ou tratar como sem conteúdo?
+
+## 8. Fora de escopo, decidido nesta rodada
+
+- **Gravar conteúdo vindo de intuição sem confirmação** — em qualquer variante, inclusive só para `1 UN`. Recusado por F16/RF6.
+- **Score de confiança da IA como gatilho** — recusado pela terceira vez, agora com contraexemplo próprio (F16/F17).
+- **Marcar "não tem conteúdo" ao pular** — recusado de novo, pela mesma razão de §5: congela erro por inércia.
+- **Extrair conteúdo da descrição por regex** — continua rejeitado, e F16 é a evidência mais nova a favor da rejeição.
