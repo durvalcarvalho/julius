@@ -1,0 +1,40 @@
+docs/tickets/julius-v2/144-search-collapse-and-order.md
+  s_e32683ed46ac18::t_7264a969424630 1-70
+docs/tickets/julius-v2/145-cli-cheapest-per-content-line.md
+  s_e32683ed46ac18::t_7264a969424630 1-75
+docs/tickets/julius-v2/140-catalog-merge-rewrite.md
+  s_e32683ed46ac18::t_7264a969424630 1-84
+docs/tickets/julius-v2/146-e2e-docs-v24.md
+  s_e32683ed46ac18::t_7264a969424630 1-85
+docs/tickets/julius-v2/141-cli-unmerge-and-merge-action.md
+  s_e32683ed46ac18::t_7264a969424630 1-79
+docs/tickets/julius-v2/139-group-prices-and-export.md
+  s_e32683ed46ac18::t_7264a969424630 1-68
+  s_e32683ed46ac18::t_5f6e7f070d72bc 69
+docs/tickets/julius-v2/142-curation-divergent-content-guard.md
+  s_e32683ed46ac18::t_7264a969424630 1-64
+docs/tickets/julius-v2/index.md
+  s_e32683ed46ac18::t_060179a56ff97e 30,80-90,116-120,123-124,133-134,159-167,193-196,208
+docs/tickets/julius-v2/137-product-merge-column-and-view.md
+  s_e32683ed46ac18::t_7264a969424630 1-72
+docs/tickets/julius-v2/143-review-auto-merge.md
+  s_e32683ed46ac18::t_7264a969424630 1-87
+docs/tickets/julius-v2/138-group-effective-product.md
+  s_e32683ed46ac18::t_7264a969424630 1-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "233efb5eff56a61a3486156a2dc85b45fad1942e",
+  "prompts": {},
+  "sessions": {
+    "s_e32683ed46ac18": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04c69812-c145-481d-872c-805dcef575c8",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
