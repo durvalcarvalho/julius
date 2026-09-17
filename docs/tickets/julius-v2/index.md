@@ -83,7 +83,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 140 | [catalog: fusão reversível](140-catalog-merge-rewrite.md) | 137, 139 | M | feito | `merge_products` reescrita, `unmerge_product`, guarda de ciclo, `merge_inheritance` |
 | 141 | [CLI: `desfundir` + ação `merge`](141-cli-unmerge-and-merge-action.md) | 140 | M | feito | `produtos desfundir`, `fundir` sem confirmação, `"merge"` no log e no desfazer |
 | 142 | [curation: guarda de conteúdo](142-curation-divergent-content-guard.md) | 138 | S | feito | par com conteúdo divergente deixa de ser candidato |
-| 143 | [review: funde e avisa](143-review-auto-merge.md) | 141, 142 | M | aberto | fusão automática do que a IA confirmou, com pedido de conferência |
+| 143 | [review: funde e avisa](143-review-auto-merge.md) | 141, 142 | M | feito | fusão automática do que a IA confirmou, com pedido de conferência |
 | 144 | [search: colapso + ordem](144-search-collapse-and-order.md) | — | M | aberto | linhas idênticas colapsadas; ordem segue a base de comparação |
 | 145 | [CLI: mais barato por conteúdo](145-cli-cheapest-per-content-line.md) | 144 | S | aberto | a frase que responde "qual embalagem compensa" |
 | 146 | [e2e + docs v2.4](146-e2e-docs-v24.md) | 137–145 | M | aberto | ciclo completo, rodada real, `CLAUDE.md`/`README.md` |

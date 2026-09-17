@@ -12,7 +12,15 @@ from rich.text import Text
 
 from julius.cli._common import console, content_text
 from julius.config import Config
-from julius.domain.models import AppliedAction, ContentSuggestion, PackagingForm, PackagingHint, Product, ProductProposal
+from julius.domain.models import (
+    AppliedAction,
+    ContentSuggestion,
+    DuplicateCandidate,
+    PackagingForm,
+    PackagingHint,
+    Product,
+    ProductProposal,
+)
 from julius.domain.normalization import normalize_content
 from julius.infra import ai_log
 from julius.infra.llm_client import LlmClient
@@ -176,6 +184,36 @@ def _ask_pending_content(
     return still_missing
 
 
+def _merge_duplicates(conn, settings: Config, duplicates: Sequence[DuplicateCandidate]) -> None:
+    """Merges what the AI confirmed and asks the user to check. No threshold: the trigger is the
+    verdict itself, because every confidence cut measured so far inverted the signal (the two
+    correct pairs scored 0,70 and 0,80 and the worst false positive scored 1,00)."""
+    lines: list[str] = []
+    applied: list[AppliedAction] = []
+    for candidate in duplicates:
+        survivor, absorbed = sorted((candidate.product_a, candidate.product_b), key=lambda p: p.id)
+        inherited = catalog.merge_inheritance(conn, absorbed.id, survivor.id)
+        try:
+            catalog.merge_products(conn, absorbed.id, survivor.id)
+        except (ValueError, LookupError) as error:
+            console.print(f"  não foi possível fundir {absorbed.id} em {survivor.id}: {error}")
+            continue
+        applied.append(AppliedAction(survivor.id, "merge", None, str(absorbed.id)))
+        lines.append(
+            f"  {survivor.id} ← {absorbed.id}  {survivor.canonical_name} ≈ {absorbed.canonical_name}"
+            f" — {candidate.ai.rationale}"
+        )
+        if inherited is not None:
+            value, source = inherited
+            lines.append(f"           o grupo herdou {value} do {source}")
+        lines.append(f"           desfazer: {_undo_command(applied[-1])}")
+    if lines:
+        console.print("Fundidos automaticamente (confira):")
+        for line in lines:
+            console.print(line)
+    _log_actions(settings, applied)
+
+
 def review_products(
     conn,
     settings: Config,
@@ -215,16 +253,7 @@ def review_products(
         pending = _ask_pending_content(conn, settings, client, pending)
 
     candidates = curation.duplicate_candidates(conn, product_ids)
-    duplicates = curation.judge_duplicates(conn, settings, client, candidates)
-    if duplicates:
-        console.print("Possíveis duplicatas (IA):")
-        for candidate in duplicates:
-            a, b = candidate.product_a, candidate.product_b
-            console.print(
-                f"  julius produtos fundir {b.id} {a.id}    "
-                f"# {a.canonical_name} ≈ {b.canonical_name} — mesmo produto "
-                f"({candidate.ai.confidence:.2f}): {candidate.ai.rationale}"
-            )
+    _merge_duplicates(conn, settings, curation.judge_duplicates(conn, settings, client, candidates))
 
     if pending:
         console.print(f"Pendentes: {len(pending)} produto(s) sem conteúdo.")

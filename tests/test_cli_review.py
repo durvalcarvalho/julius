@@ -334,8 +334,46 @@ def test_revisar_sim_does_not_apply_unknown_tag(monkeypatch):
     assert "30 UN" in output
 
 
-def test_revisar_prints_fundir_command_for_confirmed_duplicate_and_does_not_merge(monkeypatch):
+def _duplicate_client(monkeypatch, *, same: bool = True, enrich_items: list[dict] | None = None):
+    """The review with one confirmed duplicate pair (ids 12 and 13 of qrcode.html)."""
     _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich(enrich_items or [{"id": 1, "readable_name": "Refrigerante Pepsi 2L", "tags": ["bebidas"], "content": None}]),
+            "merge": _merge([{"id": 1, "rationale": "mesmo corte", "same_product": same, "confidence": 0.8}]),
+        }
+    )
+    _stub_client(monkeypatch, client)
+    return client
+
+
+def test_revisar_merges_confirmed_duplicate_keeping_the_lowest_id(monkeypatch):
+    _duplicate_client(monkeypatch)
+
+    result = _run("produtos", "revisar")
+
+    assert result.exit_code == 0, result.output
+    assert "Fundidos automaticamente (confira):" in result.output
+    assert "12 ← 13" in result.output and "mesmo corte" in result.output
+    assert "desfazer: julius produtos desfundir 13" in result.output
+    output = _run("produtos", "listar").output
+    assert "PICANHA BOV FAT kg PROMO" in output
+    assert "FRALDINHA BOV PROMO kg" not in output  # absorbed, hidden from the listing
+
+
+def test_revisar_does_not_merge_unconfirmed_pair(monkeypatch):
+    _duplicate_client(monkeypatch, same=False)
+
+    result = _run("produtos", "revisar")
+
+    assert "Fundidos automaticamente" not in result.output
+    assert "FRALDINHA BOV PROMO kg" in _run("produtos", "listar").output
+
+
+def test_revisar_merge_announces_inherited_content(monkeypatch):
+    _import("qrcode.html")
+    assert _run("produtos", "definir-conteudo", "13", "500", "G").exit_code == 0
     _ai_env(monkeypatch)
     client = ScriptedLlmClient(
         by_kind={
@@ -344,17 +382,59 @@ def test_revisar_prints_fundir_command_for_confirmed_duplicate_and_does_not_merg
         }
     )
     _stub_client(monkeypatch, client)
-    before = len(_run("produtos", "listar").output.splitlines())
+
+    result = _run("produtos", "revisar")
+
+    assert "o grupo herdou o conteúdo 0.5 KG do produto 13" in result.output
+    assert "0,5 KG" in _run("produtos", "listar").output
+
+
+def test_revisar_merge_logs_the_action_with_its_undo(monkeypatch, tmp_path):
+    _duplicate_client(monkeypatch)
+    _run("produtos", "revisar")
+
+    (action,) = [line for line in _actions(tmp_path) if line["field"] == "merge"]
+    assert (action["product_id"], action["after"]) == (12, "13")
+    assert action["undo"] == "julius produtos desfundir 13"
+
+
+def test_revisar_with_sim_still_merges(monkeypatch):
+    _duplicate_client(monkeypatch)
+    assert "Fundidos automaticamente" in _run("produtos", "revisar", "--sim").output
+
+
+def test_revisar_prints_nothing_about_duplicates_when_there_are_none(monkeypatch):
+    _import("qrcode.html")
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich([{"id": 11, "readable_name": "Linguiça", "tags": ["carnes"], "content": None}]),
+            "merge": _merge([]),
+        }
+    )
+    _stub_client(monkeypatch, client)
+
+    output = _run("produtos", "revisar").output
+    assert "Fundidos" not in output and "duplicata" not in output.lower()
+
+
+def test_revisar_survives_a_merge_that_fails(monkeypatch):
+    """A pair whose products are already in the same group: the cycle guard refuses and the
+    review keeps going."""
+    _import("qrcode.html")
+    assert _run("produtos", "fundir", "13", "12").exit_code == 0
+    _ai_env(monkeypatch)
+    client = ScriptedLlmClient(
+        by_kind={
+            "enrich": _enrich([{"id": 1, "readable_name": "Refrigerante Pepsi 2L", "tags": ["bebidas"], "content": None}]),
+            "merge": _merge([{"id": 1, "rationale": "mesmo corte", "same_product": True, "confidence": 0.8}]),
+        }
+    )
+    _stub_client(monkeypatch, client)
 
     result = _run("produtos", "revisar")
 
     assert result.exit_code == 0, result.output
-    assert "Possíveis duplicatas (IA):" in result.output
-    assert "julius produtos fundir 13 12" in result.output
-    output = _run("produtos", "listar").output
-    assert "PICANHA BOV FAT kg PROMO" in output
-    assert "FRALDINHA BOV PROMO kg" in output
-    assert len(output.splitlines()) == before
 
 
 def test_revisar_without_ai_shows_not_configured_hint():
