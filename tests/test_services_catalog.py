@@ -270,3 +270,81 @@ def test_clear_product_content_clears_both(conn):
 def test_clear_product_content_unknown_product_raises(conn):
     with pytest.raises(LookupError):
         catalog.clear_product_content(conn, 999)
+
+
+def test_merge_rejects_a_cycle(conn):
+    """A cycle makes the product_group recursion never return. This test must terminate."""
+    a = _product(conn, "A", "1")
+    b = _product(conn, "B", "2")
+    catalog.merge_products(conn, a, b)
+
+    with pytest.raises(ValueError, match="já faz parte do grupo"):
+        catalog.merge_products(conn, b, a)
+
+    assert products.group_root(conn, a) == b  # the view still answers
+    assert products.group_root(conn, b) == b
+
+
+def test_merge_rejects_a_two_step_cycle(conn):
+    a, b, c = (_product(conn, name, code) for name, code in (("A", "1"), ("B", "2"), ("C", "3")))
+    catalog.merge_products(conn, a, b)
+    catalog.merge_products(conn, b, c)
+
+    with pytest.raises(ValueError, match="já faz parte do grupo"):
+        catalog.merge_products(conn, c, a)
+
+    assert products.group_root(conn, a) == c
+
+
+def test_unmerge_restores_the_previous_state(conn):
+    a = _product(conn, "A", "1")
+    b = _product(conn, "B", "2")
+    catalog.set_product_content(conn, a, 500, "G")
+    catalog.tag_product(conn, a, "mercearia")
+    catalog.merge_products(conn, a, b)
+    assert products.get_product(conn, b).content_quantity == 0.5
+
+    catalog.unmerge_product(conn, a)
+
+    assert [product.id for product in products.list_products(conn)] == sorted([a, b])
+    assert products.get_product(conn, b).content_quantity is None
+    assert products.get_product(conn, a).tags == ("mercearia",)
+
+
+def test_unmerge_keeps_its_own_children(conn):
+    a, b, c = (_product(conn, name, code) for name, code in (("A", "1"), ("B", "2"), ("C", "3")))
+    catalog.merge_products(conn, a, b)
+    catalog.merge_products(conn, b, c)
+
+    catalog.unmerge_product(conn, b)
+
+    assert products.group_root(conn, a) == b
+    assert products.group_root(conn, c) == c
+
+
+def test_unmerge_product_not_merged_or_unknown_raises(conn):
+    product_id = _product(conn, "A", "1")
+    with pytest.raises(ValueError, match="não está fundido"):
+        catalog.unmerge_product(conn, product_id)
+    with pytest.raises(LookupError):
+        catalog.unmerge_product(conn, 9999)
+
+
+def test_merge_inheritance_reports_content_then_kind_then_none(conn):
+    a = _product(conn, "A", "1")
+    b = _product(conn, "B", "2")
+    assert catalog.merge_inheritance(conn, a, b) is None
+
+    catalog.set_product_kind(conn, a, "tomate")
+    assert catalog.merge_inheritance(conn, a, b) == ("o tipo tomate", f"produto {a}")
+
+    catalog.set_product_content(conn, a, 500, "G")
+    assert catalog.merge_inheritance(conn, a, b) == ("o conteúdo 0.5 KG", f"produto {a}")
+
+    catalog.set_product_content(conn, b, 2, "L")
+    catalog.set_product_kind(conn, b, "agua")
+    assert catalog.merge_inheritance(conn, a, b) is None
+
+
+def test_merge_inheritance_never_raises(conn):
+    assert catalog.merge_inheritance(conn, 9999, 8888) is None

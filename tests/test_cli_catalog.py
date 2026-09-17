@@ -188,7 +188,7 @@ def test_produtos_fundir_same_id_exits_1():
     _import("qrcode.html")
     result = _run("produtos", "fundir", "1", "1", "--sim")
     assert result.exit_code == 1
-    assert "different" in result.stderr
+    assert "diferentes" in result.stderr
 
 
 def test_produtos_comparar_without_ai_shows_env_var_names(monkeypatch):

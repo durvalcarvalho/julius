@@ -125,15 +125,6 @@ def test_product_ids_with_tag_and_unknown_tag_returns_empty(conn_with_stores):
     assert products.product_ids_with_tag(conn, "inexistente") == []
 
 
-def test_reassign_skus_moves_all_skus(conn_with_stores):
-    conn = conn_with_stores
-    source = products.resolve_product_id(conn, STORE_A, "22039", "TOMATE ITALIANO UNIAO kg")
-    target = products.resolve_product_id(conn, STORE_B, "7147", "TOMATE ITALIANO kg")
-    products.reassign_skus(conn, source, target)
-    assert products.resolve_product_id(conn, STORE_A, "22039", "whatever") == target
-    assert _count(conn, "products") == 2
-
-
 def test_remove_tag_deletes_link_but_keeps_tag_row(conn_with_stores):
     conn = conn_with_stores
     a = products.resolve_product_id(conn, STORE_A, "1", "DETERGENTE")
@@ -187,21 +178,6 @@ def test_has_raw_name_true_after_import_false_after_rename(conn_with_stores):
 def test_has_raw_name_false_for_product_without_prices(conn):
     product_id = conn.execute("INSERT INTO products (canonical_name) VALUES ('X')").lastrowid
     assert products.has_raw_name(conn, product_id) is False
-
-
-def test_delete_product_removes_tags_and_fails_if_still_referenced(conn_with_stores):
-    conn = conn_with_stores
-    source = products.resolve_product_id(conn, STORE_A, "22039", "TOMATE ITALIANO UNIAO kg")
-    target = products.resolve_product_id(conn, STORE_B, "7147", "TOMATE ITALIANO kg")
-    products.add_tag(conn, source, "hortifruti")
-    with pytest.raises(sqlite3.IntegrityError):
-        products.delete_product(conn, source)
-    products.reassign_skus(conn, source, target)
-    products.delete_product(conn, source)
-    assert products.get_product(conn, source) is None
-    assert conn.execute("SELECT count(*) FROM product_tags WHERE product_id = ?", (source,)).fetchone()[0] == 0
-    with pytest.raises(LookupError):
-        products.delete_product(conn, 999)
 
 
 def test_set_kind_and_read_back(conn_with_stores):

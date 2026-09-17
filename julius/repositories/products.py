@@ -228,14 +228,6 @@ def group_members(conn: sqlite3.Connection, root_id: int) -> list[int]:
     return [row["product_id"] for row in rows]
 
 
-def reassign_skus(conn: sqlite3.Connection, source_id: int, target_id: int) -> None:
-    conn.execute("UPDATE product_skus SET product_id = ? WHERE product_id = ?", (target_id, source_id))
-
-
-def delete_product(conn: sqlite3.Connection, product_id: int) -> None:
-    _require_exists(conn, product_id)
-    conn.execute("DELETE FROM product_tags WHERE product_id = ?", (product_id,))
-    conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
 
 
 def _group_product(conn: sqlite3.Connection, root_id: int, raw: set[int] | None = None) -> Product:

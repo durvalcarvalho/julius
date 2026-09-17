@@ -31,12 +31,47 @@ def rename_product(conn: sqlite3.Connection, product_id: int, name: str) -> None
 
 
 def merge_products(conn: sqlite3.Connection, source_id: int, target_id: int) -> None:
+    """Records that source belongs to target's group. Nothing is moved and nothing is deleted:
+    the group's name, content, kind and tags are composed on read (repositories.products)."""
     if source_id == target_id:
-        raise ValueError("source and target must be different products")
+        raise ValueError("origem e destino precisam ser produtos diferentes")
     source = _require_product(conn, source_id)
-    target = _require_product(conn, target_id)
+    _require_product(conn, target_id)
+    # A cycle makes the product_group recursion never return, and every command that reads a
+    # product stops responding — with no error. This is the only guard against it.
+    if products.group_root(conn, target_id) == source_id:
+        raise ValueError(
+            f"produto {target_id} já faz parte do grupo de {source_id} ({source.canonical_name}); "
+            f"desfaça essa fusão antes"
+        )
     with conn:
         products.set_merged_into(conn, source_id, target_id)
+
+
+def unmerge_product(conn: sqlite3.Connection, product_id: int) -> None:
+    product = _require_product(conn, product_id)
+    if products.group_root(conn, product_id) == product_id:
+        raise ValueError(f"produto {product_id} ({product.canonical_name}) não está fundido")
+    with conn:
+        products.set_merged_into(conn, product_id, None)
+
+
+def merge_inheritance(conn: sqlite3.Connection, source_id: int, target_id: int) -> tuple[str, str] | None:
+    """What the group will gain from this merge, for the CLI to announce. Must be called BEFORE
+    merging: afterwards the value is already composed and there is no telling where it came from.
+    Returns (field description, source description) or None. Never raises."""
+    try:
+        source = products.get_product(conn, source_id)
+        target = products.get_product(conn, target_id)
+        if source is None or target is None:
+            return None
+        if target.content_quantity is None and source.content_quantity is not None:
+            return f"o conteúdo {source.content_quantity:g} {source.content_unit}", f"produto {source_id}"
+        if target.kind is None and source.kind is not None:
+            return f"o tipo {source.kind}", f"produto {source_id}"
+        return None
+    except Exception:
+        return None
 
 
 def tag_product(conn: sqlite3.Connection, product_id: int, tag: str) -> None:
