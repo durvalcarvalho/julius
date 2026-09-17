@@ -418,3 +418,55 @@ def test_apply_kind_requested_but_proposal_empty(conn):
 
     assert curation.apply(conn, proposal, tag=None, content=False, kind=True) == []
     assert products.get_product(conn, pid).kind is None
+
+
+def _two_similar(conn) -> tuple[int, int]:
+    a = products.resolve_product_id(conn, CNPJ, "1", "REFRI PEPSI PET 2L")
+    b = products.resolve_product_id(conn, CNPJ, "2", "REFRI PEPSI PET 1.5L")
+    return a, b
+
+
+def _pair_ids(conn) -> set[tuple[int, int]]:
+    return {(a.id, b.id) for a, b, _ in curation.duplicate_candidates(conn)}
+
+
+def test_divergent_content_is_not_a_candidate(conn):
+    conn.execute("INSERT INTO stores (cnpj, legal_name, nickname) VALUES (?, 'L', 'N')", (CNPJ,))
+    a, b = _two_similar(conn)
+    assert _pair_ids(conn) == {(a, b)}
+
+    catalog.set_product_content(conn, a, 2, "L")
+    catalog.set_product_content(conn, b, 1.5, "L")
+    assert _pair_ids(conn) == set()
+
+
+def test_divergent_content_unit_is_not_a_candidate(conn):
+    conn.execute("INSERT INTO stores (cnpj, legal_name, nickname) VALUES (?, 'L', 'N')", (CNPJ,))
+    a, b = _two_similar(conn)
+    catalog.set_product_content(conn, a, 500, "ML")
+    catalog.set_product_content(conn, b, 500, "G")
+    assert _pair_ids(conn) == set()
+
+
+def test_same_content_is_still_a_candidate(conn):
+    conn.execute("INSERT INTO stores (cnpj, legal_name, nickname) VALUES (?, 'L', 'N')", (CNPJ,))
+    a, b = _two_similar(conn)
+    catalog.set_product_content(conn, a, 2, "L")
+    catalog.set_product_content(conn, b, 2, "L")
+    assert _pair_ids(conn) == {(a, b)}
+
+
+def test_one_sided_content_is_still_a_candidate(conn):
+    """The Alho vs Pão de Alho shape: only one side has content. The protection there is the
+    inheritance announcement, not the guard."""
+    conn.execute("INSERT INTO stores (cnpj, legal_name, nickname) VALUES (?, 'L', 'N')", (CNPJ,))
+    a, b = _two_similar(conn)
+    catalog.set_product_content(conn, a, 2, "L")
+    assert _pair_ids(conn) == {(a, b)}
+
+
+def test_absorbed_products_are_not_candidates(conn):
+    conn.execute("INSERT INTO stores (cnpj, legal_name, nickname) VALUES (?, 'L', 'N')", (CNPJ,))
+    a, b = _two_similar(conn)
+    catalog.merge_products(conn, b, a)
+    assert _pair_ids(conn) == set()

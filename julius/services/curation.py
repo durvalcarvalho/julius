@@ -125,12 +125,24 @@ def duplicate_candidates(
             key = (min(a.id, b.id), max(a.id, b.id))
             if key in scored:
                 continue
+            if _content_diverges(a, b):
+                continue
             score = fuzz.token_set_ratio(normalize_text(a.canonical_name), normalize_text(b.canonical_name))
             if score >= DUPLICATE_CANDIDATE_CUTOFF:
                 scored[key] = int(score)
     by_id = {product.id: product for product in universe}
     ranked = sorted(scored.items(), key=lambda pair: (-pair[1], pair[0]))[:MAX_DUPLICATE_PAIRS]
     return [(by_id[a_id], by_id[b_id], score / 100) for (a_id, b_id), score in ranked]
+
+
+def _content_diverges(a: Product, b: Product) -> bool:
+    """Two declared and different contents are evidence the pair is not the same product. Measured
+    on the real catalog: 4 of the 19 candidates diverge and all 4 are false positives, among them
+    Pepsi 2L vs Guarana 1,5L. A different unit counts as divergence: those are dimensions this
+    system never compares."""
+    if a.content_quantity is None or b.content_quantity is None:
+        return False
+    return (a.content_quantity, a.content_unit) != (b.content_quantity, b.content_unit)
 
 
 def judge_duplicates(
