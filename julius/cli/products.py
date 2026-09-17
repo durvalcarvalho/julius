@@ -54,25 +54,44 @@ def rename_product(
 
 @app.command("fundir")
 def merge_products(
-    source_id: Annotated[int, typer.Argument(help="ID do produto que vai desaparecer.")],
+    source_id: Annotated[int, typer.Argument(help="ID do produto que passa a fazer parte do outro.")],
     target_id: Annotated[int, typer.Argument(help="ID do produto que fica com todo o histórico.")],
-    yes: Annotated[bool, typer.Option("--sim", "-y", help="Não pedir confirmação.")] = False,
 ) -> None:
-    """Funde dois produtos que são a mesma coisa. Irreversível."""
+    """Funde dois produtos que são a mesma coisa. Desfaça com `julius produtos desfundir`."""
     conn = open_db()
     try:
-        names = {product.id: product.canonical_name for product in catalog.list_products(conn)}
+        names = _names(conn)
         source = names.get(source_id, f"#{source_id}")
         target = names.get(target_id, f"#{target_id}")
-        if not yes and not typer.confirm(f"Fundir '{source}' em '{target}'? Não dá para desfazer."):
-            console.print("Cancelado.")
-            return
         catalog.merge_products(conn, source_id, target_id)
     except (ValueError, LookupError) as error:
         fail(str(error))
     finally:
         conn.close()
     console.print(f"'{source}' fundido em '{target}'.")
+    console.print(f"desfazer: julius produtos desfundir {source_id}")
+
+
+@app.command("desfundir")
+def unmerge_product(
+    product_id: Annotated[int, typer.Argument(help="ID do produto absorvido, que volta a ser separado.")],
+) -> None:
+    """Desfaz uma fusão: o produto volta a ter histórico, nome, tipo e conteúdo próprios."""
+    conn = open_db()
+    try:
+        catalog.unmerge_product(conn, product_id)
+        # Read after unmerging: while it is absorbed, get_product answers for the group's root.
+        product = catalog.get_product(conn, product_id)
+    except (ValueError, LookupError) as error:
+        fail(str(error))
+    finally:
+        conn.close()
+    name = "" if product is None else f" '{product.canonical_name}'"
+    console.print(f"Produto {product_id}{name} voltou a ser separado.")
+
+
+def _names(conn) -> dict[int, str]:
+    return {product.id: product.canonical_name for product in catalog.list_products(conn)}
 
 
 @app.command("tag")

@@ -261,6 +261,7 @@ def _group_product(conn: sqlite3.Connection, root_id: int, raw: set[int] | None 
         content_unit=with_content["content_unit"],
         tags=tuple(tag["name"] for tag in tags),
         kind=next((m["kind"] for m in members if m["kind"] is not None), None),
+        merged_into=root["merged_into"],
     )
 
 
@@ -276,6 +277,7 @@ def _to_product(conn: sqlite3.Connection, row: sqlite3.Row) -> Product:
         content_unit=row["content_unit"],
         tags=tuple(tag["name"] for tag in tags),
         kind=row["kind"],
+        merged_into=row["merged_into"],
     )
 
 

@@ -1,5 +1,6 @@
 import json
 import sys
+from typing import get_args, get_type_hints
 from pathlib import Path
 
 import pytest
@@ -718,3 +719,17 @@ def test_ai_refusal_is_the_only_trigger(monkeypatch):
     assert "— conteúdo" not in result.output
     assert _packaging_calls(client) == []
     assert "10 UN" in _run("produtos", "listar").output
+
+
+def test_undo_command_for_merge_field():
+    action = AppliedAction(33, "merge", None, "80")
+    assert _review._undo_command(action) == "julius produtos desfundir 80"
+
+
+def test_every_applied_action_field_has_a_label_and_an_undo_command():
+    """Forgetting one would print an empty label or a wrong command instead of failing."""
+    names = get_args(get_type_hints(AppliedAction)["field"])
+    labelled = {field for field, _ in _review._FIELD_LABELS}
+    for name in names:
+        assert name in labelled, name
+        assert _review._undo_command(AppliedAction(1, name, "antes", "depois")).startswith("julius produtos")

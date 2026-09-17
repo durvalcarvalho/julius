@@ -81,7 +81,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 138 | [Produto efetivo do grupo](138-group-effective-product.md) | 137 | M | feito | só raízes nas listagens; nome/conteúdo/tipo/tags compostos na leitura |
 | 139 | [Preços do grupo + CSV](139-group-prices-and-export.md) | 137 | M | feito | `prices_for_products` junta o grupo, `source_product_id`, `group_product_id`; remove `reassign_product` |
 | 140 | [catalog: fusão reversível](140-catalog-merge-rewrite.md) | 137, 139 | M | feito | `merge_products` reescrita, `unmerge_product`, guarda de ciclo, `merge_inheritance` |
-| 141 | [CLI: `desfundir` + ação `merge`](141-cli-unmerge-and-merge-action.md) | 140 | M | aberto | `produtos desfundir`, `fundir` sem confirmação, `"merge"` no log e no desfazer |
+| 141 | [CLI: `desfundir` + ação `merge`](141-cli-unmerge-and-merge-action.md) | 140 | M | feito | `produtos desfundir`, `fundir` sem confirmação, `"merge"` no log e no desfazer |
 | 142 | [curation: guarda de conteúdo](142-curation-divergent-content-guard.md) | 138 | S | aberto | par com conteúdo divergente deixa de ser candidato |
 | 143 | [review: funde e avisa](143-review-auto-merge.md) | 141, 142 | M | aberto | fusão automática do que a IA confirmou, com pedido de conferência |
 | 144 | [search: colapso + ordem](144-search-collapse-and-order.md) | — | M | aberto | linhas idênticas colapsadas; ordem segue a base de comparação |

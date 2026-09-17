@@ -18,7 +18,13 @@ from julius.infra import ai_log
 from julius.infra.llm_client import LlmClient
 from julius.services import catalog, curation, suggestions
 
-_FIELD_LABELS = (("name", "nome(s)"), ("tag", "categoria(s)"), ("content", "conteúdo(s)"), ("kind", "tipo(s)"))
+_FIELD_LABELS = (
+    ("name", "nome(s)"),
+    ("tag", "categoria(s)"),
+    ("content", "conteúdo(s)"),
+    ("kind", "tipo(s)"),
+    ("merge", "fusão(ões)"),
+)
 
 # The AI's own words never reach the screen: `form` is data, this is the vocabulary the user reads.
 _FORM_LABELS: dict[PackagingForm, str] = {
@@ -41,6 +47,10 @@ def _undo_command(action: AppliedAction) -> str:
         return f'julius produtos renomear {product_id} "{action.before}"'
     if action.field == "tag":
         return f"julius produtos tag {product_id} {action.after} --remover"
+    if action.field == "merge":
+        # The absorbed product is in `after`: it is the one that changed state, while product_id
+        # is the survivor the group now shows.
+        return f"julius produtos desfundir {action.after}"
     if action.field == "content":
         if action.before is None:
             return f"julius produtos definir-conteudo {product_id} --remover"

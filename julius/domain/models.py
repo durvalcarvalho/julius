@@ -39,7 +39,8 @@ class Product:
     content_quantity: float | None = None
     content_unit: ContentUnit | None = None
     tags: tuple[str, ...] = ()
-    kind: str | None = None  # comparison group; NULL until assigned
+    kind: str | None = None
+    merged_into: int | None = None  # the product that absorbed this one, if any  # comparison group; NULL until assigned
 
 
 @dataclass(frozen=True)
@@ -204,7 +205,7 @@ class AppliedAction:
     stable; the CLI is what turns this into an undo command, since it owns the command syntax."""
 
     product_id: int
-    field: Literal["name", "tag", "content", "kind"]
+    field: Literal["name", "tag", "content", "kind", "merge"]
     before: str | None
     after: str | None
 

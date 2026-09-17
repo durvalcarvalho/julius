@@ -164,19 +164,9 @@ def test_produtos_definir_conteudo_remover_rejects_extra_arguments():
     assert "UNIDADE" in result.stderr
 
 
-def test_produtos_fundir_asks_confirmation_and_cancels_on_no():
+def test_produtos_fundir_does_not_ask_for_confirmation():
     _import("qrcode.html")
-    before = _run("produtos", "listar").output
-    result = _run("produtos", "fundir", "1", "2", input="n\n")
-    assert result.exit_code == 0, result.output
-    assert "Fundir 'REFRI PEPSI PET 2L' em 'REFRI ANT GUARANA PET 1.5L'?" in result.output
-    assert "Cancelado." in result.output
-    assert _run("produtos", "listar").output == before
-
-
-def test_produtos_fundir_with_yes_merges():
-    _import("qrcode.html")
-    result = _run("produtos", "fundir", "1", "2", "--sim")
+    result = _run("produtos", "fundir", "1", "2")  # no input= at all: nothing may block on stdin
     assert result.exit_code == 0, result.output
     assert "fundido em" in result.output
     output = _run("produtos", "listar").output
@@ -184,11 +174,48 @@ def test_produtos_fundir_with_yes_merges():
     assert "REFRI ANT GUARANA PET 1.5L" in output
 
 
+def test_produtos_fundir_prints_the_undo_command():
+    _import("qrcode.html")
+    result = _run("produtos", "fundir", "1", "2")
+    assert "julius produtos desfundir 1" in result.output
+
+
+def test_produtos_fundir_help_does_not_promise_irreversibility():
+    result = _run("produtos", "fundir", "--help")
+    assert "Irreversível" not in result.output
+    assert "desfundir" in result.output
+
+
 def test_produtos_fundir_same_id_exits_1():
     _import("qrcode.html")
-    result = _run("produtos", "fundir", "1", "1", "--sim")
+    result = _run("produtos", "fundir", "1", "1")
     assert result.exit_code == 1
     assert "diferentes" in result.stderr
+
+
+def test_produtos_desfundir_separates_the_products():
+    _import("qrcode.html")
+    assert _run("produtos", "fundir", "1", "2").exit_code == 0
+    result = _run("produtos", "desfundir", "1")
+    assert result.exit_code == 0, result.output
+    assert "REFRI PEPSI PET 2L" in result.output
+    output = _run("produtos", "listar").output
+    assert "REFRI PEPSI PET 2L" in output and "REFRI ANT GUARANA PET 1.5L" in output
+
+
+def test_produtos_desfundir_rejects_unmerged_and_unknown():
+    _import("qrcode.html")
+    assert _run("produtos", "desfundir", "1").exit_code == 1
+    assert "não está fundido" in _run("produtos", "desfundir", "1").stderr
+    assert _run("produtos", "desfundir", "9999").exit_code == 1
+
+
+def test_produtos_fundir_rejects_a_cycle():
+    _import("qrcode.html")
+    assert _run("produtos", "fundir", "1", "2").exit_code == 0
+    result = _run("produtos", "fundir", "2", "1")
+    assert result.exit_code == 1
+    assert "já faz parte do grupo" in result.stderr
 
 
 def test_produtos_comparar_without_ai_shows_env_var_names(monkeypatch):

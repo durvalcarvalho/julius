@@ -20,6 +20,10 @@ def list_products(conn: sqlite3.Connection) -> list[Product]:
     return products.list_products(conn)
 
 
+def get_product(conn: sqlite3.Connection, product_id: int) -> Product | None:
+    return products.get_product(conn, product_id)
+
+
 def rename_store(conn: sqlite3.Connection, cnpj: str, nickname: str) -> None:
     with conn:
         stores.rename_store(conn, cnpj, _non_blank(nickname, "nickname"))

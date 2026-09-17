@@ -143,7 +143,7 @@ def test_merge_via_cli_unifies_history():
     _import("qrcode.html", "qrcode-3.html")
     source = _product_id("TOMATE ITALIANO kg")
     target = _product_id("TOMATE ITALIANO UNIAO kg")
-    result = _run("produtos", "fundir", str(source), str(target), "--sim")
+    result = _run("produtos", "fundir", str(source), str(target))
     assert result.exit_code == 0, result.output
 
     output = _run("consultar", "tomate").output
