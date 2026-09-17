@@ -3,6 +3,7 @@
 > `/sc:brainstorm` de 2026-09-17. Dois pedidos do usuário, no mesmo dia em que ele rodou a v2.3 de verdade contra o banco real.
 > **Este documento reabre `docs/requirements/auto-merge-clusters.md`**, que estava marcado "sem efeito" desde 16/09. O `CLAUDE.md` exigia "dado novo" para reabrir; o dado novo existe e está em F2–F4. Os `RF1`–`RF6` daquele documento **voltam a valer** com as emendas da §2.A aqui; não foram reescritos.
 > Insumos: banco real do usuário (105 produtos, 132 preços, curado pela v2.3 hoje às 07:02), `curation.duplicate_candidates` + `judge_duplicates` rodados de verdade contra ele, `search_prices` e `mercados comparar` observados na saída real.
+> **Emendado em 2026-09-17 (segunda rodada do brainstorm):** o usuário refinou o RF1 — fundir não pode ser destrutivo *no nível de dados*, em vez de destrutivo-com-restauração. A §2.A' abaixo substitui o RF1; F11–F15 são as medições que a decisão gerou.
 > Próximo passo: `/sc:design` → tickets 137+. **Nenhum código foi alterado nesta sessão.**
 
 ## 0. Fatos verificados nesta sessão (medidos, não estimados)
@@ -19,6 +20,12 @@
 | F8 | **O que atrapalha a leitura é repetição e ordem.** 20% das linhas de `consultar` são repetições exatas (mesmo produto, data, mercado e preço): 9 de 45 linhas em 7 buscas, sendo **5 de 9 em `agua`** e 4 de 13 em `tempero`. Vêm de item repetido na mesma nota somado aos empates que a v2.2 decidiu manter fora do `--limite`. A tabela ordena por data, então responder "qual embalagem compensa" exige ler a coluna e ordenar de cabeça. | contagem sobre `search_prices` no banco real; `CLAUDE.md`, "Ainda em aberto: empates de preço em `consultar`". |
 | F9 | **Há exatamente 1 grupo onde o preço por conteúdo inverte o ranking**, e é o da água. Dos 7 grupos-UN com dois ou mais produtos com conteúdo, só `água mineral` inverte. Nenhum grupo mistura massa com volume. | varredura por `kind` no banco real. |
 | F10 | **O exemplo do usuário mistura massa e volume.** "500g por R$ 10,00 custa R$ 20,00 por litro" só vale assumindo densidade 1 (água). O sistema normaliza `G→KG` e `ML→L` em dimensões separadas justamente para não fazer essa conta. Zero ocorrências no banco hoje (F9), então é questão em aberto, não defeito. | `domain/normalization.py::normalize_content`; F9. |
+| F11 | **O dado que identifica a origem de cada preço nunca se perde, nem hoje.** Cada linha de `prices` carrega `store_cnpj` + `product_code`, e `product_skus` guarda o mesmo par. "De qual SKU veio este preço" é sempre recuperável. O que a fusão destrói é só a **linha de `products`** do absorvido (nome, tipo, conteúdo), suas tags, e o **agrupamento** (qual SKU pertencia a qual produto, quando o absorvido tinha mais de um). | schema de `prices`/`product_skus`; `catalog.py::merge_products`. |
+| F12 | **Toda leitura que agrupa por `product_id` está contida em dois arquivos.** São 26 queries, 21 em `repositories/products.py` e 5 em `repositories/prices.py`; nenhum SQL cru em `services/` ou `cli/`. A DAG de camadas paga dividendo aqui: resolver "este produto foi absorvido por aquele" é mudança de repositório, não varredura pelo sistema. | `grep` por `product_id` em `julius/**.py`. |
+| F13 | **Três fusões já aconteceram, e as três estão corretas.** `Tomate Italiano União` (2 SKUs, FL 3 Costa + Dona de Casa), `Cebola` (2 SKUs) e `Sacola reutilizável` (mesmo código em duas filiais da Dona de Casa). Não há erro a reverter — a demanda por reversibilidade é sobre o futuro automático, não sobre essas. | `product_skus` agrupado por `product_id` no banco real. |
+| F14 | **O banco é reconstruível a partir dos HTMLs, ao centavo — e os seis existem.** Reimportando os 6 recibos (3 em `tests/fixtures/`, 3 em `~/.local/share/julius/entrada/`) num banco vazio: **132 preços, 6 notas com as mesmas chaves de acesso, 5 mercados e soma dos totais R$ 1.801,57 — diferença de R$ 0,00** contra o banco real. São 108 produtos em vez de 105, porque as três fusões de F13 deixam de existir. | reimport real contra cópias, em banco limpo no scratchpad. |
+| F15 | **Mas reprocessar cobra a curadoria inteira: 391 valores.** O banco reconstruído vem com **0** nomes legíveis (contra 103), **0** tipos (contra 104), **0** conteúdos (contra 78) e **0** marcações de tag (contra 106) — inclusive as respostas de conteúdo que o usuário deu hoje às 07:02. Recuperar isso custa ~US$ 0,01 de IA e responder as perguntas de conteúdo de novo. | mesma execução de F14. |
+
 
 ## 1. Objetivo
 
@@ -32,7 +39,7 @@
 
 | # | Requisito |
 |---|---|
-| **RF1** (reafirmado, agora com escopo) | Desfazer uma fusão precisa devolver o estado **fielmente**: o produto absorvido volta com o `canonical_name`, as tags, o tipo e o conteúdo que tinha, e recebe de volta exatamente os SKUs e preços que eram dele. Um desfazer que devolve o produto com o nome cru do cupom foi avaliado e recusado — o desfazer tem que ser neutro, não custar trabalho de recuration. |
+| **RF1** (substituído pela §2.A') | *Ver §2.A' — a fusão deixa de ser uma transformação com restauração e passa a ser um estado reversível.* |
 | **RF2** (substituído) | O gatilho é **o veredito da IA, sem limiar**: funde todo par que `judge_duplicates` marcar como `same_product`. Nenhum corte de confiança — F4 mostra que qualquer corte plausível inverteria o resultado. Nenhum filtro por `kind` — F5 mostra que daria falsa confirmação nos piores pares. O corte determinístico de candidatos (`DUPLICATE_CANDIDATE_CUTOFF = 75`) continua como está, decidindo só **quem é submetido** ao julgamento. |
 | **RF3** (mantido) | Atingido o gatilho, fundir dentro do fluxo normal, sem perguntar. |
 | **RF4** (mantido, detalhado) | Imediatamente após fundir: dizer quais produtos foram fundidos, qual sobreviveu, o `rationale` que a IA escreveu, **o comando exato de desfazer**, e um pedido explícito de verificação. O usuário descreveu essa notificação como parte do pedido, não como cortesia. |
@@ -40,6 +47,25 @@
 | **RF6** (mantido) | Toda fusão automática é uma ação registrada como as outras: uma linha em `actions.jsonl` com antes/depois e o comando de desfazer, visível em `produtos revisar --ultimas-acoes`. |
 | **RF7** (novo) | **Ordem de construção é de princípio, não técnica**: o desfazer (RF1) existe e está testado **antes** de qualquer fusão automática ser ligada. Mesma restrição que pôs o ticket 118 antes do 122 na v2.2. Um agente que inverter isso entrega um sistema que apaga dado que o usuário não consegue recuperar. |
 | **RF8** (novo) | A fusão automática nunca toca linhas de `prices` além de reatribuir `product_id` — nenhum preço é alterado, somado ou apagado, nem no desfazer. |
+
+### 2.A' — Fusão não destrutiva: o estado pós-fusão (substitui o RF1)
+
+Pedido literal do usuário: *"o fundir não deveria ser destrutivo a nível de dados, pois se eu fundir e logo em seguida quiser desfundir, deve ser possível voltar ao estado anterior, então devemos lidar com esse estado pós-fundir que pode ser desfeito"*. Isto **não** é o mesmo que "guardar o estado e restaurar depois", que era o RF1 antigo: a diferença é que nenhum dado sai do lugar, então o desfazer não reconstrói nada — ele só remove a relação.
+
+| # | Requisito |
+|---|---|
+| RF1a | **Fundir não apaga nem move nenhuma linha.** A linha de `products` do produto absorvido continua existindo, com o nome, tipo, conteúdo e tags que tinha. Nenhum `DELETE`, e nenhuma reatribuição de `prices` ou `product_skus` é necessária para a fusão acontecer. |
+| RF1b | **A fusão é uma relação registrada, e desfazer é removê-la.** Depois de fundir, o sistema sabe que o produto A pertence ao grupo do produto B; desfazer apaga esse registro e o estado anterior volta por construção, não por restauração. Por isso o desfazer é barato, simétrico e não pode falhar por dado faltando. |
+| RF1c | **O grupo se apresenta com um nome só**: o do sobrevivente. Onde hoje aparece um produto (`consultar`, `produtos listar`, `mercados comparar`, o sinal do `importar`), passa a aparecer o grupo — os preços do absorvido entram no histórico do sobrevivente e sob o nome dele. |
+| RF1d | **O absorvido desaparece das listagens** (`produtos listar`), como se tivesse sido apagado. A lista continua sendo "o que eu tenho"; quem foi fundido em quem se lê em `produtos revisar --ultimas-acoes`, que já é o log de ações. |
+| RF1e | **Os atributos do grupo são os do sobrevivente; os do absorvido ficam guardados e inertes.** Regra única, sem herança e sem preenchimento de buracos. Consequência declarada e aceita: fundir pode fazer um grupo perder o conteúdo de embalagem (se o absorvido tinha e o sobrevivente não) e cair da comparação por litro/quilo até alguém preencher — o produto volta a aparecer como pendente em `produtos revisar`, que é o mecanismo que já existe para isso. |
+| RF1f | **Desfazer não é um caso especial do log.** Como o estado anterior está no banco e não no `actions.jsonl`, desfazer uma fusão funciona mesmo que o log tenha sido apagado, rotado ou nunca escrito. O log continua registrando a ação (RF6), mas não é a fonte da verdade do desfazer. |
+| RF1g | **Fusão de fusão não cria corrente.** Fundir A em B e depois B em C não pode gerar uma cadeia a resolver recursivamente a cada leitura; o resultado tem que ser um grupo plano com um sobrevivente só. |
+| RF1h | **`julius produtos fundir` manual usa exatamente o mesmo mecanismo.** Não existem duas fusões, uma destrutiva e uma reversível. Consequência: o aviso de "irreversível — por isso pede confirmação" que hoje acompanha o comando manual deixa de ser verdade e precisa sair do `--help` e do `README`. |
+
+**Fusões anteriores à mudança (F13) não recebem tratamento.** As três existentes estão corretas e não há o que reverter; a garantia de reversibilidade vale da mudança em diante. **Nada de migração de dado**: a mudança de schema é aditiva, sem tentar reconstituir os produtos já absorvidos — reconstituição parcial apresentada como completa foi explicitamente recusada.
+
+**A política de último recurso, agora medida.** Decisão do usuário: *"ainda estamos no MVP local, podemos simplesmente reprocessar tudo novamente usando os HTMLs que temos"*. F14 prova que isso funciona para os **fatos** — 132 preços, as 6 mesmas notas, R$ 0,00 de diferença — e F15 mostra o preço: **391 valores de curadoria** (103 nomes, 104 tipos, 78 conteúdos, 106 tags) mais as respostas de conteúdo dadas hoje. Então reprocessar é plano B legítimo e barato em dinheiro (~US$ 0,01), e é o que dispensa qualquer código de migração — mas exercê-lo hoje custaria trabalho já feito. Não é ação desta fase.
 
 ### 2.B — Leitura do preço por unidade base
 
@@ -56,6 +82,8 @@
 - **N2** Custo de IA dentro do orçamento existente. Medido: julgar os 19 candidatos custa **US$ 0,0011** por rodada.
 - **N3** A frente B não muda o que `search_prices` **calcula** — `price_per_content` e `highlight` estão corretos (F7) e nenhum requisito aqui pede recálculo. É apresentação.
 - **N4** Nenhum identificador em português; comandos, mensagens e prompts em português.
+- **N5** A mudança de schema é aditiva e passa pelo mecanismo de migração existente (`PRAGMA user_version` + backup automático do arquivo antes de aplicar).
+- **N6** **A política "o banco é reconstruível" depende de arquivos que hoje existem em um lugar só.** `qrcode-4/5/6.html` moram apenas em `~/.local/share/julius/entrada/`, fora do git; as outras três notas estão versionadas em `tests/fixtures/`. Perder aquela pasta tira o plano B de F14 da mesa. Não é requisito de código — é uma consequência da decisão que vale dizer em voz alta.
 
 ## 4. Decisões do usuário (Q&A deste brainstorm)
 
@@ -64,6 +92,10 @@
 | O que autoriza fundir sozinho? | **A IA confirmar, sem limiar** | RF2. Nenhuma constante nova a calibrar. O risco residual está declarado em §5/Q1. |
 | O que o desfazer devolve? | **Tudo, fielmente** | RF1. Exige guardar o estado do produto absorvido antes de fundir. |
 | O que falta no preço por conteúdo? | **Colapsar linhas repetidas + ordenar por preço por conteúdo + uma linha de resposta por grupo** | RF9, RF10, RF11. O cálculo não entra: já está certo. |
+| Fundir pode ser destrutivo, com restauração? | **Não — não destrutivo no nível de dados** | §2.A' inteira. Substitui o RF1: o desfazer para de reconstruir e passa a só remover a relação. |
+| O absorvido aparece em `produtos listar`? | **Não aparece** | RF1d. |
+| Conflito de atributos entre absorvido e sobrevivente? | **Valem os do sobrevivente; os do absorvido ficam inertes** | RF1e, com a perda de conteúdo declarada como aceita. |
+| E as três fusões antigas? | **Nada a fazer; se um dia incomodar, reprocessa tudo dos HTMLs** | Sem migração de dado, sem comando de separar SKU. F14/F15 medem o custo. |
 
 ## 5. Questões em aberto (para o `/sc:design` fechar)
 
@@ -76,7 +108,10 @@
 | Q5 | **A ordenação por preço por conteúdo é o padrão quando o grupo tem conteúdo, ou uma flag?** | Trocar o padrão muda o significado da tabela para quem a usa como histórico. |
 | Q6 | **A linha de resposta (RF11) sai em `consultar`, em `mercados comparar` ou nos dois?** | Os dois têm grupos e base de comparação; só um foi medido nesta sessão. |
 | Q7 | **Grupo com massa e volume juntos (F10): nunca comparar, ou pedir a densidade?** Zero casos hoje. | A recomendação registrada é **nunca comparar** — comparar exigiria densidade por produto, um campo novo sem nenhum caso de uso medido. |
-| Q8 | **O desfazer preserva o id do produto absorvido?** Ele é citado no `actions.jsonl`, nas dicas e na memória do usuário. | Reciclar id é confuso; criar id novo faz o log antigo apontar para o nada. |
+| Q8 | ~~O desfazer preserva o id do absorvido?~~ **Respondida pela §2.A'**: o id nunca muda, porque a linha nunca é apagada. |
+| Q9 | **Fundir em cadeia (RF1g): proibir ou normalizar?** Recusar "fundir B em C" quando B já absorveu A, ou aceitar e reapontar A para C junto? | Uma cadeia de dois níveis já basta para o desfazer ficar ambíguo. |
+| Q10 | **Qual id o `exportar` (CSV) leva?** Hoje a linha tem `product_id` e `canonical_name`. O do produto original preserva a verdade histórica da compra; o do grupo serve à análise em planilha. | O CSV é a saída que sai do sistema e ninguém valida depois. |
+| Q11 | **`desfundir` recebe o id do absorvido ou do sobrevivente?** `desfundir A` é simétrico com `fundir A B`; `desfundir B` precisaria dizer qual dos absorvidos separar quando houver mais de um. | Afeta o texto do comando de desfazer que a notificação imprime. |
 
 ## 6. Fora de escopo, de propósito
 
@@ -87,3 +122,6 @@
 - **Densidade por produto** para comparar massa com volume — F10, nenhum caso medido.
 - **Veredito de barato/caro** — RF12 mantém a linha de sempre.
 - **Fundir mercados** (filiais da mesma rede) — continua fora, como desde a v2.
+- **Migração de dado para as fusões antigas** e **comando de separar SKU** — F13: as três estão corretas; F14/F15: se um dia incomodarem, o caminho é reprocessar os HTMLs.
+- **Herança de atributos do absorvido para o grupo** — RF1e, regra única de propósito.
+- **Desfazer baseado em `actions.jsonl`** — RF1f: o log audita, não é a fonte da verdade do estado.
