@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Optional
 
 import typer
@@ -7,7 +8,7 @@ from rich.table import Table
 
 from julius import config
 from julius.cli import _review
-from julius.cli._common import console, content_text, fail, open_db
+from julius.cli._common import br_date, console, content_text, fail, open_db
 from julius.cli._hints import print_hints
 from julius.domain.models import Product
 from julius.infra import ai_log
@@ -240,6 +241,16 @@ def review(
         conn.close()
 
 
+def _when(raw: str) -> str:
+    """`.astimezone()` converts the UTC lines actions.jsonl held before the writers switched to local, and leaves the naive
+    local ones written since then untouched, so one expression reads both."""
+    try:
+        moment = datetime.fromisoformat(raw).astimezone()
+    except ValueError:
+        return ""
+    return f"{br_date(moment.date().isoformat())} {moment:%H:%M}"
+
+
 def _print_last_actions(path) -> None:
     records = ai_log.tail(path)
     if not records:
@@ -247,7 +258,7 @@ def _print_last_actions(path) -> None:
         return
     table = Table("Quando", "ID", "Campo", "Antes", "Depois", "Desfazer")
     for record in records:
-        when = str(record.get("at") or "")[:16].replace("T", " ")
+        when = _when(str(record.get("at") or ""))
         table.add_row(
             when,
             str(record.get("product_id") or ""),

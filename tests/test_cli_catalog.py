@@ -391,7 +391,7 @@ def test_comparar_footer_shows_group_count_and_period():
 
     result = _run("mercados", "comparar")
 
-    assert "base: 1 grupo · 07/09 a 12/09" in result.output
+    assert "base: 1 grupo · 07/09/2026 a 12/09/2026" in result.output
     assert "Período largo" in result.output
 
 

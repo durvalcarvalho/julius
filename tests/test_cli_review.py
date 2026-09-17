@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import time
 from typing import get_args, get_type_hints
 from pathlib import Path
 
@@ -204,6 +205,9 @@ def test_revisar_logs_one_line_per_action(monkeypatch, tmp_path):
     assert [record["field"] for record in records] == ["name", "tag", "content", "kind"]
     assert all(record["product_id"] == 8 for record in records)
     assert all(record["at"] and record["undo"] for record in records)
+    # Naive local, not UTC: `--ultimas-acoes` shows this hour, and an offset here used to be
+    # displayed as if it were local time.
+    assert all("+" not in record["at"] and not record["at"].endswith("Z") for record in records)
 
 
 def test_revisar_undo_command_for_kind_without_previous(monkeypatch, tmp_path):
@@ -822,3 +826,19 @@ def test_every_applied_action_field_has_a_label_and_an_undo_command():
     for name in names:
         assert name in labelled, name
         assert _review._undo_command(AppliedAction(1, name, "antes", "depois")).startswith("julius produtos")
+
+
+def test_when_reads_both_the_old_utc_lines_and_the_new_local_ones(monkeypatch):
+    """actions.jsonl holds UTC lines written before the writers switched to naive local. TZ is
+    pinned because `.astimezone()` uses the machine's zone, and the assertion would otherwise only
+    hold in UTC-3."""
+    monkeypatch.setenv("TZ", "America/Sao_Paulo")
+    time.tzset()
+
+    assert products_cli._when("2026-09-17T22:31:47+00:00") == "17/09/2026 19:31"
+    assert products_cli._when("2026-09-17T19:31:47") == "17/09/2026 19:31"
+
+
+@pytest.mark.parametrize("raw", ["", "lixo", "2026-13-40T00:00:00"])
+def test_when_of_a_broken_record_is_empty(raw):
+    assert products_cli._when(raw) == ""

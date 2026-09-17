@@ -10,7 +10,17 @@ from rich.text import Text
 
 from julius import config
 from julius.cli import _review, stores as stores_cli
-from julius.cli._common import HIGHLIGHT_STYLE, console, error_console, fail, money, open_db
+from julius.cli._common import (
+    HIGHLIGHT_STYLE,
+    br_date,
+    console,
+    date_cell,
+    error_console,
+    fail,
+    money,
+    open_db,
+    relative_age,
+)
 from julius.cli._hints import print_hints
 from julius.domain.comparison_basis import comparison_basis
 from julius.domain.models import ImportResult, PriceExtreme, PriceRecord, SearchOutcome
@@ -224,12 +234,10 @@ def _extreme_line(extreme: PriceExtreme) -> str:
         if extreme.previous_product_name and extreme.previous_product_name != extreme.product_name
         else ""
     )
-    previous = f"era {money(extreme.previous_price)}{beaten} em {extreme.previous_store}, {_day_month(extreme.previous_at)}"
+    # Separator, not parentheses: `previous` goes inside parentheses below, and nesting reads badly.
+    when = f"{br_date(extreme.previous_at)} · {relative_age(extreme.previous_at)}"
+    previous = f"era {money(extreme.previous_price)}{beaten} em {extreme.previous_store}, {when}"
     return f"{arrow} {extreme.product_name}  {money(extreme.price)}{suffix}  {verdict} ({previous})"
-
-
-def _day_month(purchased_at: str) -> str:
-    return f"{purchased_at[8:10]}/{purchased_at[5:7]}"
 
 
 def _weekday(purchased_at: str) -> str:
@@ -299,7 +307,7 @@ def _table(unit: str, records: list[PriceRecord]) -> Table:
         table.add_column(f"Por {only_unit}" if only_unit else "Por conteúdo")
     for record in records:
         row = [
-            record.purchased_at[:10],
+            date_cell(record.purchased_at),
             _weekday(record.purchased_at),
             record.canonical_name,
             _store_cell(record),

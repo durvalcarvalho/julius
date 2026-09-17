@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Annotated
 
 import typer
 from rich.table import Table
 
 from julius import config
-from julius.cli._common import HIGHLIGHT_STYLE, console, fail, money, open_db
+from julius.cli._common import HIGHLIGHT_STYLE, br_date, console, date_cell, fail, money, open_db
 from julius.domain.models import KindComparison, StoreComparison, StoreNaming
 from julius.domain.normalization import digits_only
 from julius.infra import ai_log
@@ -89,16 +89,12 @@ def compare_stores() -> None:
 
     first, last = comparison.first_purchase, comparison.last_purchase
     count = len(comparison.comparisons)
-    console.print(f"base: {count} {_plural(count)} · {_day_month(first)} a {_day_month(last)}")
+    console.print(f"base: {count} {_plural(count)} · {br_date(first)} a {br_date(last)}")
     console.print("Período largo: parte da diferença pode ser variação de preço no mês, não o mercado.", style="dim")
 
 
 def _plural(count: int) -> str:
     return "grupo" if count == 1 else "grupos"
-
-
-def _day_month(purchased_at: str) -> str:
-    return f"{purchased_at[8:10]}/{purchased_at[5:7]}"
 
 
 def _labels(comparison: StoreComparison) -> dict[str, str]:
@@ -133,7 +129,7 @@ def _comparison_table(group: KindComparison, labels: dict[str, str]) -> Table:
             labels[entry.store_cnpj],
             entry.product_name,
             money(entry.price),
-            entry.purchased_at[:10],
+            date_cell(entry.purchased_at),
             style=HIGHLIGHT_STYLE.get(highlight or ""),
         )
     return table
@@ -150,7 +146,10 @@ def log_namings(settings, namings: list[StoreNaming]) -> None:
         ai_log.append(
             settings.action_log_path,
             {
-                "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                # Naive local, like prices.purchased_at: this line is shown by
+                # `produtos revisar --ultimas-acoes`, and UTC there read as local time was a
+                # three-hour lie. query_log.jsonl stays UTC -- nothing displays it.
+                "at": datetime.now().isoformat(timespec="seconds"),
                 "product_id": naming.cnpj,
                 "field": "nickname",
                 "before": naming.before,

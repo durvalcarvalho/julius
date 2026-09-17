@@ -541,7 +541,7 @@ def test_import_signal_runs_after_review(monkeypatch):
 
     with_review = _import("qrcode.html").output
 
-    assert "07/09" in next(line for line in with_review.splitlines() if "↓" in line)
+    assert "07/09/2026" in next(line for line in with_review.splitlines() if "↓" in line)
 
 
 def test_import_prints_nothing_without_extremes():

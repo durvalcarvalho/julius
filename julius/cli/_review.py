@@ -4,7 +4,7 @@ import sys
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime
 
 import typer
 from rich.table import Table
@@ -73,7 +73,10 @@ def _log_actions(settings: Config, actions: Sequence[AppliedAction]) -> None:
         ai_log.append(
             settings.action_log_path,
             {
-                "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                # Naive local, like prices.purchased_at: this line is shown by
+                # `produtos revisar --ultimas-acoes`, and UTC there read as local time was a
+                # three-hour lie. query_log.jsonl stays UTC -- nothing displays it.
+                "at": datetime.now().isoformat(timespec="seconds"),
                 "product_id": action.product_id,
                 "field": action.field,
                 "before": action.before,

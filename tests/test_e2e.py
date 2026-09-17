@@ -147,7 +147,7 @@ def test_merge_via_cli_unifies_history():
     assert result.exit_code == 0, result.output
 
     output = _run("consultar", "tomate").output
-    assert "2026-09-12" in output and "2026-09-07" in output
+    assert "12/09/2026" in output and "07/09/2026" in output
     assert "TOMATE ITALIANO kg" not in output
     assert output.count("TOMATE ITALIANO UNIAO kg") == 2
 
@@ -320,7 +320,7 @@ def test_e2e_comparar_after_import_and_kinds():
     price_rows = [line for line in result.output.splitlines() if "R$" in line]
     assert "FL 3 COSTA" in price_rows[0] and "R$ 11,89" in price_rows[0]
     assert "DONA DE CASA" in price_rows[1] and "R$ 14,99" in price_rows[1]
-    assert "base: 1 grupo · 07/09 a 12/09" in result.output
+    assert "base: 1 grupo · 07/09/2026 a 12/09/2026" in result.output
 
 
 def test_e2e_import_twice_reports_lower_price(monkeypatch):
@@ -458,7 +458,7 @@ def test_v22_full_cycle(tmp_path, monkeypatch):
     assert comparar.exit_code == 0, comparar.output
     assert "tomate · por KG" in comparar.output
     assert "FL 3 COSTA" in comparar.output and "DONA DE CASA" in comparar.output
-    assert "base: 1 grupo · 07/09 a 12/09" in comparar.output
+    assert "base: 1 grupo · 07/09/2026 a 12/09/2026" in comparar.output
 
     assert _run("produtos", "tipo", "19", "--remover").exit_code == 0
     after_undo = _run("mercados", "comparar")
@@ -585,7 +585,7 @@ def test_v24_merge_cycle(monkeypatch, tmp_path):
 
     # the group reads as one product, under one name
     consulta = _run("consultar", "tomate").output
-    assert "2026-09-12" in consulta and "2026-09-07" in consulta
+    assert "12/09/2026" in consulta and "07/09/2026" in consulta
     assert "TOMATE ITALIANO kg" not in consulta
 
     # and not one price row moved
