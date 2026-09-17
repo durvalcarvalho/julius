@@ -109,7 +109,7 @@ def search_free_text(
 def records_for_products(conn: sqlite3.Connection, product_ids: Sequence[int], limit: int) -> list[PriceRecord]:
     if limit < 1:
         raise ValueError(f"limit must be at least 1, got {limit}")
-    records = prices.prices_for_products(conn, product_ids)
+    records = _collapse(prices.prices_for_products(conn, product_ids))
     groups: dict[str, list[PriceRecord]] = {}
     for record in records:
         groups.setdefault(record.unit, []).append(record)
@@ -171,9 +171,24 @@ def _candidate_ids(conn: sqlite3.Connection, term: str | None, tag: str | None) 
     return ids or set()
 
 
+def _collapse(records: list[PriceRecord]) -> list[PriceRecord]:
+    """One row per (group, day, store, price). The same price of the same product on the same day
+    at the same store carries no price information twice — it is the item repeated in one receipt.
+    Has to happen before the highlight, or the limit is spent on repetition."""
+    seen: dict[tuple[int, str, str, float], PriceRecord] = {}
+    for record in records:
+        seen.setdefault((record.product_id, record.purchased_at, record.store_nickname, record.unit_price), record)
+    return list(seen.values())
+
+
 def _highlight_and_trim(group: list[PriceRecord], limit: int) -> list[PriceRecord]:
     group = sorted(group, key=lambda record: record.purchased_at, reverse=True)
     basis, participants = comparison_basis(group)
+    if basis == "price_per_content":
+        # The question is "which package is worth it", so the useful order is the one the
+        # highlight already uses. Rows with no content have no value on this basis and go last.
+        group = sorted(group, key=lambda record: (record.price_per_content is None, record.price_per_content or 0.0))
+        basis, participants = comparison_basis(group)
     values = {index: value for index in participants if (value := basis_value(group[index], basis)) is not None}
     if len(values) < 2:
         return group[:limit]

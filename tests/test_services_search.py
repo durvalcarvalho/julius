@@ -44,12 +44,13 @@ def _id_of(conn, name_fragment: str) -> int:
     return next(product_id for product_id, name in product_names(conn) if name_fragment in name)
 
 
-def test_exact_term_returns_all_rows_of_that_product(conn):
+def test_exact_term_collapses_the_same_price_of_the_same_day(conn):
+    """The three picanha rows of qrcode.html are three pieces in one receipt at the same R$/kg:
+    one row of price information, not three."""
     _import(conn, "qrcode.html")
     rows = search_prices(conn, "picanha")
-    assert len(rows) == 3
-    assert {row.unit for row in rows} == {"KG"}
-    assert len({row.product_id for row in rows}) == 1
+    assert len(rows) == 1
+    assert rows[0].unit == "KG" and rows[0].unit_price == 44.89
 
 
 def test_typo_still_matches(conn):
@@ -309,3 +310,54 @@ def test_every_word_of_a_multi_word_term_must_match(conn):
     _price(conn, queijo, "UN", 15.99, "2026-01-02T00:00:00", "k2")
 
     assert [row.product_id for row in search_prices(conn, "pao de alho")] == [alho]
+
+
+def test_collapse_keeps_rows_that_differ_in_price_or_store(conn):
+    _import(conn, "qrcode.html")
+    _import(conn, "qrcode-3.html")
+    rows = search_prices(conn, "tomate")
+    assert len({(row.store_nickname, row.unit_price) for row in rows}) == len(rows)
+
+
+def test_collapse_happens_before_the_limit(conn):
+    _import(conn, "qrcode.html")
+    assert len(search_prices(conn, "picanha", limit=1)) == 1  # not three rows sharing one price
+
+
+def test_orders_by_price_per_content_when_that_is_the_basis(conn):
+    _import(conn, "qrcode.html")
+    big = _id_of(conn, "REFRI PEPSI PET 2L")
+    small = _id_of(conn, "REFRI ANT GUARANA PET 1.5L")
+    set_content(conn, big, 2, "L")
+    set_content(conn, small, 1.5, "L")
+
+    rows = search_prices(conn, "refri")
+
+    assert [row.price_per_content is not None for row in rows] == [True] * len(rows)
+    assert rows == sorted(rows, key=lambda row: row.price_per_content)
+    assert rows[0].highlight == "lowest"
+
+
+def test_orders_by_date_for_a_time_series(conn):
+    """One product over time: the basis is the package price, so the order stays chronological."""
+    product_id = _product(conn, "REFRI PEPSI PET 2L", "1")
+    set_content(conn, product_id, 2, "L")
+    _price(conn, product_id, "UN", 6.99, "2026-09-05T10:00:00", "a" * 44)
+    _price(conn, product_id, "UN", 7.49, "2026-09-12T10:00:00", "b" * 44)
+
+    rows = search_prices(conn, "pepsi")
+
+    assert [row.purchased_at[:10] for row in rows] == ["2026-09-12", "2026-09-05"]
+
+
+def test_rows_without_content_go_last_in_content_order(conn):
+    a, b, c = (_product(conn, f"REFRI MARCA {n}", str(n)) for n in (1, 2, 3))
+    set_content(conn, a, 2, "L")
+    set_content(conn, b, 1.5, "L")
+    for product_id, price in ((a, 6.99), (b, 4.99), (c, 5.99)):
+        _price(conn, product_id, "UN", price, "2026-09-12T10:00:00", str(product_id) * 44)
+
+    rows = search_prices(conn, "refri")
+
+    assert [row.price_per_content is None for row in rows] == [False, False, True]
+    assert rows[0].highlight == "lowest"  # 4,99 / 1,5L = 3,33/L beats 6,99 / 2L = 3,50/L

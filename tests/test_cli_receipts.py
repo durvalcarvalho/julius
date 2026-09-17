@@ -455,7 +455,7 @@ def test_consultar_logs_one_line_per_call(tmp_path):
     assert len(lines) == 2
     first = json.loads(lines[0])
     assert first["words"] == ["picanha"]
-    assert first["result_count"] == 3
+    assert first["result_count"] == 1  # the three picanha pieces share one price
     assert first["tag_used"] is None
     assert first["ai_fallback"] is False
 
