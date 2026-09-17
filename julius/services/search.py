@@ -26,7 +26,9 @@ term against a long name, so "pao" scored 60 against "Pão de forma Bauducco tra
 (dropped) and 72 against "Laranja pera União" (kept, via partial match on "UNIAO"). `consultar
 pao` returned 12 fruits and 1 bread; no cutoff value fixes that, only a different scorer.
 Two-edit typos stay out, same limitation already accepted by TAG_MATCH_CUTOFF ("pikana" ->
-"Picanha" is 77).
+"Picanha" is 77). Known ceiling at the other end: the prefix comparison scores 100 for any name
+word starting with the term, so a 1-2 letter term is a prefix listing ("a" and "pa" each match
+22 of the 105 products). Wide but never wrong, so no minimum term length is enforced.
 """
 
 NEAR_MISS_CUTOFF = 70

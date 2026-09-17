@@ -22,6 +22,7 @@ Depende de 003 (`product_names`, `product_ids_with_tag`) e 004 (`prices_for_prod
 ### Funcionais
 - Adicionar `normalize_text(text: str) -> str` em `julius/domain/normalization.py` (maiúsculas + remover acentos via `unicodedata.normalize("NFKD")` descartando combining chars + colapsar espaços), com 2 testes em `tests/test_normalization.py` (acento/caixa; string vazia). Reutilizada por 013.
 - Candidatos por `term`: aplicar `normalize_text` ao termo e aos nomes e usar `rapidfuzz.process.extract(term, {id: name}, scorer=fuzz.WRatio, score_cutoff=MATCH_SCORE_CUTOFF, limit=None)`. `MATCH_SCORE_CUTOFF` é constante de módulo (começar em 75).
+- **Superado em v2.3.1 (não reimplemente com `WRatio`):** `WRatio` penaliza termo curto contra nome longo e inverteu o ranking quando a IA passou a escrever nomes legíveis. Hoje é `_name_score` (palavra a palavra + prefixo) com `MATCH_SCORE_CUTOFF = 80`; medição no docstring da constante e em CLAUDE.md, "Identidade de produto e busca".
 - Candidatos por `tag`: `products.product_ids_with_tag(conn, tag.strip().lower())`.
 - Ambos informados → interseção. Só um → só ele.
 - Busca `prices_for_products` e agrupa por `unit`. Dentro de cada grupo: ordena `purchased_at DESC`; mantém as `limit` mais recentes **e sempre inclui** a(s) linha(s) de menor e de maior `unit_price` do grupo inteiro, mesmo fora da janela; marca `highlight="lowest"` em todas as linhas com o menor preço e `"highest"` nas de maior. Grupo com um único preço distinto → sem `highlight`.
