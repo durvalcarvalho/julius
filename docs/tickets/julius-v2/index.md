@@ -27,7 +27,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 
 ## Regras comuns a todo ticket
 
-1. Leia `CLAUDE.md` e o design da fase do ticket antes de começar; as seções citadas em cada ticket são o mínimo. Design por fase: 101–114 → `docs/design/ai-v2.md`; 115–116 → `docs/design/consultar-v2.1.md`; 117–130 → `docs/design/comparability-v2.2.md` (e `docs/requirements/comparability-closure.md`, que tem precedência sobre os outros requisitos da mesma data); 131–136 → `docs/design/review-scope-v2.3.md` (e `docs/requirements/review-scope-v2.3.md`).
+1. Leia `CLAUDE.md` e o design da fase do ticket antes de começar; as seções citadas em cada ticket são o mínimo. Design por fase: 101–114 → `docs/design/ai-v2.md`; 115–116 → `docs/design/consultar-v2.1.md`; 117–130 → `docs/design/comparability-v2.2.md` (e `docs/requirements/comparability-closure.md`, que tem precedência sobre os outros requisitos da mesma data); 131–136 → `docs/design/review-scope-v2.3.md` (e `docs/requirements/review-scope-v2.3.md`); 137–146 → `docs/design/merge-and-unit-price-v2.4.md` (e `docs/requirements/auto-merge-and-unit-price-v2.4.md`, que emenda `auto-merge-clusters.md` em vez de reescrevê-lo).
 2. Só toque nos arquivos listados no ticket. Se precisar de algo de outra camada que não existe, **pare e anote** — não crie fora do escopo.
 3. `tests/test_architecture.py` é a fonte da verdade da DAG. Se ele falhar, o desenho está errado, não o teste.
 4. Teste de caminho feliz **e** triste para cada função pública. SQLite real em `tmp_path`; rede **sempre** substituída por `tests/_fakes.py::ScriptedLlmClient`; nenhum teste toca a API real.
@@ -77,6 +77,17 @@ Trilha única (o projeto não tem frontend). A numeração continua a da v1 (101
 | 135 | [review: pergunta de conteúdo](135-review-content-question.md) | 133, 134 | M | feito | `_ask_content`, `_FORM_LABELS`, `--sim` redefinido |
 | 136 | [e2e + docs v2.3](136-e2e-docs-v23.md) | 131–135 | M | feito | `test_e2e` do ciclo, rodada real, `CLAUDE.md`/`README.md` |
 
+| 137 | [Migração 0004 + view do grupo](137-product-merge-column-and-view.md) | — | S | aberto | `products.merged_into`, view `product_group`, `set_merged_into`/`group_root`/`group_members` |
+| 138 | [Produto efetivo do grupo](138-group-effective-product.md) | 137 | M | aberto | só raízes nas listagens; nome/conteúdo/tipo/tags compostos na leitura |
+| 139 | [Preços do grupo + CSV](139-group-prices-and-export.md) | 137 | M | aberto | `prices_for_products` junta o grupo, `source_product_id`, `group_product_id`; remove `reassign_product` |
+| 140 | [catalog: fusão reversível](140-catalog-merge-rewrite.md) | 137, 139 | M | aberto | `merge_products` reescrita, `unmerge_product`, guarda de ciclo, `merge_inheritance` |
+| 141 | [CLI: `desfundir` + ação `merge`](141-cli-unmerge-and-merge-action.md) | 140 | M | aberto | `produtos desfundir`, `fundir` sem confirmação, `"merge"` no log e no desfazer |
+| 142 | [curation: guarda de conteúdo](142-curation-divergent-content-guard.md) | 138 | S | aberto | par com conteúdo divergente deixa de ser candidato |
+| 143 | [review: funde e avisa](143-review-auto-merge.md) | 141, 142 | M | aberto | fusão automática do que a IA confirmou, com pedido de conferência |
+| 144 | [search: colapso + ordem](144-search-collapse-and-order.md) | — | M | aberto | linhas idênticas colapsadas; ordem segue a base de comparação |
+| 145 | [CLI: mais barato por conteúdo](145-cli-cheapest-per-content-line.md) | 144 | S | aberto | a frase que responde "qual embalagem compensa" |
+| 146 | [e2e + docs v2.4](146-e2e-docs-v24.md) | 137–145 | M | aberto | ciclo completo, rodada real, `CLAUDE.md`/`README.md` |
+
 Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum ticket L: o que ficaria L foi dividido (suggestions em 107/108; CLI em 111/112/113; na v2.2, serviço e CLI sempre em tickets separados — 124/125 e 126/127 — e a infra de arquivamento separada da CLI que a usa, 128/129).
 
 ## DAG
@@ -102,7 +113,14 @@ Esforço: S ≈ até 1h, M ≈ 1–3h de trabalho humano equivalente. Nenhum tic
 131 repo ──► 132 curation ──► 134 review/tabela ──┐
                                                   ├──► 135 pergunta de conteúdo ──► 136 e2e + docs
 133 packaging ────────────────────────────────────┘
+
+                 ┌─► 138 produto efetivo ──► 142 guarda de conteúdo ──┐
+137 migração+view┤                                                    ├──► 143 review funde ──┐
+                 └─► 139 preços do grupo ──► 140 catalog ──► 141 CLI ─┘                       ├──► 146 e2e + docs
+144 colapso+ordem ──► 145 linha de resposta ──────────────────────────────────────────────────┘
 ```
+
+Na v2.4, paralelizável desde o início: **{137, 144}** — a frente B (144/145) não toca fusão nenhuma. Depois: 138 e 139 em paralelo após 137; 142 após 138; 140 após 139 (por causa da ponte de `reassign_product`); 141 após 140; 143 só quando 141 **e** 142 estiverem prontos.
 
 Paralelizável desde o início: {101, 104, 105}. Depois: 102 e 106 em paralelo; 103 e 107; 110 e 108; 109 após 108; 111 e 112 em paralelo após 110 (111 precisa de 108; 112 de 109). 115/116 são independentes de todo o resto (não tocam IA, endereço nem curadoria) — podem rodar em paralelo com qualquer fase.
 
@@ -111,6 +129,8 @@ Na v2.2, paralelizável desde o início: **{117, 119, 128}** — 119 não depend
 ## Caminho crítico
 
 105 → 106 → 107 → 108 → 109 → 112 → 113 → 114 (a IA de verdade fazendo curadoria no `importar`). A trilha do endereço (101 → 102 → 103 → 110 → 111) é mais curta e independente até 110. 115 → 116 é uma trilha curta e independente, à parte.
+
+v2.4: **137 → 139 → 140 → 141 → 143 → 146** (a fusão reversível chegando até a automação). A frente B (144 → 145) é curta, independente e entrega valor sozinha; pode vir primeiro se a tabela de `consultar` incomodar mais que rodar `fundir` na mão.
 
 v2.2: **117 → 118 → 121 → 122 → 127 → 130** (a curadoria automática chegando até o sinal de preço no import). A trilha de comparação entre mercados (117/119 → 124 → 125) é mais curta e entrega valor sozinha; a trilha de arquivamento (128 → 129) é independente do resto e pode ser feita primeiro se a fricção de arquivo incomodar antes.
 
@@ -135,6 +155,15 @@ v2.2: **117 → 118 → 121 → 122 → 127 → 130** (a curadoria automática c
   - **K — IA**: 133 (a segunda chamada, isolada, que ninguém consome até o 135).
   - **L — tela**: 134, 135 (a tabela deixa de mentir; a pergunta muda de campo).
   - **M — fechamento**: 136, com rodada real obrigatória contra cópia do banco.
+
+- **v2.4 — fusão reversível e leitura por unidade base** (`docs/design/merge-and-unit-price-v2.4.md`): 137 → {138, 139} → {140, 142} → 141 → 143 → 146, com {144, 145} em paralelo.
+  - **N — o estado**: 137, 138, 139 (a coluna, a view, e as leituras vendo grupos em vez de produtos).
+  - **O — a operação**: 140, 141, 142 (fundir vira uma linha, ganha desfazer, e o candidato ganha um guarda).
+  - **P — a automação**: 143 (o padrão se inverte: funde e avisa).
+  - **Q — a leitura**: 144, 145 (a tabela para de repetir e passa a responder).
+  - **R — fechamento**: 146, com rodada real obrigatória contra cópia do banco.
+
+  **Restrição de ordem que é de princípio, não técnica:** 141 antes de 143 — o `desfundir` existe e está testado antes de qualquer fusão automática ser ligada (mesma regra que pôs o 118 antes do 122). E 140 antes de 141, porque a guarda de ciclo é o que impede o comando manual de congelar o sistema.
 
   **Restrição de ordem que é de princípio, não técnica:** 134 antes de 135. O 134 tira a pergunta de categoria e o 135 põe a de conteúdo; invertidos, existe um estado em que a revisão pergunta **as duas coisas** — mais atrito do que hoje, que é o problema que a fase existe para resolver.
 
@@ -161,6 +190,10 @@ Depois de **B**, vale um teste real intermediário: `julius produtos comparar 63
 - **v2.3 — a intuição de varejo errar se dizendo certa** (133/135) → medido: `Filme PVC 30m x 28cm` virou `30 UN` com o campo de certeza marcado. Mitigação estrutural, não de prompt: a intuição nunca grava, só alimenta opções, e o humano pula. Conteúdo errado é o único campo cujo erro **não** aparece na saída normal — vira um R$/UN plausível.
 - **v2.3 — vocabulário de tags parar de crescer sozinho** (132) → efeito colateral desejado do "primeira categoria **conhecida**", que protege a medição de `TAG_MATCH_CUTOFF`. Custo zero na amostra (25 de 25 já eram conhecidas); quando acontecer, o produto fica pendente e reaparece.
 - **v2.3 — a primeira rodada ser grande** (136) → ~86 produtos contra 4 pelo critério antigo, ~4 chamadas, ~US$ 0,02. Decidido nos requisitos: roda inteira, sem teto e sem confirmação.
+- **v2.4 — um ciclo na relação de fusão congela o sistema** (140) → medido no design: com `A→B` e `B→A` a view recursiva **não retorna**, e todo comando que lê produto para de responder, sem mensagem. É o único risco desta fase que não falha alto sozinho. Mitigação: a validação vem antes de qualquer teste que monte um ciclo (nota explícita nos tickets 137 e 140), e o 140 exige um teste que prove que a guarda recusa e que a view continua respondendo.
+- **v2.4 — alguém "simplificar" reatribuindo `prices.product_id` na fusão** (139) → parece mais simples e destrói a reversibilidade. Mitigação: `reassign_product` é removida no 139 para o atalho não existir, e o teste que compara a contagem de `prices` por `product_id` antes e depois de fundir é obrigatório.
+- **v2.4 — a IA confirmar um par errado que o guarda de conteúdo não pega** (143) → é o risco aceito do gatilho sem limiar, e agora barato: desfundir é um comando e nada foi destruído. O par a observar é `Picanha ≈ Fraldinha` (ambos sem conteúdo, 0,82), que a IA rejeita hoje.
+- **v2.4 — a rejeição da fusão automática parecer ignorada** (146) → o `CLAUDE.md` diz hoje que ela "foi rejeitada por medição". Mitigação: o 146 exige registrar **por que** caiu (a medição refeita contra o catálogo curado: 19 candidatos → 2 confirmados, ambos corretos, `Alho ≈ Pão de Alho` rejeitado) e os dois filtros medidos e reprovados no caminho.
 - **v2.2 — apagar o `_files/` é a única operação destrutiva do sistema** (128) → três guardas exigidas por teste: nome derivado exato, precisa ser diretório real, nunca symlink. Pendente de veto do usuário; vetado, a função existe e não é chamada.
 
 ## Questões assumidas nos tickets (mudariam pouco se a resposta fosse outra)
@@ -172,6 +205,7 @@ Depois de **B**, vale um teste real intermediário: `julius produtos comparar 63
 - Cache de respostas de IA fora: o caminho durável é corrigir o dado.
 - O smoke script do scratchpad não entra no repositório; o resultado está registrado em `docs/design/ai-v2.md` §1.1.
 - **115/116**: nenhum comando de analytics sobre `query_log.jsonl` (jq/`Counter` cobrem, mesma decisão de não criar `julius ia status`); nenhuma tag multi-palavra (nenhuma das 13 tags precisa); nenhum `HintKind` novo pra "tag detectada" (auto-detecção bem-sucedida não é gatilho de dica — ver `docs/design/consultar-v2.1.md` §3). Se qualquer uma dessas premissas mudar, revisitar o design antes de estender os tickets.
+- **137–146 (v2.4)**: as 11 questões em aberto dos requisitos foram **fechadas por decisão do agente**, a pedido do usuário, com a razão de cada uma em `docs/requirements/auto-merge-and-unit-price-v2.4.md` §5. As três que mais mudariam o código se a resposta fosse outra: o sobrevivente é o de **menor id** (uma linha em `_review`); a cadeia guarda o **alvo direto** e resolve até a raiz (mudar isso quebraria o desfazer fiel, então não é uma escolha livre); e a ordem da tabela segue a **base de comparação** em vez de uma flag. Duas decisões do design vão além dos requisitos e estão registradas na §10 dele: a herança de atributos é **leitura, não gravação**, e `PriceRecord.product_id` passa a ser a raiz para `comparison_basis` não precisar mudar.
 - **117–130 (v2.2)**, todas registradas em `docs/design/comparability-v2.2.md` §9:
   - **Grupo em coluna, não em `tags`** — um produto pertence a no máximo um grupo, e coluna faz disso regra do banco. Reaproveitar `tags` também invalidaria a medição de `TAG_MATCH_CUTOFF` (115). Se um dia um produto precisar estar em dois grupos, o desenho muda, não o ticket.
   - **`consultar --tipo` não entra**: `rapidfuzz` já acha o grupo quando o termo é o próprio tipo (`consultar tomate` acha os dois tomates hoje).
