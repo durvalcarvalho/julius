@@ -1,0 +1,25 @@
+julius/repositories/products.py
+  s_e32683ed46ac18::t_044dc0be55095c 51-52,232,243-245
+julius/infra/migrations/0005_product_group_name.sql
+  s_e32683ed46ac18::t_044dc0be55095c 1-20
+tests/test_db.py
+  s_e32683ed46ac18::t_4a2765709683b3 68,71,73,77-78,163-175
+julius/repositories/prices.py
+  s_e32683ed46ac18::t_044dc0be55095c 68,74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "39a6f2877609a097104cb1e37ae37b589074092c",
+  "prompts": {},
+  "sessions": {
+    "s_e32683ed46ac18": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04c69812-c145-481d-872c-805dcef575c8",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
