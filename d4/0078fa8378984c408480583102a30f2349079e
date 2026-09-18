@@ -1,0 +1,28 @@
+CLAUDE.md
+  s_2696c997dae14b::t_68f7f033be63db 11,13,489-494,594
+  s_2696c997dae14b::t_3ffeb51268bbbd 53-54,68-70
+  s_2696c997dae14b::t_5c9c02dde22516 595
+README.md
+  s_2696c997dae14b::t_bc52703a34aca9 106
+  s_2696c997dae14b::t_d4286662a4c058 489,546-551,555
+  s_2696c997dae14b::t_de871a64998eb8 336-337,340,347-355,361,363-365,389-390,399-402,423-426
+  s_2696c997dae14b::t_cc9103c43a69d5 35-36,39,290-291,313,315
+docs/como-testar-o-bot.md
+  s_2696c997dae14b::t_fc0d108fa21c18 1-317
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d40078fa8378984c408480583102a30f2349079e",
+  "prompts": {},
+  "sessions": {
+    "s_2696c997dae14b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47bd6331-591b-4f18-a95a-1c9c00a35931",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
