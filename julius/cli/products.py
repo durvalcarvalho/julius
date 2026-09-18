@@ -137,6 +137,11 @@ def set_kind(
         else:
             catalog.set_product_kind(conn, product_id, kind)  # type: ignore[arg-type]
         name = _name_of(conn, product_id)
+        # Read back, never echo the argument: `set_kind` reuses a spelling that already exists,
+        # so asking for "ovos" where "ovo" is known stores "ovo" — and saying otherwise would
+        # hide the very grouping the command just did.
+        product = catalog.get_product(conn, product_id)
+        stored = product.kind if product is not None else None
     except (ValueError, LookupError) as error:
         fail(str(error))
     finally:
@@ -144,7 +149,7 @@ def set_kind(
     if remove:
         console.print(f"{product_id} · {name} → tipo removido")
     else:
-        console.print(f'{product_id} · {name} → tipo "{kind.strip().lower()}"')  # type: ignore[union-attr]
+        console.print(f'{product_id} · {name} → tipo "{stored}"')
 
 
 @app.command("definir-conteudo")

@@ -185,6 +185,10 @@ class StoreComparison:
     comparisons: tuple[KindComparison, ...]
     first_purchase: str
     last_purchase: str
+    # Why the output is as small as it is. Measured on the real database: 80 of 87 kinds were
+    # bought in a single store, which is the answer to "why are so few products compared?".
+    kinds_total: int = 0
+    kinds_single_store: int = 0
 
 
 @dataclass(frozen=True)

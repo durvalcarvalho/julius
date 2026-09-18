@@ -58,23 +58,14 @@ def compare_stores() -> None:
     conn = open_db()
     try:
         comparison = comparison_service.compare_stores(conn)
-        products = catalog.list_products(conn)
     finally:
         conn.close()
-    typed = sum(1 for product in products if product.kind)
     if not comparison.comparisons:
-        if not typed:
+        if not comparison.kinds_total:
             console.print("Nenhum produto tem tipo ainda. Rode: julius produtos revisar")
         else:
             console.print("Nenhum tipo de produto foi comprado em dois mercados ainda — sem base para comparar.")
-            # Coverage, not existence: one typed product out of a hundred used to silence this,
-            # and a half-curated catalogue is the likeliest reason there is nothing to compare.
-            if typed < len(products):
-                missing = len(products) - typed
-                console.print(
-                    f"{missing} dos {len(products)} produtos ainda não têm tipo. Rode: julius produtos revisar",
-                    style="dim",
-                )
+            console.print(f"Cobertura: {_coverage(comparison)}.", style="dim")
         return
 
     labels = _labels(comparison)
@@ -89,12 +80,27 @@ def compare_stores() -> None:
 
     first, last = comparison.first_purchase, comparison.last_purchase
     count = len(comparison.comparisons)
-    console.print(f"base: {count} {_plural(count)} · {br_date(first)} a {br_date(last)}")
+    base = f"base: {count} {_plural(count)} · {br_date(first)} a {br_date(last)}"
+    if comparison.kinds_single_store:
+        base += f" · {_coverage(comparison)}"
+    console.print(base)
     console.print("Período largo: parte da diferença pode ser variação de preço no mês, não o mercado.", style="dim")
 
 
 def _plural(count: int) -> str:
     return "grupo" if count == 1 else "grupos"
+
+
+def _coverage(comparison: StoreComparison) -> str:
+    """Why the output is this small. Comparing needs the same kind in two stores, and measured on
+    the real database 80 of 87 kinds were bought in a single one — the tables can only ever show
+    the rest. Without this the smallness reads as a missing feature."""
+    total, single = comparison.kinds_total, comparison.kinds_single_store
+    if single < total:
+        return f"{single} dos {total} tipos comprados em um mercado só"
+    if total == 1:
+        return "o único tipo comprado saiu de um mercado só"
+    return f"todos os {total} tipos comprados saíram de um mercado só"
 
 
 def _labels(comparison: StoreComparison) -> dict[str, str]:

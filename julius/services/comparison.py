@@ -25,9 +25,14 @@ def compare_stores(conn: sqlite3.Connection) -> StoreComparison:
     # ponytail: scans every price row of typed products (132 today). SQL aggregation only if the
     # database grows orders of magnitude.
     groups: dict[tuple[str, str], list[PriceRecord]] = {}
+    # Counted by kind, never by `len(groups)`: those are keyed by (kind, unit), and one kind sold
+    # both by weight and by package is two keys but one kind (87 kinds against 89 keys today).
+    stores_per_kind: dict[str, set[str]] = {}
     for record in prices.prices_for_products(conn, typed):
         if record.kind is not None:
             groups.setdefault((record.kind, record.unit), []).append(record)
+            stores_per_kind.setdefault(record.kind, set()).add(record.store_cnpj)
+    coverage = (len(stores_per_kind), sum(1 for cnpjs in stores_per_kind.values() if len(cnpjs) == 1))
 
     comparisons: list[KindComparison] = []
     used_dates: list[str] = []
@@ -55,8 +60,8 @@ def compare_stores(conn: sqlite3.Connection) -> StoreComparison:
         used_dates += [entry.purchased_at for entry in entries]
 
     if not comparisons:
-        return StoreComparison((), "", "")
-    return StoreComparison(tuple(comparisons), min(used_dates), max(used_dates))
+        return StoreComparison((), "", "", *coverage)
+    return StoreComparison(tuple(comparisons), min(used_dates), max(used_dates), *coverage)
 
 
 def new_extremes(conn: sqlite3.Connection, access_keys: Sequence[str]) -> list[PriceExtreme]:

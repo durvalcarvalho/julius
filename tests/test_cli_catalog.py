@@ -108,6 +108,19 @@ def test_produtos_tipo_sets_and_prints_confirmation():
     assert 'tipo "refrigerante"' in result.output
 
 
+def test_produtos_tipo_confirms_the_spelling_it_stored():
+    """`set_kind` reuses a spelling that already exists, so the echo has to be read back: asking
+    for "ovos" where "ovo" is known stores "ovo", and echoing the argument would hide the grouping
+    the command just did."""
+    _import("qrcode.html")
+    assert _run("produtos", "tipo", "1", "ovo").exit_code == 0
+
+    result = _run("produtos", "tipo", "2", "ovos")
+
+    assert result.exit_code == 0, result.output
+    assert 'tipo "ovo"' in result.output
+
+
 def test_produtos_tipo_remover_clears():
     _import("qrcode.html")
     assert _run("produtos", "tipo", "1", "refrigerante").exit_code == 0
@@ -326,16 +339,29 @@ def test_comparar_message_when_no_shared_kind():
     assert "sem base para comparar" in result.output
 
 
-def test_comparar_says_how_many_products_still_have_no_kind():
-    """Coverage, not existence: one typed product used to silence the nudge entirely, which is
-    exactly the state that makes the comparison come back empty."""
+def test_comparar_says_why_there_is_nothing_to_compare():
+    """An empty screen that only says "no base" reads as a broken feature. The funnel is the
+    answer: comparing needs one kind in two stores, and here there is a single store."""
     _import("qrcode.html")
     assert _run("produtos", "tipo", "1", "refrigerante").exit_code == 0
 
     result = _run("mercados", "comparar")
 
-    assert "14 dos 15 produtos ainda não têm tipo" in result.output
-    assert "julius produtos revisar" in result.output
+    assert "sem base para comparar" in result.output
+    assert "o único tipo comprado saiu de um mercado só" in result.output
+
+
+def test_comparar_footer_says_how_many_kinds_only_one_store_sells():
+    """The question this answers came from real use: "why are so few products compared?". The
+    tables can only ever show the kinds bought in two stores — the footer says how many are not."""
+    first, second = _tomatoes_in_two_stores()
+    for product_id in (first, second):
+        assert _run("produtos", "tipo", str(product_id), "tomate").exit_code == 0
+    assert _run("produtos", "tipo", "1", "refrigerante").exit_code == 0
+
+    result = _run("mercados", "comparar")
+
+    assert "1 dos 2 tipos comprados em um mercado só" in result.output
 
 
 def test_comparar_disambiguates_two_stores_sharing_a_nickname():
