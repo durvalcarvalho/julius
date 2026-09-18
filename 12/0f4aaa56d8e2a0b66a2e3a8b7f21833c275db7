@@ -1,0 +1,26 @@
+julius/config.py
+  s_2696c997dae14b::t_22985d9c2f560b 22-23,29-34,68-69,83-90
+  s_2696c997dae14b::t_145ddb2e31ec12 91-92
+tests/conftest.py
+  s_2696c997dae14b::t_22985d9c2f560b 14,22-23,28-30
+tests/test_config.py
+  s_2696c997dae14b::t_7e2d2ca8f0b5b0 142-145,147-151
+  s_2696c997dae14b::t_64616f3fbbb20e 99-141
+  s_2696c997dae14b::t_f5293e29110a32 146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "120f4aaa56d8e2a0b66a2e3a8b7f21833c275db7",
+  "prompts": {},
+  "sessions": {
+    "s_2696c997dae14b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47bd6331-591b-4f18-a95a-1c9c00a35931",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
