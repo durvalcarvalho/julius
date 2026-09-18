@@ -190,3 +190,144 @@ def test_a_listing_reply_carries_no_pending(deps):
 
     assert reply.pending is None and state.pending is None
     assert "Dona de Casa" in reply.text or "DONA DE CASA" in reply.text
+
+
+# --- the tap (ticket 160) ---------------------------------------------------------
+
+from dataclasses import replace as _replace  # noqa: E402
+
+from julius.bot import turn as turn_module  # noqa: E402
+from julius.bot.actions import PendingWrite  # noqa: E402
+from julius.bot.turn import PENDING_TTL_SECONDS, handle_tap  # noqa: E402
+
+
+def _pending_rename(deps, state, name="Picanha bovina"):
+    product = next(p for p in catalog.list_products(deps.conn) if "PICANHA" in p.canonical_name.upper())
+    model, _ = _model(_action("rename_product", {"product": str(product.id), "name": name}))
+    _turn(deps, model, state=state, text="renomeia")
+    return product
+
+
+def _snapshot(deps):
+    return [catalog.get_product(deps.conn, p.id) for p in catalog.list_products(deps.conn)]
+
+
+def test_tap_with_no_pending_is_inert(deps):
+    before = _snapshot(deps)
+    state = ChatState()
+
+    reply = handle_tap(state, deps, "qualquer", approve=True)
+
+    assert reply.text == "Essa confirmação não está mais ativa."
+    assert _snapshot(deps) == before
+
+
+def test_tap_with_wrong_nonce_keeps_the_pending(deps):
+    state = ChatState()
+    _pending_rename(deps, state)
+    alive = state.pending
+
+    reply = handle_tap(state, deps, "nonce-errado", approve=True)
+
+    assert reply.text == "Essa confirmação não está mais ativa."
+    assert state.pending is alive, "an old tap must not knock out a newer pending"
+
+
+def test_tap_expired_clears_without_executing(deps):
+    state = ChatState()
+    product = _pending_rename(deps, state)
+    before = _snapshot(deps)
+
+    reply = handle_tap(state, deps, state.pending.nonce, approve=True, now=state.pending.created_at + 301)
+
+    assert reply.text == "Confirmação expirada — nada foi executado."
+    assert state.pending is None
+    assert _snapshot(deps) == before
+    assert catalog.get_product(deps.conn, product.id).canonical_name == product.canonical_name
+
+
+def test_tap_at_exactly_the_ttl_is_still_valid(deps):
+    state = ChatState()
+    product = _pending_rename(deps, state)
+
+    reply = handle_tap(
+        state, deps, state.pending.nonce, approve=True, now=state.pending.created_at + PENDING_TTL_SECONDS
+    )
+
+    assert reply.text.startswith("✅")
+    assert catalog.get_product(deps.conn, product.id).canonical_name == "Picanha bovina"
+
+
+def test_tap_deny_clears_without_executing(deps):
+    state = ChatState()
+    _pending_rename(deps, state)
+    before = _snapshot(deps)
+
+    reply = handle_tap(state, deps, state.pending.nonce, approve=False)
+
+    assert reply.text == "❌ Cancelado — nada foi executado."
+    assert state.pending is None
+    assert _snapshot(deps) == before
+
+
+def test_tap_approve_executes_and_returns_undo(deps):
+    state = ChatState()
+    product = _pending_rename(deps, state)
+
+    reply = handle_tap(state, deps, state.pending.nonce, approve=True)
+
+    assert reply.text.startswith("✅")
+    assert f"<code>julius produtos renomear {product.id}" in reply.text
+    assert catalog.get_product(deps.conn, product.id).canonical_name == "Picanha bovina"
+    assert state.pending is None
+
+
+def test_tap_approve_write_failed_is_reported(deps):
+    """A merge that would close a cycle: the service refuses, and the tap says why."""
+    a = next(p for p in catalog.list_products(deps.conn) if "PICANHA" in p.canonical_name.upper())
+    b = next(p for p in catalog.list_products(deps.conn) if p.id != a.id)
+    catalog.merge_products(deps.conn, a.id, b.id)
+    state = ChatState(pending=PendingWrite("merge_products", {"source_id": b.id, "target_id": a.id}, "p", "n", 0.0))
+    before = _snapshot(deps)
+
+    reply = handle_tap(state, deps, "n", approve=True, now=0.0)
+
+    assert reply.text.startswith("❌ Não executado:")
+    assert "já faz parte do grupo" in reply.text
+    assert state.pending is None
+    assert _snapshot(deps) == before
+
+
+def test_tap_approve_unexpected_error_clears_pending(deps, monkeypatch):
+    state = ChatState()
+    _pending_rename(deps, state)
+    monkeypatch.setattr(turn_module, "execute", lambda deps, pending: 1 / 0)
+
+    reply = handle_tap(state, deps, state.pending.nonce, approve=True)
+
+    assert reply.text == "❌ Não executado: erro inesperado; nada foi executado"
+    assert state.pending is None, "a pending left behind would wedge the chat forever"
+
+
+def test_text_after_expired_pending_has_no_cancel_notice(deps):
+    state = ChatState()
+    _pending_rename(deps, state)
+    state.pending = _replace(state.pending, created_at=state.pending.created_at - PENDING_TTL_SECONDS - 1)
+    model, _ = _model(_prose("beleza"))
+
+    reply, _ = _turn(deps, model, state=state, text="outra coisa")
+
+    assert "Ação anterior cancelada." not in reply.text
+    assert reply.text == "beleza"
+    assert state.pending is None
+
+
+def test_text_while_a_live_pending_exists_still_warns(deps):
+    """The counterpart of the test above: a pending the user could still see gets a notice."""
+    state = ChatState()
+    _pending_rename(deps, state)
+    model, _ = _model(_prose("beleza"))
+
+    reply, _ = _turn(deps, model, state=state, text="outra coisa")
+
+    assert reply.text.startswith("Ação anterior cancelada.")

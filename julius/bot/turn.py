@@ -13,14 +13,16 @@ from datetime import datetime, timezone
 
 from pydantic_ai.messages import ModelMessage
 
-from julius.bot.actions import Deps, PendingWrite, ProductListing, StoreListing
+from julius.bot.actions import Deps, PendingWrite, ProductListing, StoreListing, WriteFailed, execute
 from julius.bot.agent import BOT_PROMPT_VERSION, BotAgent
 from julius.bot.render import (
     escape,
     render_comparison,
+    render_failure,
     render_pending,
     render_products,
     render_records,
+    render_result,
     render_stores,
 )
 from julius.config import Config
@@ -29,11 +31,16 @@ from julius.infra import ai_log
 from julius.services import suggestions
 
 HISTORY_TURNS = 3
+# 300, not 120: the majordomo measured a real tap arriving at 121 s and being dropped.
+PENDING_TTL_SECONDS = 300.0
 
 CALL_KIND = "bot_turn"
 
 CANCELLED_NOTICE = "Ação anterior cancelada.\n\n"
 AI_UNREACHABLE = "Não consegui falar com a IA agora. Tente de novo em instantes."
+STALE_TAP = "Essa confirmação não está mais ativa."
+EXPIRED_TAP = "Confirmação expirada — nada foi executado."
+DENIED_TAP = "❌ Cancelado — nada foi executado."
 
 
 @dataclass
@@ -119,8 +126,10 @@ async def handle_text(agent: BotAgent, state: ChatState, deps: Deps, text: str) 
     """Never raises: every failure becomes a Reply and a line in ai_calls.jsonl."""
     prefix = ""
     if state.pending is not None:
+        # An expired one goes in silence: the user was never told it was still waiting.
+        if not _expired(state.pending, time.monotonic()):
+            prefix = CANCELLED_NOTICE
         state.pending = None
-        prefix = CANCELLED_NOTICE
 
     if not suggestions.is_available(deps.conn, deps.config):
         _charge(deps, text, attempt=0, kind=None, latency_ms=0, error="budget_exhausted")
@@ -167,3 +176,34 @@ async def handle_text(agent: BotAgent, state: ChatState, deps: Deps, text: str) 
 
     reply = _render_output(result.output, state, deps)
     return Reply(f"{prefix}{reply.text}", pending=reply.pending) if prefix else reply
+
+
+def _expired(pending: PendingWrite, now: float) -> bool:
+    return now - pending.created_at > PENDING_TTL_SECONDS
+
+
+def handle_tap(state: ChatState, deps: Deps, nonce: str, approve: bool, *, now: float | None = None) -> Reply:
+    """The second pass of a write. No model here: approved runs execute() in code, and every other
+    branch writes nothing.
+
+    `now` is injectable for the same reason `relative_age` takes `today` -- a test of expiry must
+    not sleep."""
+    pending = state.pending
+    if pending is None or pending.nonce != nonce:
+        # Deliberately does not clear: an old tap must not knock out a newer pending.
+        return Reply(STALE_TAP)
+    try:
+        if _expired(pending, time.monotonic() if now is None else now):
+            return Reply(EXPIRED_TAP)
+        if not approve:
+            return Reply(DENIED_TAP)
+        try:
+            return Reply(render_result(execute(deps, pending)))
+        except WriteFailed as error:
+            return Reply(render_failure(str(error)))
+        except Exception:
+            # Services write inside `with conn:`, so an exception mid-way already rolled back.
+            return Reply(render_failure("erro inesperado; nada foi executado"))
+    finally:
+        # Written before the branches, not after: a pending left behind wedges the chat forever.
+        state.pending = None
