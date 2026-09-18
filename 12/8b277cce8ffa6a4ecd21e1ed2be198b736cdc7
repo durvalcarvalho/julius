@@ -1,0 +1,21 @@
+tests/test_bot_render.py
+  s_2696c997dae14b::t_06fe57bf5cc6a4 1-226
+julius/bot/render.py
+  s_2696c997dae14b::t_dd3b7d4698836a 1-196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "128b277cce8ffa6a4ecd21e1ed2be198b736cdc7",
+  "prompts": {},
+  "sessions": {
+    "s_2696c997dae14b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47bd6331-591b-4f18-a95a-1c9c00a35931",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
