@@ -113,6 +113,12 @@ def _snapshot(deps: Deps) -> list:
     return [catalog.get_product(deps.conn, p.id) for p in catalog.list_products(deps.conn)]
 
 
+def _guinea_pig(deps: Deps):
+    """Pelo menor id, não pela primeira linha: `list_products` ordena por nome, então renomear
+    dentro de um teste mudaria quem é o `[0]` do teste seguinte."""
+    return min(catalog.list_products(deps.conn), key=lambda product: product.id)
+
+
 # --- o que a rede responde, e nada mais ------------------------------------------
 
 
@@ -173,7 +179,7 @@ def test_reading_questions_route_to_the_right_action(deps):
 def test_a_write_is_only_ever_proposed(deps):
     """Invariante, não roteamento: se o modelo escolheu uma escrita, ela NÃO pode ter gravado. Se
     ele escolher outra coisa, o teste diz isso e não finge que verificou."""
-    product = catalog.list_products(deps.conn)[0]
+    product = _guinea_pig(deps)
     before = _snapshot(deps)
 
     reply = _ask(deps, f'renomeia o produto {product.id} para "Teste Julius"')
@@ -190,7 +196,7 @@ def test_a_write_is_only_ever_proposed(deps):
 
 def test_the_tap_executes_and_the_undo_is_pastable(deps):
     """Fecha o laço na cópia: propõe pela IA, executa pelo toque, confere no banco e desfaz."""
-    product = catalog.list_products(deps.conn)[0]
+    product = _guinea_pig(deps)
 
     state = ChatState()
     reply = _ask(deps, f'renomeia o produto {product.id} para "Teste Julius"', state)
@@ -234,7 +240,9 @@ def test_the_model_never_invents_a_product_id(deps):
 
 
 def test_the_run_reports_what_it_cost():
-    """Não é assert de nada: é o número que você acompanha entre rodadas."""
+    """Não é assert de nada: é o número que você acompanha entre rodadas.
+
+    Reporta o custo *desta seleção*, não o da rodada inteira — com `-k`, só o que rodou."""
     if not _SPENT:
         pytest.skip("nenhuma chamada foi feita")
     print(f"\n  {len(_SPENT)} chamadas · US$ {sum(_SPENT):.6f} nesta rodada")
