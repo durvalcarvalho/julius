@@ -1,0 +1,21 @@
+julius/bot/turn.py
+  s_2696c997dae14b::t_e8832fddbedae5 16,21,25,34-35,41-43,129-131,179-209
+tests/test_bot_turn.py
+  s_2696c997dae14b::t_0f35f176272ba5 193-333
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5b2567d7670fb06a60fe679da7d6cb0887737bdd",
+  "prompts": {},
+  "sessions": {
+    "s_2696c997dae14b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47bd6331-591b-4f18-a95a-1c9c00a35931",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
