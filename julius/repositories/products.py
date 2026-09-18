@@ -79,6 +79,17 @@ def all_kinds(conn: sqlite3.Connection) -> list[str]:
     return [row["kind"] for row in rows]
 
 
+def _kind_key(kind: str) -> str:
+    """Two spellings of one kind. Accents and case were always folded here; the trailing `s` was
+    added after `ovo` (Assaí) and `ovos` (Costa) turned out to be the same 30-egg box in two
+    stores — one letter apart, so they never compared. No score and no cutoff: exact match over
+    one character less. Measured on the 87 real kinds it touches 3 (`brócolis`, `ovos`, `água com
+    gás`) and collides exactly one pair, the right one — the others have no singular in the
+    catalogue, and matching never rewrites, it only reuses a spelling that already exists."""
+    normalized = normalize_text(kind)
+    return normalized[:-1] if normalized.endswith("S") else normalized
+
+
 def set_kind(conn: sqlite3.Connection, product_id: int, kind: str | None) -> None:
     """Writes the comparison group. The spelling rule lives here, not in the service layer:
     `curation.apply` writes through the repositories, so a rule in `catalog` would be bypassed."""
@@ -87,8 +98,8 @@ def set_kind(conn: sqlite3.Connection, product_id: int, kind: str | None) -> Non
         cleaned = kind.strip().lower()
         if not cleaned:
             raise ValueError("kind must not be blank")
-        normalized = normalize_text(cleaned)
-        kind = next((known for known in all_kinds(conn) if normalize_text(known) == normalized), cleaned)
+        normalized = _kind_key(cleaned)
+        kind = next((known for known in all_kinds(conn) if _kind_key(known) == normalized), cleaned)
     conn.execute("UPDATE products SET kind = ? WHERE id = ?", (kind, product_id))
 
 

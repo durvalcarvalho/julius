@@ -196,6 +196,25 @@ def test_set_kind_reuses_existing_spelling(conn_with_stores):
     assert products.get_product(conn, second).kind == "açaí"
 
 
+def test_set_kind_reuses_existing_spelling_across_plural(conn_with_stores):
+    """Measured on the real database: `ovo` (Assaí) and `ovos` (Costa) are the same 30-egg box in
+    two stores, and the trailing letter alone kept them from ever comparing."""
+    conn = conn_with_stores
+    first = products.resolve_product_id(conn, STORE_A, "1", "OVO BCO GRANDE C/30")
+    second = products.resolve_product_id(conn, STORE_B, "2", "OVOS IANA 30UN MEDIO BCO")
+    products.set_kind(conn, first, "ovo")
+    products.set_kind(conn, second, "ovos")
+    assert products.get_product(conn, second).kind == "ovo"
+
+
+def test_set_kind_keeps_a_plural_with_no_singular_in_the_catalogue(conn_with_stores):
+    """The rule matches an existing spelling, it never rewrites — so `brócolis` stays whole."""
+    conn = conn_with_stores
+    pid = products.resolve_product_id(conn, STORE_A, "1", "BROCOLE NINJA")
+    products.set_kind(conn, pid, "brócolis")
+    assert products.get_product(conn, pid).kind == "brócolis"
+
+
 def test_set_kind_none_clears(conn_with_stores):
     conn = conn_with_stores
     pid = products.resolve_product_id(conn, STORE_A, "1", "TOMATE")
