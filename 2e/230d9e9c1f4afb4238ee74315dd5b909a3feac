@@ -1,0 +1,22 @@
+tests/test_repositories_products.py
+  s_766f3b974b40c9::t_75fe4d3afc4e3d 199-217
+julius/repositories/products.py
+  s_766f3b974b40c9::t_b75379d5afb50e 101-102
+  s_766f3b974b40c9::t_0ae73d51cdb79b 82-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2e230d9e9c1f4afb4238ee74315dd5b909a3feac",
+  "prompts": {},
+  "sessions": {
+    "s_766f3b974b40c9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4173796a-19bd-4f8e-ab60-b914b5dfeed1",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
