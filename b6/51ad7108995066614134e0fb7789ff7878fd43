@@ -1,0 +1,39 @@
+julius/bot/app.py
+  s_703528d2945188::t_58a4b2c60e6922 186
+  s_703528d2945188::t_1bc1c210ac9a4e 156
+  s_703528d2945188::t_ed14f1ceb59c23 10
+  s_c29beff4204490::t_c54562f4f493b4 204-210,221
+  s_703528d2945188::t_5543fd328fbe89 125-140
+tests/test_bot_app.py
+  s_703528d2945188::t_7e33ecf3180992 214
+  s_c29beff4204490::t_4b4b568f36bf53 110
+  s_703528d2945188::t_b7d4e010c8539a 170-213
+docs/tickets/julius-bot/173-typing-indicator.md
+  s_703528d2945188::t_ed64f7f793c7b2 67
+  s_703528d2945188::t_72ff24e3acf260 58-62,65-66
+  s_703528d2945188::t_52edd9e723e815 3-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b651ad7108995066614134e0fb7789ff7878fd43",
+  "prompts": {},
+  "sessions": {
+    "s_703528d2945188": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6995d6b-ed00-47d8-9d91-ba6b5ed6e563",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    },
+    "s_c29beff4204490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9eb824c-d2fb-4566-9e0c-14c76bf5fd30",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
