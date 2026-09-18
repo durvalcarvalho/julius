@@ -11,7 +11,7 @@ from julius.infra import cnpj_client, db
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
-AI_ENV_VARS = (
+ISOLATED_ENV_VARS = (
     "JULIUS_AI_API_KEY",
     "JULIUS_AI_BASE_URL",
     "JULIUS_AI_MODEL",
@@ -19,13 +19,15 @@ AI_ENV_VARS = (
     "JULIUS_AI_INPUT_PRICE_USD_PER_1M",
     "JULIUS_AI_OUTPUT_PRICE_USD_PER_1M",
     "JULIUS_AI_REQUEST_EXTRAS",
+    "JULIUS_BOT_TOKEN",
+    "JULIUS_BOT_ALLOWED_CHAT_ID",
 )
 
 
 @pytest.fixture(autouse=True)
-def _clean_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Isola os testes de credenciais reais de IA exportadas no shell do usuário."""
-    for name in AI_ENV_VARS:
+def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isola os testes de credenciais reais (IA e bot) exportadas no shell do usuário."""
+    for name in ISOLATED_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
 
 

@@ -19,10 +19,18 @@ class Config:
     ai_input_price_usd_per_1m: float | None
     ai_output_price_usd_per_1m: float | None
     ai_request_extras: dict[str, object] = field(default_factory=dict)
+    bot_token: str | None = None
+    bot_allowed_chat_id: int | None = None
 
     @property
     def ai_configured(self) -> bool:
         return bool(self.ai_api_key and self.ai_base_url and self.ai_model)
+
+    @property
+    def bot_configured(self) -> bool:
+        # `is not None`, not truthiness: 0 is the bootstrap value, a real chat id no one has, and
+        # it means "configured, and nobody is allowed yet".
+        return bool(self.bot_token) and self.bot_allowed_chat_id is not None
 
     @property
     def ai_log_path(self) -> Path:
@@ -57,6 +65,8 @@ def load(env: Mapping[str, str] | None = None) -> Config:
         ai_input_price_usd_per_1m=_optional_float(env, "JULIUS_AI_INPUT_PRICE_USD_PER_1M"),
         ai_output_price_usd_per_1m=_optional_float(env, "JULIUS_AI_OUTPUT_PRICE_USD_PER_1M"),
         ai_request_extras=_request_extras(env),
+        bot_token=env.get("JULIUS_BOT_TOKEN") or None,
+        bot_allowed_chat_id=_optional_int(env, "JULIUS_BOT_ALLOWED_CHAT_ID"),
     )
 
 
@@ -68,6 +78,16 @@ def _optional_float(env: Mapping[str, str], name: str) -> float | None:
         return float(raw)
     except ValueError:
         raise ValueError(f"{name} must be a number, got {raw!r}") from None
+
+
+def _optional_int(env: Mapping[str, str], name: str) -> int | None:
+    raw = env.get(name)
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be an integer, got {raw!r}") from None
 
 
 def _request_extras(env: Mapping[str, str]) -> dict[str, object]:

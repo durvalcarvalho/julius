@@ -96,3 +96,56 @@ def test_inbox_and_archive_paths_sit_next_to_db():
     cfg = config.load({"JULIUS_DB": "/x/y/prices.db"})
     assert cfg.inbox_path == Path("/x/y/entrada")
     assert cfg.archive_path == Path("/x/y/entrada/importados")
+
+
+def test_bot_settings_default_to_none_and_not_configured():
+    cfg = config.load({})
+    assert cfg.bot_token is None
+    assert cfg.bot_allowed_chat_id is None
+    assert cfg.bot_configured is False
+
+
+def test_bot_settings_are_read_from_env():
+    cfg = config.load({"JULIUS_BOT_TOKEN": "123:abc", "JULIUS_BOT_ALLOWED_CHAT_ID": "123456789"})
+    assert cfg.bot_token == "123:abc"
+    assert cfg.bot_allowed_chat_id == 123456789
+    assert cfg.bot_configured is True
+
+
+def test_bot_token_alone_is_not_configured():
+    assert config.load({"JULIUS_BOT_TOKEN": "123:abc"}).bot_configured is False
+
+
+def test_bot_allowed_chat_id_alone_is_not_configured():
+    assert config.load({"JULIUS_BOT_ALLOWED_CHAT_ID": "7"}).bot_configured is False
+
+
+@pytest.mark.parametrize("raw", ["abc", "12.5"])
+def test_bot_allowed_chat_id_must_be_an_integer(raw):
+    """A float is an error too: a chat id is compared for equality, and 12.5 can never match one."""
+    with pytest.raises(ValueError, match="JULIUS_BOT_ALLOWED_CHAT_ID"):
+        config.load({"JULIUS_BOT_ALLOWED_CHAT_ID": raw})
+
+
+def test_a_group_chat_id_is_negative_and_accepted():
+    assert config.load({"JULIUS_BOT_ALLOWED_CHAT_ID": "-1001234567890"}).bot_allowed_chat_id == -1001234567890
+
+
+def test_zero_is_a_configured_chat_id_because_it_is_the_bootstrap():
+    """No real chat has id 0, so it starts the bot closed: it answers nobody and only logs who
+    wrote, which is how the user learns their own id."""
+    cfg = config.load({"JULIUS_BOT_TOKEN": "123:abc", "JULIUS_BOT_ALLOWED_CHAT_ID": "0"})
+    assert cfg.bot_allowed_chat_id == 0
+    assert cfg.bot_configured is True
+
+
+def test_conftest_isolates_bot_env():
+    """The user exports a real token in their shell. `load()` with no argument reads os.environ,
+    so this only passes because the autouse fixture deleted both names first -- and the membership
+    check is what fails loudly if someone trims that list."""
+    from conftest import ISOLATED_ENV_VARS
+
+    assert {"JULIUS_BOT_TOKEN", "JULIUS_BOT_ALLOWED_CHAT_ID"} <= set(ISOLATED_ENV_VARS)
+    cfg = config.load()
+    assert cfg.bot_token is None
+    assert cfg.bot_allowed_chat_id is None
