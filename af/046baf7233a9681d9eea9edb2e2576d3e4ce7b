@@ -1,0 +1,47 @@
+julius/bot/render.py
+  s_703528d2945188::t_337935ac2122b3 37-41
+  s_703528d2945188::t_348eebd2b68572 104-105,110,112,119-120,122-124
+  s_703528d2945188::t_d4edfd01a23e40 130-133,137,142,146-152,158-159,164-168,176,179-180
+  s_703528d2945188::t_859cd7e3f81cee 259-269
+tests/test_services_suggestions.py
+  s_703528d2945188::t_57a10893e58598 606
+docs/tickets/julius-bot/163-suggestions-narrate.md
+  s_703528d2945188::t_0c286f8d9be8a4 3-11
+tests/test_bot_render.py
+  s_703528d2945188::t_afd45c279b8a49 70,78-79,83,88,92-97
+  s_703528d2945188::t_e51f3708823e85 112-114
+  s_703528d2945188::t_f92dfbf73c25e3 183-184
+  s_703528d2945188::t_79782a2eb90774 84-87,89-91
+  s_703528d2945188::t_18ce49c7422198 138,149,151
+  s_703528d2945188::t_b25bd045e8a2ba 98-99
+CLAUDE.md
+  s_703528d2945188::t_aa5e36886b56f8 63-67
+docs/tickets/julius-bot/165-render-fallback-lines.md
+  s_703528d2945188::t_8d6c210130f175 3-7
+docs/tickets/julius-bot/164-render-facts.md
+  s_703528d2945188::t_c0487eb248e992 3-11
+docs/tickets/julius-bot/index.md
+  s_703528d2945188::t_5b6409ec0530d2 123
+julius/services/suggestions.py
+  s_703528d2945188::t_6532008e7a0ff0 155-157
+  s_703528d2945188::t_a6b2afe486edf9 631
+  s_703528d2945188::t_a3500d755a6367 137-141,144-145,147-154,158-159
+  s_703528d2945188::t_289f2117e01c70 617-618
+  s_703528d2945188::t_2fd243ba4e2d76 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "af046baf7233a9681d9eea9edb2e2576d3e4ce7b",
+  "prompts": {},
+  "sessions": {
+    "s_703528d2945188": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6995d6b-ed00-47d8-9d91-ba6b5ed6e563",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
