@@ -106,7 +106,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a global do 
 > Gerado a partir de: o design "voz do Julius no bot (v2.7)" combinado em chat na sessão de 2026-09-18 (brainstorm → design, sem documento de design próprio ainda — o ticket 169 decide se um nasce em `docs/design/`), reagindo ao caso real do screenshot de 2026-09-18 16:09 (busca de preço respondida como tabela de log, sem personagem).
 > Gerado em: 2026-09-18 · Estado do código **na geração**: commit `5e6d412` (162 fechado), working tree com um protótipo descartado (ver nota abaixo) e `persona-julius-rock.md` não rastreado na raiz.
 > **Antes de começar o 163**: descarte o protótipo em `julius/bot/{actions,app,render,turn}.py`, `julius/services/suggestions.py` e os três `tests/test_bot_*`/`test_services_suggestions.py` (`git checkout -- <arquivos>` ou `git stash`) — ele não segue o corte Modo A/B nem o ponto único `narrate` que esta trilha define, e implementar por cima dele reabriria a mesma discussão de design.
-> **Trilha implementada em 2026-09-18**: 163–169 feitos, um commit por ticket, **949 testes verdes**. Achado real durante a implementação (não no smoke): `asyncio.to_thread(suggestions.narrate, deps.conn, ...)` quebra porque `sqlite3.Connection` não atravessa thread — corrigido no 167, chamando `narrate()` direto; ver `<!-- adjustments -->` no topo do ticket 167. Falta só o **smoke real** (dono: o usuário), roteiro em `docs/como-testar-o-bot.md` passos 16–20 — é ele que confirma se os cortes `NARRATE_FULL_MAX_RECORDS`/`NARRATE_FULL_MAX_GROUPS` (chute, não medição) e o tom da persona funcionam contra o `deepseek-flash` de verdade.
+> **Trilha implementada em 2026-09-18**: 163–169 feitos, um commit por ticket, **949 testes verdes**. Achado real durante a implementação (não no smoke): `asyncio.to_thread(suggestions.narrate, deps.conn, ...)` quebra porque `sqlite3.Connection` não atravessa thread — corrigido no 167, chamando `narrate()` direto; ver `<!-- adjustments -->` no topo do ticket 167. **Smoke da camada de IA rodado no mesmo dia**, contra cópia do banco de produção: `NARRATE_FULL_MAX_GROUPS` subiu de 3 para **6** (medido — é o número exato de grupos comparáveis do catálogo real, narrados inteiros sem a guarda rejeitar nada); `NARRATE_FULL_MAX_RECORDS = 6` confirmado (cobre 69 de 72 buscas reais); tom lido como funcional, mais comedido que o character bible completo. **Falta só o roteiro dentro do Telegram de verdade** (botões, edição de mensagem — passos 1–15/19 de `docs/como-testar-o-bot.md`), que é do usuário; a chamada a `narrate()` já foi validada fora do `python-telegram-bot`.
 
 ### Visão geral
 
@@ -121,7 +121,7 @@ Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo
 - **Ponto único de narração** (`narrate(conn, config, client, context, facts)`), reaproveitado por toda leitura e escrita — um prompt, uma guarda, um `call_kind` de log (`"persona"`).
 - **Guarda por dinheiro, não por identidade**: qualquer `R$ X,XX` na resposta que não esteja nos fatos derruba a resposta inteira. Guarda de nome/id de produto/mercado foi considerada e adiada por falta de caso medido — mesma disciplina do resto do projeto.
 - **Fallback com tom, mas só no Modo A** (busca/comparação pequenas): frase-molde determinística, sem IA. Modo B (listagens, escrita) degrada para "sem comentário", igual a hoje.
-- **Corte de tamanho não medido**: `NARRATE_FULL_MAX_RECORDS = 6`, `NARRATE_FULL_MAX_GROUPS = 3` — chute inicial, a corrigir no smoke (169) contra o catálogo real.
+- **Corte de tamanho**: `NARRATE_FULL_MAX_RECORDS = 6`, `NARRATE_FULL_MAX_GROUPS = 6` — o segundo era chute (3) e foi corrigido pelo smoke da camada de IA em 18/09/2026 contra o catálogo real; o primeiro já nasceu medido.
 
 ### Trilha
 
@@ -151,7 +151,7 @@ Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo
 
 | Risco | Ticket | Mitigação |
 |---|---|---|
-| Corte de tamanho (6 registros/3 grupos) errado pro catálogo real | 167 (constantes documentadas como chute), 169 (smoke item 6) | ajuste direto no código do 167 quando o número real aparecer |
+| Corte de tamanho errado pro catálogo real | 167 (medido em 18/09/2026, ver `<!-- adjustments -->`) | `NARRATE_FULL_MAX_GROUPS` ajustado de 3 para 6 direto no código |
 | Persona soar mecânica/genérica apesar da guarda | 163 (prompt conciso), 169 (achado qualitativo do smoke) | sem métrica automática — é leitura humana, mesmo espírito do resto da camada de IA deste projeto |
 | Comentário de escrita insinuar que algo já foi feito antes do tap | 168 (nota para o agente) | revisão manual no smoke (169, item 5); design já exige o oposto (RF3 do brainstorm) |
 | Custo por mensagem dobrar sem se perceber | 163/167/168 (reaproveitam `_ask`/`record_usage` sem caminho novo) | `ai_calls.jsonl` já registra tudo; smoke (169) lê o custo real |

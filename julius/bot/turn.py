@@ -40,11 +40,13 @@ HISTORY_TURNS = 3
 # 300, not 120: the majordomo measured a real tap arriving at 121 s and being dropped.
 PENDING_TTL_SECONDS = 300.0
 
-# Chute inicial, não medido -- corrigir contra o catálogo real no smoke (ticket 169). Acima destes
-# cortes, a leitura ganha só um comentário por cima da tabela de sempre (Modo B); dentro deles, a
-# narração troca a tabela inteira por uma frase (Modo A).
+# Medido contra o banco real em 18/09/2026 (105 produtos, 132 preços, 5 mercados): 6 cobre 69 das
+# 72 buscas possíveis (96%), e o único `mercados comparar` real do catálogo tem exatamente 6 grupos
+# -- narrado inteiro pela IA sem a guarda rejeitar nada. Acima destes cortes, a leitura ganha só um
+# comentário por cima da tabela de sempre (Modo B); dentro deles, a narração troca a tabela inteira
+# por uma frase (Modo A). Reavaliar se o catálogo crescer muito além disso.
 NARRATE_FULL_MAX_RECORDS = 6
-NARRATE_FULL_MAX_GROUPS = 3
+NARRATE_FULL_MAX_GROUPS = 6
 
 CALL_KIND = "bot_turn"
 

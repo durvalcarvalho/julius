@@ -7,7 +7,10 @@ created in a thread can only be used in that same thread" -- check_same_thread �
 e o except Exception de narrate() engolia o erro em silêncio -- toda chamada parecia "a IA não
 disse nada". Corrigido chamando suggestions.narrate(...) direto, sem thread, igual ao 168 já fazia
 em handle_tap. _narrate continua async def só para o await ficar uniforme nos 4 call sites; nunca
-cede o loop de fato. Nenhuma outra peça do ticket mudou. -->
+cede o loop de fato. Segundo ajuste, do smoke real contra o banco de produção (18/09/2026):
+NARRATE_FULL_MAX_GROUPS subiu de 3 (chute) para 6 (medido -- é o número exato de grupos
+comparáveis do catálogo real, e a IA narrou os 6 inteiros sem a guarda rejeitar nada).
+NARRATE_FULL_MAX_RECORDS = 6 ficou como estava: cobre 69 das 72 buscas possíveis do catálogo real. -->
 
 > Onde tudo se junta: para cada leitura, decide se o resultado é pequeno o bastante para a IA substituir a tabela inteira (Modo A) ou grande demais e só ganha um comentário por cima (Modo B) — e o que fazer quando a IA não responde.
 

@@ -313,7 +313,7 @@ def test_compare_reply_uses_the_persona_when_small(deps):
 
 
 def test_compare_reply_above_the_cutoff_uses_comment_plus_table(deps):
-    groups = tuple(_kind_group(f"tipo{i}", _store_entry("Assaí", "1", 1.0 + i), _store_entry("Dona de Casa", "2", 2.0 + i)) for i in range(4))
+    groups = tuple(_kind_group(f"tipo{i}", _store_entry("Assaí", "1", 1.0 + i), _store_entry("Dona de Casa", "2", 2.0 + i)) for i in range(7))
     client = ScriptedLlmClient([_persona_reply("Bastante grupo pra comparar.")])
     output = _store_comparison(*groups)
 

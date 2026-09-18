@@ -281,6 +281,8 @@ jq -s 'map(select(.call_kind=="bot_turn")) | {chamadas: length, custo_total: (ma
 
 ---
 
+> **Já rodado uma vez, fora do Telegram:** em 18/09/2026 a camada de IA (`narrate()`) foi exercitada direto contra o `deepseek-flash` e contra uma cópia deste banco, sem passar pelo bot de verdade — é o que mediu os números abaixo e ajustou `NARRATE_FULL_MAX_GROUPS` de 3 para 6. O que falta destes passos é só a parte que exige o Telegram de verdade: os botões, a edição de mensagem, o `julius-bot` rodando.
+
 ## Passo 16 — A voz do Julius numa busca pequena
 
 Depois da v2.7 (`narrate()`, tickets 163–168), uma busca com poucos resultados não deve mais vir como tabela. Pergunte de novo por algo com poucas compras (idealmente 1–6 linhas, o corte de `NARRATE_FULL_MAX_RECORDS` em `julius/bot/turn.py`):
@@ -297,7 +299,7 @@ jq -s 'map(select(.call_kind=="persona"))[-1] | {reply: (.raw_response | fromjso
 
 ## Passo 17 — Um resultado grande (Modo B)
 
-Pergunte por algo com muitas compras, ou compare mercados se o catálogo tiver mais de 3 tipos comparáveis (`NARRATE_FULL_MAX_GROUPS`):
+Pergunte por algo com muitas compras, ou compare mercados se o catálogo tiver mais de 6 tipos comparáveis (`NARRATE_FULL_MAX_GROUPS`) — o catálogo real tinha exatamente 6 na medição de 18/09/2026, então talvez você só veja o Modo A mesmo aqui, o que também é um resultado válido:
 
 ```
 quais mercados são mais baratos?
