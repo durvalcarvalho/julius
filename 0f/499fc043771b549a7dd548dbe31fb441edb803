@@ -1,0 +1,29 @@
+docs/tickets/julius-bot/170-formatting-weekday-phrase.md
+  s_703528d2945188::t_5a9085170ea09e 1-68
+docs/tickets/julius-bot/171-render-facts-dedup-weekday.md
+  s_703528d2945188::t_e815d3c36faf1b 1-61
+docs/tickets/julius-bot/172-persona-prompt-v3.md
+  s_703528d2945188::t_7b4a5cd3408dfe 1-61
+docs/tickets/julius-bot/174-humanization-smoke-and-docs.md
+  s_703528d2945188::t_27ea0a26efc1ac 1-57
+docs/tickets/julius-bot/index.md
+  s_703528d2945188::t_1046659409415c 159-202
+docs/tickets/julius-bot/173-typing-indicator.md
+  s_703528d2945188::t_eb87608e86547a 1-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0f499fc043771b549a7dd548dbe31fb441edb803",
+  "prompts": {},
+  "sessions": {
+    "s_703528d2945188": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6995d6b-ed00-47d8-9d91-ba6b5ed6e563",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
