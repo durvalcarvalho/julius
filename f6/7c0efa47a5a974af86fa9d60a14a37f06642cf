@@ -1,0 +1,32 @@
+docs/como-testar-o-bot.md
+  s_703528d2945188::t_8ad5aa6c2b7b40 302
+  s_703528d2945188::t_ad1d2f1bf79356 284-285
+docs/tickets/julius-bot/167-turn-narration-reads.md
+  s_703528d2945188::t_b2b156d5027d2a 10-13
+tests/test_bot_turn.py
+  s_703528d2945188::t_6b0524a68a4b94 316
+julius/bot/turn.py
+  s_703528d2945188::t_367eabb3d70665 43-47,49
+CLAUDE.md
+  s_703528d2945188::t_dcbddfdee83546 63
+docs/tickets/julius-bot/index.md
+  s_703528d2945188::t_ab024566e6f768 124
+  s_703528d2945188::t_b5d85ce15a58bb 154
+  s_703528d2945188::t_c062c59043af2c 109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f67c0efa47a5a974af86fa9d60a14a37f06642cf",
+  "prompts": {},
+  "sessions": {
+    "s_703528d2945188": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6995d6b-ed00-47d8-9d91-ba6b5ed6e563",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
