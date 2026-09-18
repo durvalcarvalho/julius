@@ -1,0 +1,33 @@
+docs/tickets/julius-bot/166-deps-client-wiring.md
+  s_703528d2945188::t_afd6ddfce88015 1-58
+docs/tickets/julius-bot/168-turn-narration-writes.md
+  s_703528d2945188::t_a8c126ae4d708c 1-65
+docs/tickets/julius-bot/index.md
+  s_703528d2945188::t_a002104e8e4323 101-156
+docs/tickets/julius-bot/165-render-fallback-lines.md
+  s_703528d2945188::t_169d8b442756dc 1-61
+docs/tickets/julius-bot/169-docs-and-smoke.md
+  s_703528d2945188::t_d66d9cdf18499d 1-64
+docs/tickets/julius-bot/163-suggestions-narrate.md
+  s_703528d2945188::t_2fce7bd0f97d61 1-71
+docs/tickets/julius-bot/167-turn-narration-reads.md
+  s_703528d2945188::t_2f2c2936335d98 1-67
+docs/tickets/julius-bot/164-render-facts.md
+  s_703528d2945188::t_8bc8ce41b44c5e 1-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2db7856ffc0fec13472d426265a0e59b30337403",
+  "prompts": {},
+  "sessions": {
+    "s_703528d2945188": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6995d6b-ed00-47d8-9d91-ba6b5ed6e563",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
