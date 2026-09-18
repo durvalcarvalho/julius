@@ -45,6 +45,30 @@ def relative_age(purchased_at: str, *, today: date | None = None) -> str:
     return label if rest == 0 else f"{label} e {rest} {'mês' if rest == 1 else 'meses'}"
 
 
+_WEEKDAYS = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo")
+
+
+def weekday_phrase(purchased_at: str, *, today: date | None = None) -> str:
+    """The day name instead of the calendar date -- carries more information in less text (v2.7.1
+    humanization feedback: stating both "16/09/2026" and "há 2 dias" is redundant). Delegates past
+    15 days to `relative_age`'s own bands rather than inventing a new cutoff -- it's the same
+    boundary that function already uses to switch from days to weeks."""
+    try:
+        purchased_date = date.fromisoformat(purchased_at[:10])
+    except ValueError:
+        return ""
+    days = ((today or date.today()) - purchased_date).days
+    if days <= 0:
+        return "hoje"
+    if days == 1:
+        return "ontem"
+    if days <= 7:
+        return _WEEKDAYS[purchased_date.weekday()]
+    if days <= 15:
+        return f"{_WEEKDAYS[purchased_date.weekday()]} passada"
+    return relative_age(purchased_at, today=today)
+
+
 def content_text(quantity: float, unit: str) -> str:
     return f"{quantity:g}".replace(".", ",") + f" {unit}"
 

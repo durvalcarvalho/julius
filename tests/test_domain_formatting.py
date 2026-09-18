@@ -10,6 +10,7 @@ from julius.domain.formatting import (
     plural_groups,
     relative_age,
     store_labels,
+    weekday_phrase,
 )
 from julius.domain.models import KindComparison, StoreComparison, StorePrice
 
@@ -94,6 +95,45 @@ def test_relative_age_of_a_date_ahead_of_the_clock_is_today():
 @pytest.mark.parametrize("raw", ["", "2026-13-40", "lixo"])
 def test_relative_age_of_junk_is_empty(raw):
     assert relative_age(raw, today=TODAY) == ""
+
+
+@pytest.mark.parametrize(
+    ("days_ago", "expected"),
+    [
+        (0, "hoje"),
+        (1, "ontem"),
+        (2, "terça-feira"),
+        (7, "quinta-feira"),
+        (8, "quarta-feira passada"),
+        (15, "quarta-feira passada"),
+    ],
+)
+def test_weekday_phrase_bands(days_ago, expected):
+    """TODAY (2026-09-17) is a Thursday -- the exact weekdays here are real calendar facts, not
+    arbitrary strings, checked against `date.strftime('%A')` before writing the test."""
+    assert weekday_phrase(_iso(days_ago), today=TODAY) == expected
+
+
+@pytest.mark.parametrize("days_ago", [16, 30])
+def test_weekday_phrase_falls_back_to_relative_age_after_15_days(days_ago):
+    assert weekday_phrase(_iso(days_ago), today=TODAY) == relative_age(_iso(days_ago), today=TODAY)
+
+
+def test_weekday_phrase_all_seven_names():
+    expected = ["quinta-feira", "sexta-feira", "sábado", "domingo", "segunda-feira", "terça-feira", "quarta-feira"]
+    names = [weekday_phrase(_iso(days), today=TODAY) for days in range(2, 8)] + [
+        weekday_phrase(_iso(8), today=TODAY).replace(" passada", "")
+    ]
+    assert set(names) == set(expected)
+
+
+@pytest.mark.parametrize("raw", ["", "2026-13-40", "lixo"])
+def test_weekday_phrase_of_junk_is_empty(raw):
+    assert weekday_phrase(raw, today=TODAY) == ""
+
+
+def test_weekday_phrase_of_a_date_ahead_of_the_clock_is_today():
+    assert weekday_phrase(_iso(-3), today=TODAY) == "hoje"
 
 
 def test_content_text_drops_trailing_zeros():
