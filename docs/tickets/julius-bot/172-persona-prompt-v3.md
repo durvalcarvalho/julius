@@ -1,6 +1,12 @@
 # 172: prompt `persona` v3 — veredito, lista negra e exemplo trabalhado
 
-> A reescrita que devia ter vindo com exemplo desde o início: "compra em X"/"não compra em Y" quando há 2+ mercados, lista negra de conectivo de redação, e o primeiro exemplo de entrada/saída que este prompt ganha — os outros 5 prompts do projeto já têm, `persona` era o único sem.
+<!-- adjustments: o resumo original (e o design que o gerou) dizia "os outros 5 prompts já têm
+exemplo" -- checado na implementação, só merge e enrich têm ("Exemplo de entrada"/"Exemplo de
+saída"); packaging/store/match não têm. Não muda a decisão (dar um exemplo a persona segue fazendo
+sentido pelo motivo já dado — ritmo não fixou só com instrução solta), só corrige a contagem: depois
+deste ticket são 3 prompts com exemplo, não 6. -->
+
+> A reescrita que devia ter vindo com exemplo desde o início: "compra em X"/"não compra em Y" quando há 2+ mercados, lista negra de conectivo de redação, e o primeiro exemplo de entrada/saída que este prompt ganha — `merge` e `enrich` já usam esse formato, `persona` era o único dos três prompts "de julgamento" sem.
 
 ## Contexto
 
@@ -50,10 +56,10 @@ modificar tests/test_services_suggestions.py — prompt_version esperado (já us
 3. Suíte inteira (`.venv/bin/pytest -q`) continua verde.
 
 ## Critérios de aceite
-- [ ] `.venv/bin/pytest -q` verde.
-- [ ] `grep -n '"3"' julius/services/suggestions.py` mostra `PROMPT_VERSIONS["persona"]`.
-- [ ] `grep -n "Exemplo de entrada" julius/services/suggestions.py` mostra 6 ocorrências (as 5 de sempre + `persona`).
-- [ ] Todo valor monetário no "Exemplo de saída" do prompt `persona` aparece literalmente no "Exemplo de entrada" dele (conferência manual — é exatamente a regra que a guarda de `narrate()` aplicaria em produção).
+- [x] `.venv/bin/pytest -q` verde.
+- [x] `grep -n '"3"' julius/services/suggestions.py` mostra `PROMPT_VERSIONS["persona"]`.
+- [x] `grep -c "Exemplo de entrada" julius/services/suggestions.py` mostra 3 ocorrências (`merge`, `enrich`, `persona` — ver adjustments).
+- [x] Todo valor monetário no "Exemplo de saída" do prompt `persona` aparece literalmente no "Exemplo de entrada" dele: R$ 7,89, R$ 9,99 e R$ 2,10 nos três lugares — conferido rodando `python -c "from julius.services import suggestions; print(suggestions.SYSTEM_PROMPTS['persona'])"`.
 
 ## Notas para o agente
 

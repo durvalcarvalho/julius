@@ -169,7 +169,7 @@ Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo
 - **Veredito só com 2+ mercados comparáveis** — nunca opinião sobre um preço isolado (a linha que o projeto já tinha contra "veredito de preço" continua valendo; isto é aritmética sobre dois números dados, não julgamento de "caro/barato").
 - **Dia da semana até 15 dias**, mesmo corte que `relative_age` já usa — sem inventar um corte novo.
 - **Deduplicar por (loja, preço)** antes de virar fato — a causa concreta do textão real.
-- **Prompt ganha exemplo trabalhado**, como os outros 5 já têm — instrução solta não fixou o ritmo em duas rodadas.
+- **Prompt ganha exemplo trabalhado**, como `merge`/`enrich` já têm (checado na implementação: só esses dois, não os 5 — `packaging`/`store`/`match` não têm exemplo) — instrução solta não fixou o ritmo em duas rodadas.
 - **"Digitando..." sem `asyncio.sleep`** — a latência real da IA já cobre a janela ideal (~1–2s); somar atraso arriscaria passar dos ~3s onde a responsividade percebida cai.
 - **Fora desta rodada, por decisão**: erro+autocorreção (a própria pesquisa recomenda não automatizar sem teste com usuário real primeiro) e calibração de ritmo por teste A/B.
 
