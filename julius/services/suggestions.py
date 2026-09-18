@@ -164,13 +164,14 @@ def _log(
     cost_usd: float,
     latency_ms: int,
     error: str | None,
+    prompt_version: str | None = None,
 ) -> None:
     ai_log.append(
         config.ai_log_path,
         {
             "ts": datetime.now().isoformat(timespec="seconds"),
             "call_kind": call_kind,
-            "prompt_version": PROMPT_VERSIONS.get(call_kind, ""),
+            "prompt_version": PROMPT_VERSIONS.get(call_kind, "") if prompt_version is None else prompt_version,
             "model": config.ai_model,
             "attempt": attempt,
             "user_prompt": user_prompt,
@@ -183,6 +184,54 @@ def _log(
             "error": error,
         },
     )
+
+
+def record_usage(
+    conn: sqlite3.Connection,
+    config: Config,
+    call_kind: str,
+    *,
+    attempt: int,
+    user_prompt: str,
+    raw_response: str | None,
+    parsed_ok: bool,
+    input_tokens: int,
+    output_tokens: int,
+    latency_ms: int,
+    error: str | None,
+    month: str | None = None,
+    prompt_version: str | None = None,
+) -> float:
+    """Charges the month and appends one line to ai_calls.jsonl; returns the cost in USD.
+
+    Public because the bot spends from the same budget and writes to the same log, and it may not
+    import repositories. `prompt_version` is explicit so the bot can name its own prompt without
+    entering PROMPT_VERSIONS, which belongs to the curation prompts."""
+    if config.ai_input_price_usd_per_1m is None or config.ai_output_price_usd_per_1m is None:
+        cost = 0.0
+    else:
+        cost = (
+            input_tokens / 1e6 * config.ai_input_price_usd_per_1m
+            + output_tokens / 1e6 * config.ai_output_price_usd_per_1m
+        )
+    if cost > 0:
+        with conn:
+            ai_usage.add_spent(conn, month or _current_month(), cost)
+    _log(
+        config,
+        call_kind,
+        attempt=attempt,
+        user_prompt=user_prompt,
+        raw_response=raw_response,
+        parsed_ok=parsed_ok,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=cost,
+        latency_ms=latency_ms,
+        error=error,
+        prompt_version=prompt_version,
+    )
+    return cost
 
 
 def _ask(
@@ -200,7 +249,8 @@ def _ask(
     if not _configured_with_prices(config):
         return None
     if ai_usage.spent_in_month(conn, month) >= config.ai_budget_usd:
-        _log(
+        record_usage(
+            conn,
             config,
             call_kind,
             attempt=0,
@@ -209,9 +259,9 @@ def _ask(
             parsed_ok=False,
             input_tokens=0,
             output_tokens=0,
-            cost_usd=0.0,
             latency_ms=0,
             error="budget_exhausted",
+            month=month,
         )
         return None
     for attempt in range(1, MAX_ATTEMPTS + 1):
@@ -221,13 +271,6 @@ def _ask(
         except Exception as exc:
             response = LlmResponse("", 0, 0, error=f"client raised {type(exc).__name__}")
         latency_ms = int((time.monotonic() - started) * 1000)
-        cost = (
-            response.input_tokens / 1e6 * config.ai_input_price_usd_per_1m  # type: ignore[operator]
-            + response.output_tokens / 1e6 * config.ai_output_price_usd_per_1m  # type: ignore[operator]
-        )
-        if cost > 0:
-            with conn:
-                ai_usage.add_spent(conn, month, cost)
         parsed: object | None = None
         parsed_ok = False
         error = response.error
@@ -237,7 +280,8 @@ def _ask(
                 parsed_ok = True
             except ValueError:
                 error = "invalid json"
-        _log(
+        record_usage(
+            conn,
             config,
             call_kind,
             attempt=attempt,
@@ -246,9 +290,9 @@ def _ask(
             parsed_ok=parsed_ok,
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
-            cost_usd=cost,
             latency_ms=latency_ms,
             error=error,
+            month=month,
         )
         if error is None:
             return parsed

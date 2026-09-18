@@ -505,3 +505,83 @@ def test_packaging_unavailable_returns_empty_dict_without_calls(conn, cfg):
 def test_packaging_never_raises_on_garbage(conn, cfg, payload):
     client = ScriptedLlmClient([LlmResponse(payload, 10, 5)])
     assert suggestions.suggest_packaging(conn, cfg, client, _products(1), MONTH) == {}
+
+
+def _usage_args(**overrides) -> dict:
+    args = {
+        "attempt": 1,
+        "user_prompt": "produtos: 1 | TOMATE",
+        "raw_response": '{"ok": true}',
+        "parsed_ok": True,
+        "input_tokens": 1000,
+        "output_tokens": 500,
+        "latency_ms": 42,
+        "error": None,
+        "month": MONTH,
+    }
+    return {**args, **overrides}
+
+
+def test_record_usage_charges_and_logs(conn, cfg):
+    config = replace(cfg, ai_input_price_usd_per_1m=0.30, ai_output_price_usd_per_1m=1.20)
+
+    cost = suggestions.record_usage(conn, config, "bot_turn", **_usage_args())
+
+    assert cost == pytest.approx(0.0009)
+    assert ai_usage.spent_in_month(conn, MONTH) == pytest.approx(0.0009)
+    line = _lines(config)[-1]
+    assert line["call_kind"] == "bot_turn"
+    assert line["cost_usd"] == pytest.approx(0.0009)
+    assert line["input_tokens"] == 1000
+    assert line["latency_ms"] == 42
+
+
+def test_record_usage_with_zero_tokens_logs_without_charging(conn, cfg):
+    """The budget_exhausted line: nothing was spent, but the silence has to be visible."""
+    cost = suggestions.record_usage(
+        conn,
+        cfg,
+        "bot_turn",
+        **_usage_args(input_tokens=0, output_tokens=0, parsed_ok=False, raw_response=None, error="budget_exhausted"),
+    )
+
+    assert cost == 0.0
+    assert ai_usage.spent_in_month(conn, MONTH) == 0.0
+    assert _lines(cfg)[-1]["error"] == "budget_exhausted"
+
+
+def test_record_usage_without_prices_costs_nothing(conn, cfg):
+    """_ask never reaches charging without prices, but a public function must be safe without them."""
+    config = replace(cfg, ai_input_price_usd_per_1m=None, ai_output_price_usd_per_1m=None)
+
+    assert suggestions.record_usage(conn, config, "bot_turn", **_usage_args()) == 0.0
+    assert ai_usage.spent_in_month(conn, MONTH) == 0.0
+    assert _lines(config)[-1]["cost_usd"] == 0.0
+
+
+def test_record_usage_prompt_version_override(conn, cfg):
+    """The bot names its own prompt without entering PROMPT_VERSIONS, which is the curation's."""
+    suggestions.record_usage(conn, cfg, "bot_turn", **_usage_args(prompt_version="7"))
+    assert _lines(cfg)[-1]["prompt_version"] == "7"
+
+    suggestions.record_usage(conn, cfg, "enrich", **_usage_args())
+    assert _lines(cfg)[-1]["prompt_version"] == suggestions.PROMPT_VERSIONS["enrich"]
+
+    suggestions.record_usage(conn, cfg, "bot_turn", **_usage_args())
+    assert _lines(cfg)[-1]["prompt_version"] == ""
+
+
+def test_record_usage_accumulates_in_the_same_month(conn, cfg):
+    suggestions.record_usage(conn, cfg, "bot_turn", **_usage_args(input_tokens=1_000_000, output_tokens=0))
+    suggestions.record_usage(conn, cfg, "bot_turn", **_usage_args(input_tokens=1_000_000, output_tokens=0))
+
+    assert ai_usage.spent_in_month(conn, MONTH) == pytest.approx(2.0)
+    assert len(_lines(cfg)) == 2
+
+
+def test_record_usage_defaults_the_month_to_now(conn, cfg):
+    from datetime import datetime
+
+    suggestions.record_usage(conn, cfg, "bot_turn", **_usage_args(month=None, input_tokens=1_000_000, output_tokens=0))
+
+    assert ai_usage.spent_in_month(conn, datetime.now().strftime("%Y-%m")) == pytest.approx(1.0)
