@@ -17,7 +17,8 @@ from pydantic_ai import ModelRetry, RunContext
 
 from julius.config import Config
 from julius.domain.models import Product, SearchOutcome, Store, StoreComparison
-from julius.domain.normalization import digits_only, normalize_text
+from julius.domain.formatting import content_text
+from julius.domain.normalization import digits_only, normalize_content, normalize_text
 from julius.services import catalog, comparison as comparison_service, search as search_service
 
 MAX_CANDIDATES = 8  # what fits in a question to the user without becoming a listing
@@ -324,11 +325,233 @@ def _do_untag_product(deps: Deps, args: Mapping[str, object]) -> WriteResult:
     )
 
 
+async def set_product_kind(ctx: RunContext[Deps], product: str, kind: str) -> PendingWrite:
+    """Define o tipo do produto — o grupo pelo qual preços são comparados entre mercados.
+
+    O tipo diz "que coisa é esta" (tomate, leite uht, refrigerante). Marca, sabor e tamanho não
+    entram: dois produtos do mesmo tipo têm de ser alternativas de compra um do outro.
+
+    Args:
+        product: o produto, pelo id ou pelo nome.
+        kind: o tipo, em minúsculas e no singular (ex.: "tomate", "leite uht").
+    """
+    kind = _required(kind, "O tipo")
+    found = resolve_product(ctx.deps.conn, product)
+    previous = f" (antes: «{found.kind}»)" if found.kind else ""
+    return _pending(
+        "set_product_kind",
+        {"product_id": found.id, "kind": kind},
+        f"Definir o tipo do produto {found.id} «{found.canonical_name}» como «{kind}»{previous}",
+    )
+
+
+async def clear_product_kind(ctx: RunContext[Deps], product: str) -> PendingWrite:
+    """Remove o tipo de um produto, tirando-o da comparação entre mercados.
+
+    Args:
+        product: o produto, pelo id ou pelo nome.
+    """
+    found = resolve_product(ctx.deps.conn, product)
+    if not found.kind:
+        raise ModelRetry(f"O produto {found.id} não tem tipo.")
+    return _pending(
+        "clear_product_kind",
+        {"product_id": found.id},
+        f"Remover o tipo «{found.kind}» do produto {found.id} «{found.canonical_name}»",
+    )
+
+
+def _content_of(product: Product) -> str | None:
+    if product.content_quantity is None or not product.content_unit:
+        return None
+    return content_text(product.content_quantity, product.content_unit)
+
+
+async def set_product_content(ctx: RunContext[Deps], product: str, quantity: float, unit: str) -> PendingWrite:
+    """Define o conteúdo da embalagem, que é o que permite comparar tamanhos diferentes.
+
+    Sem isso não dá para dizer se 20 ovos por R$12 é melhor que 30 por R$16,50. Informe o conteúdo
+    TOTAL da embalagem.
+
+    Args:
+        product: o produto, pelo id ou pelo nome.
+        quantity: a quantidade (ex.: 500 para "500 g", 1.5 para "1,5 L", 30 para "30 unidades").
+        unit: a unidade como está no rótulo: L, ML, KG, G ou UN.
+    """
+    found = resolve_product(ctx.deps.conn, product)
+    try:
+        normalized_quantity, normalized_unit = normalize_content(quantity, unit)
+    except ValueError:
+        if quantity <= 0:
+            raise ModelRetry(f"A quantidade precisa ser maior que zero, recebi {quantity:g}.") from None
+        raise ModelRetry(f"Unidade «{unit}» inválida; aceitas: L, ML, KG, G, UN.") from None
+    current = _content_of(found)
+    previous = f" (antes: {current})" if current else ""
+    return _pending(
+        "set_product_content",
+        {"product_id": found.id, "quantity": normalized_quantity, "unit": normalized_unit},
+        f"Definir o conteúdo do produto {found.id} «{found.canonical_name}» como "
+        f"{content_text(normalized_quantity, normalized_unit)}{previous}",
+    )
+
+
+async def clear_product_content(ctx: RunContext[Deps], product: str) -> PendingWrite:
+    """Remove o conteúdo declarado de um produto.
+
+    Args:
+        product: o produto, pelo id ou pelo nome.
+    """
+    found = resolve_product(ctx.deps.conn, product)
+    current = _content_of(found)
+    if current is None:
+        raise ModelRetry(f"O produto {found.id} não tem conteúdo definido.")
+    return _pending(
+        "clear_product_content",
+        {"product_id": found.id},
+        f"Remover o conteúdo {current} do produto {found.id} «{found.canonical_name}»",
+    )
+
+
+async def merge_products(ctx: RunContext[Deps], source: str, target: str) -> PendingWrite:
+    """Diz que dois produtos são a mesma coisa, juntando o histórico de preço dos dois.
+
+    É reversível: nada é apagado, e unmerge_product devolve o estado anterior. Use quando o mesmo
+    item aparece com descrições diferentes em mercados diferentes.
+
+    Args:
+        source: o produto que será absorvido, pelo id ou pelo nome.
+        target: o produto que passa a representar os dois, pelo id ou pelo nome.
+    """
+    absorbed = resolve_product(ctx.deps.conn, source)
+    kept = resolve_product(ctx.deps.conn, target)
+    if absorbed.id == kept.id:
+        raise ModelRetry("Origem e destino são o mesmo produto.")
+    preview = (
+        f"Fundir o produto {absorbed.id} «{absorbed.canonical_name}» dentro de "
+        f"{kept.id} «{kept.canonical_name}»: o histórico dos dois passa a aparecer junto"
+    )
+    inheritance = catalog.merge_inheritance(ctx.deps.conn, absorbed.id, kept.id)
+    if inheritance is not None:
+        what, where = inheritance
+        preview += f"; o grupo herda {what} de {where}"
+    return _pending("merge_products", {"source_id": absorbed.id, "target_id": kept.id}, preview)
+
+
+async def unmerge_product(ctx: RunContext[Deps], product: str) -> PendingWrite:
+    """Desfaz uma fusão, separando de novo um produto que foi fundido dentro de outro.
+
+    Informe o id, não o nome: um produto absorvido não aparece nas listagens com o nome dele — o
+    grupo mostra um nome só — então procurá-lo por nome encontra o grupo, não ele.
+
+    Args:
+        product: o id do produto ABSORVIDO (o que foi fundido dentro de outro).
+    """
+    reference = product.strip()
+    group = resolve_product(ctx.deps.conn, reference)
+    # Asking the id and comparing is how "is this one absorbed?" is answered without a repository:
+    # reading any product resolves to its group's root, so getting a different id back IS the
+    # merge. `Product.merged_into` never arrives filled through services.
+    if not reference.isdigit() or int(reference) == group.id:
+        raise ModelRetry(
+            f"O produto {group.id} não está fundido. Se quiser desfundir outro, informe o id do "
+            "produto absorvido, que list_products mostra dentro do grupo."
+        )
+    return _pending(
+        "unmerge_product",
+        {"product_id": int(reference)},
+        f"Desfundir o produto {reference} do grupo {group.id} «{group.canonical_name}»",
+    )
+
+
+def _do_set_product_kind(deps: Deps, args: Mapping[str, object]) -> WriteResult:
+    product_id, kind = int(args["product_id"]), str(args["kind"])
+    before = _product_now(deps.conn, product_id).kind
+    catalog.set_product_kind(deps.conn, product_id, kind)
+    undo = (
+        f'julius produtos tipo {product_id} "{_quotable(before)}"'
+        if before
+        else f"julius produtos tipo {product_id} --remover"
+    )
+    tail = f" (antes: «{before}»)" if before else ""
+    return WriteResult(summary=f"Produto {product_id} agora é do tipo «{kind}»{tail}", undo=undo)
+
+
+def _do_clear_product_kind(deps: Deps, args: Mapping[str, object]) -> WriteResult:
+    product_id = int(args["product_id"])
+    before = _product_now(deps.conn, product_id).kind
+    catalog.clear_product_kind(deps.conn, product_id)
+    return WriteResult(
+        summary=f"Produto {product_id} ficou sem tipo (antes: «{before}»)",
+        undo=f'julius produtos tipo {product_id} "{_quotable(before or "")}"',
+    )
+
+
+def _do_set_product_content(deps: Deps, args: Mapping[str, object]) -> WriteResult:
+    product_id = int(args["product_id"])
+    quantity, unit = float(args["quantity"]), str(args["unit"])
+    before = _product_now(deps.conn, product_id)
+    catalog.set_product_content(deps.conn, product_id, quantity, unit)
+    undo = (
+        f"julius produtos definir-conteudo {product_id} {before.content_quantity:g} {before.content_unit}"
+        if before.content_quantity is not None and before.content_unit
+        else f"julius produtos definir-conteudo {product_id} --remover"
+    )
+    previous = _content_of(before)
+    tail = f" (antes: {previous})" if previous else ""
+    return WriteResult(
+        summary=f"Produto {product_id} agora tem {content_text(quantity, unit)}{tail}",
+        undo=undo,
+    )
+
+
+def _do_clear_product_content(deps: Deps, args: Mapping[str, object]) -> WriteResult:
+    product_id = int(args["product_id"])
+    before = _product_now(deps.conn, product_id)
+    catalog.clear_product_content(deps.conn, product_id)
+    return WriteResult(
+        summary=f"Produto {product_id} ficou sem conteúdo (antes: {_content_of(before)})",
+        undo=f"julius produtos definir-conteudo {product_id} {before.content_quantity:g} {before.content_unit}",
+    )
+
+
+def _do_merge_products(deps: Deps, args: Mapping[str, object]) -> WriteResult:
+    source_id, target_id = int(args["source_id"]), int(args["target_id"])
+    source = _product_now(deps.conn, source_id)
+    target = _product_now(deps.conn, target_id)
+    catalog.merge_products(deps.conn, source_id, target_id)
+    return WriteResult(
+        summary=f"Produto {source_id} «{source.canonical_name}» fundido dentro de {target_id} «{target.canonical_name}»",
+        undo=f"julius produtos desfundir {source_id}",
+    )
+
+
+def _do_unmerge_product(deps: Deps, args: Mapping[str, object]) -> WriteResult:
+    product_id = int(args["product_id"])
+    group = _product_now(deps.conn, product_id)
+    catalog.unmerge_product(deps.conn, product_id)
+    separated = _product_now(deps.conn, product_id)
+    # ponytail: the undo re-merges into the group ROOT, which is the direct parent for every merge
+    # this system creates in one step. In a hand-built chain A->B->C it would put A under C instead
+    # of B -- same group, so nothing visible changes, but a later unmerge of B would not carry A
+    # out. Exact reversal needs the direct parent, and no service exposes it; add one to catalog if
+    # chains ever appear.
+    return WriteResult(
+        summary=f"Produto {product_id} «{separated.canonical_name}» separado do grupo {group.id} «{group.canonical_name}»",
+        undo=f"julius produtos fundir {product_id} {group.id}",
+    )
+
+
 _EXECUTORS = {
     "rename_product": _do_rename_product,
     "rename_store": _do_rename_store,
     "tag_product": _do_tag_product,
     "untag_product": _do_untag_product,
+    "set_product_kind": _do_set_product_kind,
+    "clear_product_kind": _do_clear_product_kind,
+    "set_product_content": _do_set_product_content,
+    "clear_product_content": _do_clear_product_content,
+    "merge_products": _do_merge_products,
+    "unmerge_product": _do_unmerge_product,
 }
 
 
@@ -344,4 +567,17 @@ def execute(deps: Deps, pending: PendingWrite) -> WriteResult:
         raise WriteFailed(str(error)) from None
 
 
-WRITE_ACTIONS = (rename_product, rename_store, tag_product, untag_product)
+WRITE_ACTIONS = (
+    rename_product,
+    rename_store,
+    tag_product,
+    untag_product,
+    set_product_kind,
+    clear_product_kind,
+    set_product_content,
+    clear_product_content,
+    merge_products,
+    unmerge_product,
+)
+
+ALL_ACTIONS = READ_ACTIONS + WRITE_ACTIONS

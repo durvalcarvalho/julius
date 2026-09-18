@@ -6,6 +6,7 @@ from pydantic_ai.models.function import FunctionModel
 from conftest import copied_fixtures
 from julius.bot import render
 from julius.bot.actions import (
+    ALL_ACTIONS,
     READ_ACTIONS,
     WRITE_ACTIONS,
     Deps,
@@ -48,7 +49,7 @@ def deps(stocked, cfg) -> Deps:
     return Deps(conn=stocked, config=cfg)
 
 
-KNOWN_ACTIONS = (*READ_ACTIONS, *WRITE_ACTIONS)
+KNOWN_ACTIONS = ALL_ACTIONS
 
 
 def _by_name(name: str):
@@ -106,6 +107,7 @@ def test_every_write_action_leaves_the_database_alone(deps):
     catalog.set_product_content(deps.conn, product.id, 1, "KG")
     catalog.tag_product(deps.conn, product.id, "carnes")
     snapshot = catalog.get_product(deps.conn, product.id)
+    other = next(p for p in catalog.list_products(deps.conn) if p.id != product.id)
     store = catalog.list_stores(deps.conn)[0]
 
     calls = [
@@ -113,6 +115,11 @@ def test_every_write_action_leaves_the_database_alone(deps):
         ("rename_store", {"store": store.cnpj, "nickname": "Outro"}),
         ("tag_product", {"product": str(product.id), "tag": "frios"}),
         ("untag_product", {"product": str(product.id), "tag": "carnes"}),
+        ("set_product_kind", {"product": str(product.id), "kind": "carne"}),
+        ("clear_product_kind", {"product": str(product.id)}),
+        ("set_product_content", {"product": str(product.id), "quantity": 2, "unit": "KG"}),
+        ("clear_product_content", {"product": str(product.id)}),
+        ("merge_products", {"source": str(product.id), "target": str(other.id)}),
     ]
     for name, args in calls:
         outcome, _ = _run(name, args, deps)
@@ -250,4 +257,185 @@ def test_render_pending_result_failure_escape():
 
 
 def test_read_and_write_actions_are_disjoint():
+    assert set(ALL_ACTIONS) == set(READ_ACTIONS) | set(WRITE_ACTIONS)
     assert not set(READ_ACTIONS) & set(WRITE_ACTIONS)
+
+
+# --- kind, content, merge (ticket 157) --------------------------------------------
+
+
+def test_set_kind_pending_and_execute_with_and_without_previous(deps):
+    product = _picanha(deps)
+
+    first, _ = _run("set_product_kind", {"product": str(product.id), "kind": "picanha"}, deps)
+    assert first.output.args == {"product_id": product.id, "kind": "picanha"}
+    assert "(antes:" not in first.output.preview
+    result = execute(deps, first.output)
+    assert catalog.get_product(deps.conn, product.id).kind == "picanha"
+    assert result.undo == f"julius produtos tipo {product.id} --remover"
+
+    second, _ = _run("set_product_kind", {"product": str(product.id), "kind": "carne bovina"}, deps)
+    assert "(antes: «picanha»)" in second.output.preview
+    assert execute(deps, second.output).undo == f'julius produtos tipo {product.id} "picanha"'
+
+
+def test_clear_kind_requires_a_kind(deps):
+    product = _picanha(deps)
+
+    refused, _ = _run("clear_product_kind", {"product": str(product.id)}, deps)
+    assert any(f"O produto {product.id} não tem tipo." in c for c in _retries(refused))
+
+    catalog.set_product_kind(deps.conn, product.id, "picanha")
+    pending, _ = _run("clear_product_kind", {"product": str(product.id)}, deps)
+    result = execute(deps, pending.output)
+
+    assert catalog.get_product(deps.conn, product.id).kind is None
+    assert result.undo == f'julius produtos tipo {product.id} "picanha"'
+
+
+def test_set_content_preview_shows_normalized_unit(deps):
+    """500 G is stored as 0,5 KG, so that is what the confirmation has to say."""
+    product = _picanha(deps)
+
+    pending, _ = _run("set_product_content", {"product": str(product.id), "quantity": 500, "unit": "G"}, deps)
+
+    assert pending.output.args == {"product_id": product.id, "quantity": 0.5, "unit": "KG"}
+    assert "0,5 KG" in pending.output.preview
+
+    execute(deps, pending.output)
+    stored = catalog.get_product(deps.conn, product.id)
+    assert (stored.content_quantity, stored.content_unit) == (0.5, "KG")
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        ({"quantity": 1, "unit": "caixas"}, "aceitas: L, ML, KG, G, UN."),
+        ({"quantity": 0, "unit": "KG"}, "maior que zero"),
+        ({"quantity": -2, "unit": "KG"}, "maior que zero"),
+    ],
+)
+def test_set_content_invalid_unit_or_quantity_retries(deps, args, expected):
+    product = _picanha(deps)
+
+    result, _ = _run("set_product_content", {"product": str(product.id), **args}, deps)
+
+    assert any(expected in content for content in _retries(result))
+
+
+def test_clear_content_pending_and_undo(deps):
+    product = _picanha(deps)
+
+    refused, _ = _run("clear_product_content", {"product": str(product.id)}, deps)
+    assert any("não tem conteúdo definido" in c for c in _retries(refused))
+
+    catalog.set_product_content(deps.conn, product.id, 500, "G")
+    pending, _ = _run("clear_product_content", {"product": str(product.id)}, deps)
+    assert "0,5 KG" in pending.output.preview
+    result = execute(deps, pending.output)
+
+    assert catalog.get_product(deps.conn, product.id).content_quantity is None
+    assert result.undo == f"julius produtos definir-conteudo {product.id} 0.5 KG"
+
+
+def test_merge_pending_mentions_inheritance(deps):
+    """Content gained in silence is the one error that never shows up in normal output."""
+    source = _picanha(deps)
+    target = next(p for p in catalog.list_products(deps.conn) if p.id != source.id)
+    catalog.set_product_content(deps.conn, source.id, 1, "KG")
+
+    pending, _ = _run("merge_products", {"source": str(source.id), "target": str(target.id)}, deps)
+
+    assert "o grupo herda o conteúdo 1 KG" in pending.output.preview
+    assert "o histórico dos dois passa a aparecer junto" in pending.output.preview
+
+
+def test_merge_same_product_retries(deps):
+    product = _picanha(deps)
+
+    result, _ = _run("merge_products", {"source": str(product.id), "target": str(product.id)}, deps)
+
+    assert any("Origem e destino são o mesmo produto." in c for c in _retries(result))
+
+
+def test_merge_execute_and_undo(deps):
+    source = _picanha(deps)
+    target = next(p for p in catalog.list_products(deps.conn) if p.id != source.id)
+
+    pending, _ = _run("merge_products", {"source": str(source.id), "target": str(target.id)}, deps)
+    result = execute(deps, pending.output)
+
+    # Reading the absorbed id now resolves to the group it joined -- that IS the merge.
+    assert catalog.get_product(deps.conn, source.id).id == target.id
+    assert source.id not in {p.id for p in catalog.list_products(deps.conn)}
+    assert result.undo == f"julius produtos desfundir {source.id}"
+
+
+def test_merge_cycle_fails_closed_at_execute(deps):
+    """A cycle makes the group recursion never return, so the service is the only guard -- the
+    action deliberately does not duplicate it, because that would need a repository.
+
+    The pending is built by hand because the action cannot produce one: resolving the absorbed id
+    already returns the group's root, so both sides come back equal and it refuses earlier. This is
+    the stale-pending case -- a tap arriving after the world changed."""
+    a = _picanha(deps)
+    b = next(p for p in catalog.list_products(deps.conn) if p.id != a.id)
+    catalog.merge_products(deps.conn, a.id, b.id)
+    stale = PendingWrite("merge_products", {"source_id": b.id, "target_id": a.id}, "preview", "n", 0.0)
+
+    with pytest.raises(WriteFailed, match="já faz parte do grupo"):
+        execute(deps, stale)
+
+    assert catalog.get_product(deps.conn, b.id).id == b.id, "b is still its own group's root"
+    assert catalog.get_product(deps.conn, a.id).id == b.id, "a is still inside b"
+
+
+def test_merge_action_cannot_even_propose_a_cycle(deps):
+    a = _picanha(deps)
+    b = next(p for p in catalog.list_products(deps.conn) if p.id != a.id)
+    catalog.merge_products(deps.conn, a.id, b.id)
+
+    result, _ = _run("merge_products", {"source": str(b.id), "target": str(a.id)}, deps)
+
+    assert any("Origem e destino são o mesmo produto." in c for c in _retries(result))
+
+
+def test_unmerge_requires_merged_and_undo_restores_the_group(deps):
+    source = _picanha(deps)
+    target = next(p for p in catalog.list_products(deps.conn) if p.id != source.id)
+
+    refused, _ = _run("unmerge_product", {"product": str(source.id)}, deps)
+    assert any(f"O produto {source.id} não está fundido." in c for c in _retries(refused))
+
+    catalog.merge_products(deps.conn, source.id, target.id)
+    pending, _ = _run("unmerge_product", {"product": str(source.id)}, deps)
+    assert f"do grupo {target.id}" in pending.output.preview
+    result = execute(deps, pending.output)
+
+    assert catalog.get_product(deps.conn, source.id).id == source.id, "it is its own group again"
+    assert result.undo == f"julius produtos fundir {source.id} {target.id}"
+
+
+def test_unmerge_by_name_never_unmerges(deps):
+    """Reading any member resolves to the group's root, so a name can never single out the
+    absorbed row. Both ways it can go are refusals, and neither touches the database."""
+    unmerged = _picanha(deps)
+    by_name, _ = _run("unmerge_product", {"product": "picanha"}, deps)
+    assert any("não está fundido" in c for c in _retries(by_name))
+
+    target = next(p for p in catalog.list_products(deps.conn) if p.id != unmerged.id)
+    catalog.merge_products(deps.conn, unmerged.id, target.id)
+
+    after_merge, _ = _run("unmerge_product", {"product": "picanha"}, deps)
+
+    assert _retries(after_merge), "it refused rather than unmerging something else"
+    assert catalog.get_product(deps.conn, unmerged.id).id == target.id, "still merged"
+
+
+def test_all_actions_have_unique_names_and_documented_parameters():
+    assert len({action.__name__ for action in ALL_ACTIONS}) == 14
+
+    for action in ALL_ACTIONS:
+        assert action.__doc__, action.__name__
+        takes_arguments = action.__code__.co_argcount > 1
+        assert ("Args:" in action.__doc__) == takes_arguments, action.__name__
