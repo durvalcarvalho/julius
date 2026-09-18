@@ -1,0 +1,35 @@
+julius/bot/turn.py
+  s_703528d2945188::t_0ca6ffffe31bc5 123-132,135
+  s_703528d2945188::t_dbe33215573dbe 19-20,22-23,31-32,43-47
+  s_703528d2945188::t_af543b2bc45d6a 120-122,133-134,136-138,144-145,150,152-154,156-157,159,161-163,165-167,169-171
+  s_703528d2945188::t_67d04ab3821ebc 146-149,151,158,160
+  s_703528d2945188::t_490fb4d0968c06 228
+  s_703528d2945188::t_0da527d2102b96 48
+docs/tickets/julius-bot/167-turn-narration-reads.md
+  s_703528d2945188::t_87ea5b2349fc6f 38,40
+  s_703528d2945188::t_610bf0de5533fb 3-11
+  s_703528d2945188::t_83ae50311fc0ed 69-71
+  s_703528d2945188::t_36ea5955e3301a 22
+tests/test_bot_turn.py
+  s_703528d2945188::t_a33e8965c9d3cd 200-201,203-205,215-363
+  s_703528d2945188::t_88e8b1f8eaa0a5 202
+  s_703528d2945188::t_8abac719e26793 206-214
+docs/tickets/julius-bot/index.md
+  s_703528d2945188::t_56f64926f5d6ce 129-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c2f0661181610098230763c921d0af45e51bd112",
+  "prompts": {},
+  "sessions": {
+    "s_703528d2945188": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6995d6b-ed00-47d8-9d91-ba6b5ed6e563",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
