@@ -1,0 +1,27 @@
+julius/bot/render.py
+  s_703528d2945188::t_6edb40044f27be 23
+  s_703528d2945188::t_d20d5dc71d76c9 197
+  s_703528d2945188::t_50041d0efd0b13 129-145,148-150,153,163
+tests/test_bot_render.py
+  s_703528d2945188::t_9ebe7fe4143bcd 156-157
+  s_703528d2945188::t_835c3a29cc11ce 104-121,123-147
+  s_703528d2945188::t_f39f67ce0d29bd 70
+  s_703528d2945188::t_496ba080db66b1 122
+  s_703528d2945188::t_52aa219d30a5ea 165-173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7e32679506b809f16175b6684ab7193b833aea2d",
+  "prompts": {},
+  "sessions": {
+    "s_703528d2945188": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6995d6b-ed00-47d8-9d91-ba6b5ed6e563",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
