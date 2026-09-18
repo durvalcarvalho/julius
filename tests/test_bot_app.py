@@ -116,11 +116,26 @@ def test_build_application_registers_three_handlers():
         ("❌ Cancelado — nada foi executado.", "❌ Cancelado"),
         ("Confirmação expirada — nada foi executado.", "⏰ Expirado"),
         ("❌ Não executado: deu ruim", "⚠️ Não executado"),
-        ("Essa confirmação não está mais ativa.", "⚠️ Não executado"),
+        ("Essa confirmação não está mais ativa.", "⚠️ Não está mais ativa"),
     ],
 )
 def test_outcome_labels_every_reply_the_tap_can_produce(reply_text, expected):
     assert bot_app._outcome(reply_text) == expected
+
+
+def test_a_stale_tap_and_a_failed_write_are_stamped_differently():
+    """Both leave the database alone, but only one of them was ever attempted -- the same label on
+    both would tell the user a write failed when none was tried."""
+    from julius.bot import turn
+
+    assert bot_app._outcome(turn.STALE_TAP) != bot_app._outcome("❌ Não executado: deu ruim")
+
+
+def test_every_reply_handle_tap_can_return_has_a_label():
+    from julius.bot import turn
+
+    for text in (turn.STALE_TAP, turn.EXPIRED_TAP, turn.DENIED_TAP):
+        assert bot_app._outcome(text) != "⚠️ Não executado", text
 
 
 def test_importing_the_app_has_no_side_effects_on_disk(tmp_path):
@@ -134,7 +149,7 @@ def test_the_bot_reads_no_environment_of_its_own():
     """Every variable goes through config.load(); a second reader would drift from it."""
     from pathlib import Path
 
-    sources = list(Path("julius/bot").glob("*.py"))
+    sources = list((Path(__file__).resolve().parent.parent / "julius" / "bot").glob("*.py"))
     assert sources
     for path in sources:
         text = path.read_text(encoding="utf-8")

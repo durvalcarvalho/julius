@@ -21,7 +21,7 @@ from telegram.ext import (
 from julius import config
 from julius.bot.actions import Deps
 from julius.bot.agent import BotAgent, build_agent
-from julius.bot.turn import ChatState, handle_tap, handle_text
+from julius.bot.turn import DENIED_TAP, EXPIRED_TAP, STALE_TAP, ChatState, handle_tap, handle_text
 from julius.config import Config
 from julius.infra import db
 
@@ -43,12 +43,14 @@ NO_AI = (
     "por token) — o bot roteia toda mensagem pela IA; não existe modo sem ela."
 )
 
-_OUTCOMES = (
-    ("✅", "✅ Confirmado"),
-    ("❌ Cancelado", "❌ Cancelado"),
-    ("Confirmação expirada", "⏰ Expirado"),
-    ("❌ Não executado", "⚠️ Não executado"),
-)
+# The stamp left on the tapped message. Matched against the constants, not by prefix order: a
+# stale tap and a failed write are different things, and one label for both would tell the user a
+# write was attempted when none was.
+_OUTCOMES = {
+    STALE_TAP: "⚠️ Não está mais ativa",
+    EXPIRED_TAP: "⏰ Expirado",
+    DENIED_TAP: "❌ Cancelado",
+}
 
 
 def check_startup(settings: Config) -> None:
@@ -144,10 +146,9 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def _outcome(text: str) -> str:
-    for marker, label in _OUTCOMES:
-        if text.startswith(marker):
-            return label
-    return "⚠️ Não executado"
+    if text in _OUTCOMES:
+        return _OUTCOMES[text]
+    return "✅ Confirmado" if text.startswith("✅") else "⚠️ Não executado"
 
 
 async def on_tap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
