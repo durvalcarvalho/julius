@@ -16,7 +16,8 @@ from julius.infra import ai_log
 from julius.infra.llm_client import HttpLlmClient
 from julius.services import catalog, comparison as comparison_service
 
-app = typer.Typer()
+# no_args_is_help: `julius mercados` sozinho é alguém procurando o que existe, não um erro.
+app = typer.Typer(no_args_is_help=True)
 
 
 @app.command("listar")

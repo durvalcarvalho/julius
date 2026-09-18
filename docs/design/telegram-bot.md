@@ -224,12 +224,21 @@ E um princípio do `majordomo` que confirma um do Julius: a seção "Deliberatel
 4. Texto do prompt de sistema do bot — em português, versionado em `PROMPT_VERSIONS`, e **medido** contra uma dúzia de frases reais antes de fechar (o projeto já aprendeu que mexer em prompt medido invalida a medição; este nasce medido).
 5. Como o PTB é iniciado quando o PC liga fica de fora, como os requisitos já disseram (§5 deles): `julius-bot` na mão até incomodar.
 
-### 9.1 Respondido pela implementação (2026-09-17, pydantic-ai 2.44.0, python-telegram-bot 22.8)
+### 9.1 Respondido pela implementação (2026-09-17) e pela primeira rodada real (2026-09-18)
+
+Versões: pydantic-ai 2.44.0, python-telegram-bot 22.8, `deepseek-flash`.
 
 - **Item 2 — resolvido, e com uma pegadinha.** *Output functions* convivem com `str` e com `ModelRetry` exatamente como o design supôs: a chamada encerra o run (um teste conta as chamadas de modelo e exige **uma**), `ModelRetry` devolve o turno ao modelo, e prosa vira `str`. O plano B (*Deferred Tools*) **não** foi necessário. A pegadinha: o PydanticAI expõe a ação como **`final_result_<nome>`**, não pelo nome da função — chamar o nome nu cai no caminho de "Unknown tool", que **ainda assim termina o run** com a prosa do modelo como saída. Os testes derivam o nome de `__name__` e um deles afirma a convenção, para que uma mudança de biblioteca falhe em vez de passar em silêncio.
 - **Item 3 — respondido.** `result.usage` é **propriedade**, não método (`result.usage()` levanta `TypeError`). Os campos `input_tokens`/`output_tokens` estão corretos.
 - **Item 4 — parcialmente.** O prompt nasceu em português e versionado, mas em `BOT_PROMPT_VERSION` e **fora** de `PROMPT_VERSIONS` (esse dict é dos prompts da curadoria; o bot passa a versão explicitamente em `record_usage`). Ele **ainda não foi medido** contra frases reais: o `FunctionModel` da suíte não exercita prompt nenhum. A medição é o smoke do usuário.
-- **Itens 1 e 5 — ainda do usuário.** O smoke real é o que confirma se o `deepseek-flash` escolhe ação de forma confiável com catorze opções e se o `extra_body` desliga o *thinking* no caminho do PydanticAI. A assinatura da falha é a de 15/09: `output_tokens` na casa dos milhares em vez de dezenas, ou `error` preenchido em `ai_calls.jsonl`. Lista completa do smoke em `docs/tickets/julius-bot/162-bot-e2e-docs.md`; **anote o resultado aqui**.
+- **Item 1 — RESPONDIDO em 18/09/2026, por `tests/test_real_ai.py` (`make test-ia`).** Primeira rodada real contra o DeepSeek, 13 chamadas, **US$ 0,011**:
+  - **O `extra_body` desliga o *thinking*.** `deepseek-flash`, **42 tokens de saída**, 2451 de entrada, **1393 ms**, `error: null`. A falha de 15/09 teria gasto os 600 tokens de `max_tokens` e voltado truncada — a folga é de mais de uma ordem de grandeza.
+  - **O roteamento acertou 5 de 5** (preço → `search_prices`; comparar → `compare_stores`; "que produtos tenho" → `list_products`; "quais mercados" → `list_stores`; "bom dia" → texto, sem ação).
+  - **`deepseek-flash` é aceito pela API** — o nome não mudou, o item 9 do smoke não se aplica.
+  - **Custo por mensagem: ~US$ 0,00085**, dominado pela entrada (2451 tokens = prompt de sistema + o schema das 14 ações). Mil mensagens custariam menos de US$ 1.
+  - Invariantes conferidas na mesma rodada: escrita só proposta (banco intacto antes do toque), toque executa e o desfazer cola, 4 entradas estranhas sem exceção, e id inexistente **vira pergunta** (*"Não encontrei nenhum produto com o id 99999. Pode conferir o id ou me dizer o nome do produto?"*) em vez de escrita no produto errado.
+- **Item 4 — o prompt v1 passou sem ajuste.** Foi medido pela primeira vez nessa rodada e não precisou de mudança; `BOT_PROMPT_VERSION` continua `"1"`.
+- **Item 5 — ainda do usuário.** O smoke real é o que confirma se o `deepseek-flash` escolhe ação de forma confiável com catorze opções e se o `extra_body` desliga o *thinking* no caminho do PydanticAI. A assinatura da falha é a de 15/09: `output_tokens` na casa dos milhares em vez de dezenas, ou `error` preenchido em `ai_calls.jsonl`. Lista completa do smoke em `docs/tickets/julius-bot/162-bot-e2e-docs.md`; **anote o resultado aqui**.
 
 ### 9.2 O que a implementação descobriu e o design não previa
 

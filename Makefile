@@ -1,4 +1,4 @@
-.PHONY: install install-bot uninstall test inbox
+.PHONY: install install-bot uninstall test test-ia inbox
 
 # `julius` global (~/.local/bin) apontando pro código deste diretório: editar ou trocar
 # de branch já muda o comando instalado. Rode de novo só se o pyproject.toml mudar.
@@ -19,6 +19,11 @@ uninstall:
 
 test: .venv/bin/pytest
 	.venv/bin/pytest -q
+
+# Os testes que falam com o DeepSeek de verdade: pulados por padrão, porque gastam do orçamento.
+# Precisa das JULIUS_AI_* exportadas. Roda numa cópia do banco; o real nunca é tocado.
+test-ia: .venv/bin/pytest
+	.venv/bin/pytest tests/test_real_ai.py --real-ai -s -q
 
 # `entrada/` é um symlink pra pasta canônica: o Ctrl+S do navegador cai aqui e o arquivo
 # já está fisicamente no lugar certo — não há nada a mover depois.

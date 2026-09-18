@@ -289,6 +289,8 @@ Leitura responde na hora. **Escrita nunca acontece sozinha**: a ação só monta
 
 > **Para pôr no ar pela primeira vez, siga o [guia passo a passo](docs/como-testar-o-bot.md)** — instalação, `@BotFather`, variáveis, bootstrap do `chat_id` e a lista de verificações com o que esperar em cada uma. O que está aqui é a referência; lá é o roteiro.
 
+**Medido em 18/09/2026, contra o DeepSeek de verdade** (`make test-ia`): `deepseek-flash` escolheu a ação certa em **5 de 5** perguntas, respondeu em **~1,4 s**, e cada mensagem custa **~US$ 0,00085** — mil mensagens ficam abaixo de US$ 1. Como o modelo é não-determinístico, essa medição não é uma promessa: é o que `make test-ia` refaz quando você quiser conferir.
+
 ### Instalação
 
 ```bash
@@ -325,7 +327,7 @@ Só o `chat_id` da variável é atendido; qualquer outro recebe **silêncio** (r
 - A confirmação de uma escrita **expira em 5 minutos**; depois disso o toque não executa nada.
 - Só texto: sem foto de cupom, sem QR code, sem áudio.
 - O histórico do chat guarda os **3 últimos turnos** — ele não lembra da conversa de ontem.
-- O comportamento do `deepseek-flash` escolhendo ações ainda **está por confirmar no smoke real** (ver `docs/design/telegram-bot.md` §9); o desligamento do *thinking* via `JULIUS_AI_REQUEST_EXTRAS` é obrigatório, como na curadoria.
+- O desligamento do *thinking* via `JULIUS_AI_REQUEST_EXTRAS` é **obrigatório**, como na curadoria — sem ele o modelo não converge.
 
 ---
 
@@ -486,11 +488,14 @@ Adicionar uma migração é soltar um `.sql` novo na pasta. O backup é a rede d
 ## Desenvolvimento
 
 ```bash
-make test        # cria o .venv/ na primeira vez e roda os 908 testes (~18 s)
+make test        # cria o .venv/ na primeira vez e roda os 910 testes (~19 s)
 make install     # `julius` global via pipx, em modo editável: editar o código já vale
 make install-bot # `julius-bot` (o mesmo, com o extra `bot`: telegram + pydantic-ai)
+make test-ia     # fala com o DeepSeek de verdade (~US$ 0,01); precisa das JULIUS_AI_*
 make uninstall
 ```
+
+`make test` nunca toca a rede: os testes de IA estão atrás do marcador `real_ai` e só rodam com `--real-ai`. Eles usam uma **cópia** do banco — o seu `JULIUS_DB` não é tocado.
 
 Sem `make`: `python3 -m venv .venv && .venv/bin/pip install -e '.[dev]' && .venv/bin/pytest -q`.
 
@@ -545,8 +550,8 @@ Fixtures são só o `.html` — nunca a pasta `_files/` que o navegador salva ju
 
 **No bot**
 
-- **Implementado e ainda não verificado contra o modelo de verdade.** Os 908 testes passam com um modelo falso; se o `deepseek-flash` escolhe as ações com confiabilidade é o que o [guia de teste](docs/como-testar-o-bot.md) responde. Até lá, nada aqui afirma esse comportamento.
 - Uma ação por mensagem; PC desligado é silêncio, e o que chegou enquanto ele estava fora não é respondido na volta; só texto (sem foto nem QR); memória de 3 turnos; confirmação expira em 5 minutos.
+- O modelo é **não-determinístico**, e é por isso que existe `make test-ia`: uma suíte que fala com o DeepSeek de verdade e mede se ele ainda escolhe a ação certa. Rode depois de mexer no prompt, de trocar de modelo ou quando algo parecer estranho.
 - As dicas de uso (`guidance`) não aparecem no bot: quando uma busca vem vazia ele diz "Nenhum resultado." sem o "parecidos: …" que a CLI dá. Os textos vivem em `cli/_hints.py`; trazê-los exigiria movê-los para `domain/`, como foi feito com os formatadores.
 
 **Evoluções plausíveis** (nenhuma prometida)

@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 
+import pytest
 from typer.testing import CliRunner
 
 from julius.cli import app
@@ -29,3 +30,18 @@ def test_importing_the_cli_does_not_load_bot_dependencies():
     escolha de quem entra, nunca herança de importar o outro."""
     code = "import julius.cli, sys; assert 'telegram' not in sys.modules and 'pydantic_ai' not in sys.modules"
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+@pytest.mark.parametrize("group", ["mercados", "produtos"])
+def test_a_command_group_alone_lists_its_commands(group):
+    """Typing the group name is someone looking for what exists, not a mistake. The default
+    "Missing command." box sent them to `--help` for the answer they had already asked for.
+
+    Exit code stays 2, like `julius` alone: help was printed, but no command ran -- a script that
+    reached here got no data."""
+    result = CliRunner().invoke(app, [group])
+    root = CliRunner().invoke(app, [])
+
+    assert "Commands" in result.output
+    assert "Missing command" not in result.output
+    assert result.exit_code == root.exit_code == 2

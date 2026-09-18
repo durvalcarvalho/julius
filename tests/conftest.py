@@ -11,6 +11,32 @@ from julius.infra import cnpj_client, db
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
+REAL_AI_OPTION = "--real-ai"
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        REAL_AI_OPTION,
+        action="store_true",
+        default=False,
+        help="Roda também os testes marcados `real_ai`, que chamam o modelo de verdade e gastam do orçamento.",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Skipped with a reason, not deselected: uma suíte que some em silêncio é uma suíte que
+    ninguém percebe que parou de rodar."""
+    if config.getoption(REAL_AI_OPTION):
+        return
+    skip = pytest.mark.skip(reason=f"precisa de {REAL_AI_OPTION} (chama o modelo de verdade e gasta do orçamento)")
+    for item in items:
+        if "real_ai" in item.keywords:
+            item.add_marker(skip)
+
+
+def _wants_real_ai(request: pytest.FixtureRequest) -> bool:
+    return request.node.get_closest_marker("real_ai") is not None
+
 ISOLATED_ENV_VARS = (
     "JULIUS_AI_API_KEY",
     "JULIUS_AI_BASE_URL",
@@ -25,25 +51,35 @@ ISOLATED_ENV_VARS = (
 
 
 @pytest.fixture(autouse=True)
-def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Isola os testes de credenciais reais (IA e bot) exportadas no shell do usuário."""
+def _clean_env(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
+    """Isola os testes de credenciais reais (IA e bot) exportadas no shell do usuário.
+
+    Um teste `real_ai` precisa exatamente do que esta fixture apaga, e é o único que pode pedir."""
+    if _wants_real_ai(request):
+        return
     for name in ISOLATED_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture(autouse=True)
-def _no_model_requests(monkeypatch: pytest.MonkeyPatch) -> None:
+def _no_model_requests(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
     """Nenhum teste fala com um modelo de verdade — irmão de _no_cnpj_lookup. O import é local
-    para nada fora de julius/bot/ carregar pydantic_ai no nível do módulo."""
+    para nada fora de julius/bot/ carregar pydantic_ai no nível do módulo.
+
+    A exceção é `real_ai`, cujo propósito é justamente falar: é o marcador, e só ele, que destrava."""
+    if _wants_real_ai(request):
+        return
     from pydantic_ai import models
 
     monkeypatch.setattr(models, "ALLOW_MODEL_REQUESTS", False)
 
 
 @pytest.fixture(autouse=True)
-def _no_cnpj_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+def _no_cnpj_lookup(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
     """Nenhum teste consulta o registro de CNPJ de verdade: dar apelido a um mercado não pode
     depender da rede numa rodada de teste. Um teste que queira uma resposta substitui isto."""
+    if _wants_real_ai(request):
+        return
     monkeypatch.setattr(cnpj_client, "fetch_trade_name", lambda cnpj, **kwargs: None)
 
 

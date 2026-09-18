@@ -29,3 +29,6 @@ include = ["julius*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "real_ai: fala com o modelo de verdade e gasta do orçamento; só roda com --real-ai",
+]

@@ -4,6 +4,8 @@
 > **Por que existe:** os 908 testes automatizados **nunca falaram com um modelo de verdade** — todos usam um modelo falso. Este documento é a única verificação de que o `deepseek-flash` realmente escolhe as ações e de que o *thinking* fica desligado. Sem ele, o bot está "implementado e não verificado".
 > **Onde anotar o resultado:** `docs/design/telegram-bot.md` §9.
 
+> **Atualização de 18/09/2026 — a parte automatizável disto já roda sozinha.** `make test-ia` fala com o DeepSeek de verdade e mede roteamento, custo, latência e as invariantes de segurança, numa **cópia** do banco. A primeira rodada respondeu as duas perguntas em aberto: o *thinking* está desligado (42 tokens de saída, 1,4 s) e o roteamento acertou **5 de 5**. Este guia continua sendo o que você segue para **pôr o bot no ar** e para verificar o que só existe no Telegram — os botões, a edição da mensagem, a expiração de 5 minutos.
+
 ---
 
 ## Antes de começar — três coisas que valem saber
