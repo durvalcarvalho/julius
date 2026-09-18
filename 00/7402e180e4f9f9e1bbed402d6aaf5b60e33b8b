@@ -1,0 +1,21 @@
+julius/bot/render.py
+  s_703528d2945188::t_d884b4424f4928 96-146
+tests/test_bot_render.py
+  s_703528d2945188::t_cc15828b291440 65-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "007402e180e4f9f9e1bbed402d6aaf5b60e33b8b",
+  "prompts": {},
+  "sessions": {
+    "s_703528d2945188": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6995d6b-ed00-47d8-9d91-ba6b5ed6e563",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
