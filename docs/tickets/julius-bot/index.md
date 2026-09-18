@@ -156,3 +156,47 @@ Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo
 | Persona soar mecânica/genérica apesar da guarda | 163 (prompt conciso), 169 (achado qualitativo do smoke) | sem métrica automática — é leitura humana, mesmo espírito do resto da camada de IA deste projeto |
 | Comentário de escrita insinuar que algo já foi feito antes do tap | 168 (nota para o agente) | revisão manual no smoke (169, item 5); design já exige o oposto (RF3 do brainstorm) |
 | Custo por mensagem dobrar sem se perceber | 163/167/168 (reaproveitam `_ask`/`record_usage` sem caminho novo) | `ai_calls.jsonl` já registra tudo; smoke (169) lê o custo real |
+
+---
+
+## Trilha v2.7.1 — humanização (dia da semana, veredito, "digitando...")
+
+> Gerado a partir de: duas rodadas de brainstorm/design em 2026-09-18 — a primeira reagindo a um screenshot real do bot (parágrafo único, sem quebra, sem veredito), a segunda incorporando `claudedocs/research_chatbot_humanizacao_20260918.md` (pesquisa externa validando os achados e trazendo o indicador de "digitando..." e a ressalva sobre erro+autocorreção).
+> Entre o fechamento da v2.7 (ticket 169) e esta trilha, o prompt `persona` já passou por uma revisão ad hoc (v2, commit `af046ba`, sem ticket próprio — feita direto em resposta a feedback de chat) que acrescentou unidade explícita e a diferença já calculada nos fatos. Esta trilha é a v3 do prompt, em cima dessa base.
+
+### Decisões aplicadas
+
+- **Veredito só com 2+ mercados comparáveis** — nunca opinião sobre um preço isolado (a linha que o projeto já tinha contra "veredito de preço" continua valendo; isto é aritmética sobre dois números dados, não julgamento de "caro/barato").
+- **Dia da semana até 15 dias**, mesmo corte que `relative_age` já usa — sem inventar um corte novo.
+- **Deduplicar por (loja, preço)** antes de virar fato — a causa concreta do textão real.
+- **Prompt ganha exemplo trabalhado**, como os outros 5 já têm — instrução solta não fixou o ritmo em duas rodadas.
+- **"Digitando..." sem `asyncio.sleep`** — a latência real da IA já cobre a janela ideal (~1–2s); somar atraso arriscaria passar dos ~3s onde a responsividade percebida cai.
+- **Fora desta rodada, por decisão**: erro+autocorreção (a própria pesquisa recomenda não automatizar sem teste com usuário real primeiro) e calibração de ritmo por teste A/B.
+
+### Trilha
+
+| # | Ticket | Depende de | Esforço | Estado | Entrega |
+|---|---|---|---|---|---|
+| 170 | [`weekday_phrase`](170-formatting-weekday-phrase.md) | — | S | pendente | `domain/formatting.py::weekday_phrase`, faixas hoje/ontem/dia da semana/dia da semana passada/delega pra `relative_age` |
+| 171 | [dedup + dia da semana nos fatos](171-render-facts-dedup-weekday.md) | 170 | S | pendente | `_collapse_repeated_prices`, `records_facts`/`comparison_facts` usando `weekday_phrase` |
+| 172 | [prompt `persona` v3](172-persona-prompt-v3.md) | 170, 171 | M | pendente | veredito, lista negra, exemplo trabalhado, `PROMPT_VERSIONS["persona"] = "3"` |
+| 173 | ["digitando..."](173-typing-indicator.md) | — | S | pendente | `send_chat_action` em `on_text`/`on_tap`, sem sleep artificial |
+| 174 | [smoke + docs](174-humanization-smoke-and-docs.md) | 172, 173 | S | pendente | `CLAUDE.md` v2.7.1, índice atualizado, nota no roteiro de smoke |
+
+### Dependências e caminho crítico
+
+```
+170 ── 171 ── 172 ──┐
+173 ─────────────────┴── 174
+```
+
+173 é totalmente independente (não toca `render.py`/`suggestions.py`) e pode ser feito em paralelo com 170–172. Caminho crítico: **170 → 171 → 172 → 174** (173 se junta antes do 174).
+
+### Riscos e onde os tickets os tratam
+
+| Risco | Ticket | Mitigação |
+|---|---|---|
+| `max_tokens` novo (mais baixo) cortar resposta no meio | 172 (chute documentado), 174 (smoke mede) | ajuste direto no código quando o número real aparecer |
+| Veredito aparecer fora de contexto (1 registro só, ou sumir com 2+) | 172, 174 | achado de prompt, versionar (`PROMPT_VERSIONS` sobe) se precisar ajustar |
+| Indicador de "digitando..." piscar rápido demais no caminho sem IA | 173 (nota para o agente), 174 (registrado, não corrigido às cegas) | dado novo pra decidir depois, não licença pra adicionar sleep sem medir |
+| `_collapse_repeated_prices` colapsar par errado | 171 (chave é `(loja, preço)` explícita, testada) | teste dedicado; nunca colapsa por produto+data |
