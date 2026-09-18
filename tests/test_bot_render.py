@@ -114,6 +114,64 @@ def test_stores_facts_counts():
     assert render.stores_facts([]) == ""
 
 
+def test_search_fallback_line_one_record():
+    text = render.search_fallback_line([_record(store_nickname="Costa Atacadao")], today=TODAY)
+
+    assert text == "Só uma compra registrada: Picanha bovina a R$ 89,90 em Costa Atacadao, há 5 dias."
+
+
+def test_search_fallback_line_marks_cheapest_and_dearest():
+    records = [
+        _record(highlight="lowest", unit_price=3.79, store_nickname="Costa Atacadao"),
+        _record(highlight="highest", unit_price=5.99, store_nickname="Assaí Guará"),
+    ]
+
+    text = render.search_fallback_line(records, today=TODAY)
+
+    assert "R$ 3,79, em Costa Atacadao" in text
+    assert "R$ 5,99, em Assaí Guará" in text
+
+
+def test_search_fallback_line_without_highlight_falls_back_to_a_count():
+    text = render.search_fallback_line([_record(), _record()], today=TODAY)
+
+    assert text == "2 compras registradas de Picanha bovina. Fica de olho nos preços."
+
+
+def test_search_fallback_line_empty():
+    assert render.search_fallback_line([]) == "Nenhum resultado."
+
+
+def test_search_fallback_line_never_has_html():
+    text = render.search_fallback_line(
+        [
+            _record(highlight="lowest", canonical_name="AÇÚCAR & CIA"),
+            _record(highlight="highest", unit_price=9.0),
+        ],
+        today=TODAY,
+    )
+    assert "<" not in text and ">" not in text
+
+
+def test_compare_fallback_line_one_line_per_group():
+    comparison = _comparison(
+        _group("tomate", _entry("Assaí", "1", 11.89), _entry("Dona de Casa", "2", 14.99)),
+        _group("cebola", _entry("Assaí", "1", 3.99), _entry("Dona de Casa", "2", 5.49)),
+    )
+
+    text = render.compare_fallback_line(comparison)
+
+    assert "tomate: Assaí sai mais em conta, a R$ 11,89." in text
+    assert "cebola: Assaí sai mais em conta, a R$ 3,99." in text
+
+
+def test_compare_fallback_line_no_comparable_groups():
+    assert render.compare_fallback_line(_comparison()) == render.render_comparison(_comparison())
+    assert render.compare_fallback_line(_comparison(total=3, single=3)) == render.render_comparison(
+        _comparison(total=3, single=3)
+    ).split("\n")[0]
+
+
 def test_render_records_markers():
     text = render.render_records(
         [

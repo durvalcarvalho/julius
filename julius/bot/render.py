@@ -93,6 +93,29 @@ def render_records(records: Sequence[PriceRecord], *, today: date | None = None)
     return fit("\n\n".join(blocks))
 
 
+def search_fallback_line(records: Sequence[PriceRecord], *, today: date | None = None) -> str:
+    """The Julius-toned answer for when the IA isn't there to say it -- written by hand, no model
+    involved, so it's always available. Reuses `highlight` the same way `_record_line` does;
+    never recomputes a min/max of its own."""
+    if not records:
+        return "Nenhum resultado."
+    if len(records) == 1:
+        record = records[0]
+        return (
+            f"Só uma compra registrada: {record.canonical_name} a {money(record.unit_price)} "
+            f"em {record.store_nickname}, {relative_age(record.purchased_at, today=today)}."
+        )
+    cheapest = next((record for record in records if record.highlight == "lowest"), None)
+    dearest = next((record for record in records if record.highlight == "highest"), None)
+    if cheapest is None or dearest is None:
+        return f"{len(records)} compras registradas de {records[0].canonical_name}. Fica de olho nos preços."
+    return (
+        f"Já paguei de {money(cheapest.unit_price)}, em {cheapest.store_nickname}, até "
+        f"{money(dearest.unit_price)}, em {dearest.store_nickname}, por {records[0].canonical_name}. "
+        "Presta atenção da próxima vez."
+    )
+
+
 def records_facts(records: Sequence[PriceRecord], *, today: date | None = None) -> str:
     """Plain-text facts for the persona (ticket 163's `narrate`) -- no HTML, nothing the model
     was not handed. One line per record, same source data as `_record_line`."""
@@ -195,6 +218,21 @@ def render_comparison(comparison: StoreComparison, *, today: date | None = None)
         f"{base}\n<i>Período largo: parte da diferença pode ser variação de preço no mês, não o mercado.</i>"
     )
     return fit("\n\n".join(parts))
+
+
+def compare_fallback_line(comparison: StoreComparison, *, today: date | None = None) -> str:
+    """Same spirit as `search_fallback_line`: no model, always available. `today` is accepted for
+    signature symmetry with the other render_X/fallback pairs, unused here (no relative age in a
+    per-group summary)."""
+    if not comparison.comparisons:
+        if not comparison.kinds_total:
+            return "Nenhum produto tem tipo ainda. Rode: julius produtos revisar"
+        return "Nenhum tipo de produto foi comprado em dois mercados ainda — sem base para comparar."
+    lines = [
+        f"{group.kind}: {group.entries[0].store_nickname} sai mais em conta, a {money(group.entries[0].price)}."
+        for group in comparison.comparisons
+    ]
+    return " ".join(lines)
 
 
 def render_products(products: Sequence[Product]) -> str:
