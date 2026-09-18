@@ -467,6 +467,80 @@ def test_tap_approve_write_failed_is_reported(deps):
     assert _snapshot(deps) == before
 
 
+# --- comment on write confirmations (ticket 168) ----------------------------------
+
+
+def test_pending_write_gets_a_comment_when_a_client_is_configured(deps):
+    client = ScriptedLlmClient([_persona_reply("Já ajeitei essa categoria, era hora.")])
+    product = next(p for p in catalog.list_products(deps.conn) if "PICANHA" in p.canonical_name.upper())
+    model, _ = _model(_action("rename_product", {"product": str(product.id), "name": "Picanha bovina"}))
+
+    reply, state = _turn(_with_client(deps, client), model, text="renomeia")
+
+    assert reply.text.startswith("Já ajeitei essa categoria, era hora.")
+    assert "⚠️" in reply.text and "Confirmar?" in reply.text
+    assert reply.pending is not None
+    assert client.calls, "the persona client should have been asked"
+
+
+def test_pending_write_without_a_client_is_unchanged(deps):
+    product = next(p for p in catalog.list_products(deps.conn) if "PICANHA" in p.canonical_name.upper())
+    model, _ = _model(_action("rename_product", {"product": str(product.id), "name": "Picanha bovina"}))
+
+    reply, _ = _turn(deps, model, text="renomeia")
+
+    assert reply.text.startswith("⚠️")
+
+
+def test_tap_approve_result_gets_a_comment_but_undo_stays_verbatim(deps):
+    client = ScriptedLlmClient([_persona_reply("Bom, mais um preço acertado no radar.")])
+    state = ChatState()
+    product = _pending_rename(deps, state)
+    deps_with_client = _with_client(deps, client)
+
+    reply = handle_tap(state, deps_with_client, state.pending.nonce, approve=True)
+
+    assert reply.text.startswith("Bom, mais um preço acertado no radar.")
+    assert f"<code>julius produtos renomear {product.id}" in reply.text
+    assert '"Picanha bovina"' not in reply.text.split("<code>")[0]  # comment never leaks into the undo line
+
+
+def test_tap_write_failed_gets_a_comment_but_reason_stays_verbatim(deps):
+    a = next(p for p in catalog.list_products(deps.conn) if "PICANHA" in p.canonical_name.upper())
+    b = next(p for p in catalog.list_products(deps.conn) if p.id != a.id)
+    catalog.merge_products(deps.conn, a.id, b.id)
+    client = ScriptedLlmClient([_persona_reply("Isso não colou, e não é a primeira vez.")])
+    deps_with_client = _with_client(deps, client)
+    state = ChatState(pending=PendingWrite("merge_products", {"source_id": b.id, "target_id": a.id}, "p", "n", 0.0))
+
+    reply = handle_tap(state, deps_with_client, "n", approve=True, now=0.0)
+
+    assert reply.text.startswith("Isso não colou, e não é a primeira vez.")
+    assert "já faz parte do grupo" in reply.text
+
+
+def test_tap_deny_expired_and_stale_never_call_the_persona(deps):
+    """The pending is built with the plain `deps` (no client), so narrate() is never a factor in
+    setting it up -- only the tap's own three no-op paths are under test here."""
+    client = ScriptedLlmClient([_persona_reply("não deveria rodar")])
+    deps_with_client = _with_client(deps, client)
+
+    state = ChatState()
+    _pending_rename(deps, state)
+    handle_tap(state, deps_with_client, "nonce-errado", approve=True)
+    assert client.calls == []
+
+    state = ChatState()
+    _pending_rename(deps, state)
+    handle_tap(state, deps_with_client, state.pending.nonce, approve=False)
+    assert client.calls == []
+
+    state = ChatState()
+    _pending_rename(deps, state)
+    handle_tap(state, deps_with_client, state.pending.nonce, approve=True, now=state.pending.created_at + 301)
+    assert client.calls == []
+
+
 def test_tap_approve_unexpected_error_clears_pending(deps, monkeypatch):
     state = ChatState()
     _pending_rename(deps, state)

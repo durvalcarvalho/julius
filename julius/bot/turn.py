@@ -138,7 +138,9 @@ async def _narrate(deps: Deps, context: str, facts: str) -> str | None:
 async def _render_output(output: object, state: ChatState, deps: Deps) -> Reply:
     if isinstance(output, PendingWrite):
         state.pending = output
-        return Reply(render_pending(output), pending=output)
+        base = render_pending(output)
+        remark = await _narrate(deps, "confirmação de uma alteração no catálogo", output.preview)
+        return Reply(f"{escape(remark)}\n\n{base}" if remark else base, pending=output)
     if isinstance(output, SearchOutcome):
         _log_query(deps.config, output)
         records = output.records
@@ -233,9 +235,20 @@ def _expired(pending: PendingWrite, now: float) -> bool:
     return now - pending.created_at > PENDING_TTL_SECONDS
 
 
+def _tap_comment(deps: Deps, facts: str) -> str | None:
+    """Same guard as `_narrate`, synchronous because `handle_tap` is not a coroutine (there is no
+    event loop here to `await` into -- `app.py::on_tap` calls it directly). Called *after*
+    `execute`/`WriteFailed` resolve, never before: narrating a result that might still fail would
+    contradict the "never affirm a write already happened" rule the persona prompt carries."""
+    if deps.client is None or not facts:
+        return None
+    return suggestions.narrate(deps.conn, deps.config, deps.client, "confirmação de uma alteração no catálogo", facts)
+
+
 def handle_tap(state: ChatState, deps: Deps, nonce: str, approve: bool, *, now: float | None = None) -> Reply:
-    """The second pass of a write. No model here: approved runs execute() in code, and every other
-    branch writes nothing.
+    """The second pass of a write: approved runs execute() in code, every other branch writes
+    nothing. The model is never asked to decide anything here -- at most it comments, after the
+    fact, on a result the code already produced.
 
     `now` is injectable for the same reason `relative_age` takes `today` -- a test of expiry must
     not sleep."""
@@ -249,12 +262,18 @@ def handle_tap(state: ChatState, deps: Deps, nonce: str, approve: bool, *, now: 
         if not approve:
             return Reply(DENIED_TAP)
         try:
-            return Reply(render_result(execute(deps, pending)))
+            result = execute(deps, pending)
         except WriteFailed as error:
-            return Reply(render_failure(str(error)))
+            reason = str(error)
+            comment = _tap_comment(deps, reason)
+            base = render_failure(reason)
+            return Reply(f"{escape(comment)}\n\n{base}" if comment else base)
         except Exception:
             # Services write inside `with conn:`, so an exception mid-way already rolled back.
             return Reply(render_failure("erro inesperado; nada foi executado"))
+        comment = _tap_comment(deps, result.summary)
+        base = render_result(result)
+        return Reply(f"{escape(comment)}\n\n{base}" if comment else base)
     finally:
         # Written before the branches, not after: a pending left behind wedges the chat forever.
         state.pending = None

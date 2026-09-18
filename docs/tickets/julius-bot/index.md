@@ -131,7 +131,7 @@ Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo
 | 165 | [`render.py` — frases-molde](165-render-fallback-lines.md) | — | S | **feito** (`e002d2a`) | `search_fallback_line`, `compare_fallback_line` |
 | 166 | [`Deps.client` + fiação](166-deps-client-wiring.md) | — | S | **feito** (`650c261`) | `Deps.client`, `HttpLlmClient` em `build_application`/`on_text` |
 | 167 | [`turn.py` — leituras](167-turn-narration-reads.md) | 163, 164, 165, 166 | M | **feito** | Modo A/B nas 4 leituras, `_narrate`, cortes de tamanho — achado: `asyncio.to_thread` quebra com `sqlite3` (ver ticket) |
-| 168 | [`turn.py` — escrita](168-turn-narration-writes.md) | 163, 166 | M | pendente | comentário em `PendingWrite`/`WriteResult`/`WriteFailed`, `client` em `on_tap` |
+| 168 | [`turn.py` — escrita](168-turn-narration-writes.md) | 163, 166 | M | **feito** | comentário em `PendingWrite`/`WriteResult`/`WriteFailed`, `client` em `on_tap` |
 | 169 | [docs + smoke](169-docs-and-smoke.md) | 167, 168 | S | pendente | `CLAUDE.md` v2.7, roteiro de smoke, destino de `persona-julius-rock.md` |
 
 ### Dependências e caminho crítico

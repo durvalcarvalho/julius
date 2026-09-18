@@ -169,7 +169,8 @@ async def on_tap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state = context.chat_data.setdefault("state", ChatState())
     conn = db.connect(settings.db_path)
     try:
-        reply = handle_tap(state, Deps(conn=conn, config=settings), nonce, verdict == "y")
+        deps = Deps(conn=conn, config=settings, client=context.bot_data.get("client"))
+        reply = handle_tap(state, deps, nonce, verdict == "y")
     finally:
         conn.close()
     try:
