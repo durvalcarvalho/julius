@@ -14,6 +14,7 @@ _KIND_MARKERS = {
     '"ids"': "match",
     '"packaging"': "packaging",
     '"stores"': "store",
+    '"reply"': "persona",
 }
 
 

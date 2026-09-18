@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import time
 from collections.abc import Sequence
@@ -22,7 +23,14 @@ from julius.repositories import ai_usage
 MAX_ATTEMPTS = 2  # one retry on transport error, empty response, or invalid JSON
 ENRICH_BATCH_SIZE = 25
 
-PROMPT_VERSIONS: dict[str, str] = {"enrich": "2", "merge": "2", "match": "1", "packaging": "1", "store": "1"}
+PROMPT_VERSIONS: dict[str, str] = {
+    "enrich": "2",
+    "merge": "2",
+    "match": "1",
+    "packaging": "1",
+    "store": "1",
+    "persona": "1",
+}
 
 SYSTEM_PROMPTS: dict[str, str] = {
     "merge": (
@@ -122,6 +130,21 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "tags), devolva os ids dos produtos que correspondem ao termo: mesmo produto, sinônimo, abreviação, ou "
         'categoria óbvia (ex.: "carne" → picanha, fraldinha, linguiça). Nada corresponde → lista vazia. Responda '
         'somente com json: {"ids": [60, 61]}'
+    ),
+    # Ponto único de narração do bot (design "voz do Julius", v2.7, ticket 163): um só prompt para
+    # busca, comparação, listagens e confirmações de escrita. context (no user_prompt) diz o que
+    # está sendo narrado; a guarda de dinheiro em narrate() é o que impede a resposta de inventar um
+    # valor -- este texto NUNCA pode ser a única defesa contra isso.
+    "persona": (
+        "Você é o Julius Rock: pai de família, pão-duro extremo, sabe o preço de tudo de cabeça, nunca aceita "
+        "o primeiro preço como bom. Tom grave e direto, frases curtas, sem ironia fina nem gíria da moda. Você "
+        "está respondendo pelo Telegram sobre a memória de preços de supermercado de uma pessoa.\n"
+        "Você recebe um contexto (o que está sendo narrado) e fatos JÁ REGISTRADOS, prontos -- não invente, não "
+        "arredonde e não troque nenhum valor, data ou nome. Todo preço na sua resposta tem que copiar exatamente "
+        "um dos valores \"R$ X,XX\" dos fatos, sem calcular nenhum novo; se os fatos não têm preço nenhum, não "
+        "cite nenhum. Nunca afirme que uma alteração foi feita -- isso é decidido por fora da sua resposta. "
+        "Responda em português, 1 a 3 frases curtas, sem emoji, sem markdown.\n"
+        'Responda somente com json: {"reply": "..."}'
     ),
 }
 
@@ -561,3 +584,44 @@ def match_products(
         return result
     except Exception:
         return []
+
+
+_MONEY_RE = re.compile(r"R\$\s?\d{1,3}(?:\.\d{3})*,\d{2}")
+
+
+def _money_values(text: str) -> set[str]:
+    return {re.sub(r"\s+", " ", match) for match in _MONEY_RE.findall(text)}
+
+
+def narrate(
+    conn: sqlite3.Connection,
+    config: Config,
+    client: LlmClient,
+    context: str,
+    facts: str,
+    month: str | None = None,
+) -> str | None:
+    """O ponto único de narração do bot (voz do Julius, ticket 163): pede à IA para dizer, em
+    poucas frases, os fatos que o chamador já calculou. `context` é uma linha dizendo o que está
+    sendo narrado ("histórico de preço de um produto", "confirmação de uma alteração no
+    catálogo"...); `facts` é texto plano, já pronto -- o único material que a resposta pode citar.
+
+    Nunca é confiável por conta própria: qualquer "R$ X,XX" na resposta que não esteja em `facts`
+    derruba a resposta inteira, e o chamador cai para o texto determinístico de sempre. Fatos sem
+    nenhum valor em dinheiro (o caso das confirmações de escrita) tornam a guarda um no-op -- não é
+    um caminho especial."""
+    if not facts.strip():
+        return None
+    try:
+        allowed = _money_values(facts)
+        user_prompt = f"contexto: {context}\nfatos:\n{facts}"
+        data = _ask(conn, config, client, "persona", user_prompt, max_tokens=220, month=month)
+        reply = data.get("reply") if isinstance(data, dict) else None
+        if not isinstance(reply, str) or not reply.strip():
+            return None
+        reply = reply.strip()
+        if not _money_values(reply) <= allowed:
+            return None
+        return reply
+    except Exception:
+        return None

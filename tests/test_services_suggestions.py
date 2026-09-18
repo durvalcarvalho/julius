@@ -585,3 +585,62 @@ def test_record_usage_defaults_the_month_to_now(conn, cfg):
     suggestions.record_usage(conn, cfg, "bot_turn", **_usage_args(month=None, input_tokens=1_000_000, output_tokens=0))
 
     assert ai_usage.spent_in_month(conn, datetime.now().strftime("%Y-%m")) == pytest.approx(1.0)
+
+
+# --- narrate (ticket 163) -----------------------------------------------------------------------
+
+FACTS = "Banana prata · R$ 3,79 (mais barato) · 16/09/2026 (há 2 dias) · Costa Atacadao"
+
+
+def _persona_response(reply: str) -> LlmResponse:
+    return LlmResponse(json.dumps({"reply": reply}), 400, 40)
+
+
+def test_narrate_returns_grounded_text(conn, cfg):
+    client = ScriptedLlmClient([_persona_response("Banana a R$ 3,79 na Costa Atacadao. Foi o melhor preço.")])
+
+    reply = suggestions.narrate(conn, cfg, client, "histórico de preço de um produto", FACTS, MONTH)
+
+    assert reply == "Banana a R$ 3,79 na Costa Atacadao. Foi o melhor preço."
+    assert _lines(cfg)[-1]["call_kind"] == "persona"
+    assert _lines(cfg)[-1]["prompt_version"] == "1"
+
+
+def test_narrate_rejects_a_price_not_in_the_facts(conn, cfg):
+    """The model naming a number it was not handed is exactly what this guard exists to catch."""
+    client = ScriptedLlmClient([_persona_response("Essa banana já chegou a custar R$ 9,99, um absurdo.")])
+
+    assert suggestions.narrate(conn, cfg, client, "histórico de preço de um produto", FACTS, MONTH) is None
+
+
+def test_narrate_accepts_a_reply_with_no_price_mentioned(conn, cfg):
+    """The write-confirmation case: facts have no money in them, so the guard is a no-op."""
+    client = ScriptedLlmClient([_persona_response("Já ajeitei essa categoria, era hora.")])
+
+    reply = suggestions.narrate(conn, cfg, client, "confirmação de uma alteração no catálogo", "produto marcado com a tag hortifruti", MONTH)
+
+    assert reply == "Já ajeitei essa categoria, era hora."
+
+
+def test_narrate_empty_facts_short_circuits(conn, cfg):
+    client = ScriptedLlmClient([_persona_response("não deveria rodar")])
+
+    assert suggestions.narrate(conn, cfg, client, "contexto qualquer", "", MONTH) is None
+    assert client.calls == []
+
+
+def test_narrate_not_configured_returns_none(conn, cfg):
+    config = replace(cfg, ai_api_key=None)
+    client = ScriptedLlmClient([_persona_response("x")])
+
+    assert suggestions.narrate(conn, config, client, "contexto qualquer", FACTS, MONTH) is None
+    assert client.calls == []
+
+
+def test_narrate_client_raises_returns_none(conn, cfg):
+    assert suggestions.narrate(conn, cfg, RaisingLlmClient(), "contexto qualquer", FACTS, MONTH) is None
+
+
+def test_narrate_malformed_json_shape_returns_none(conn, cfg):
+    assert suggestions.narrate(conn, cfg, ScriptedLlmClient([LlmResponse(json.dumps({"reply": 123}), 10, 10)]), "c", FACTS, MONTH) is None
+    assert suggestions.narrate(conn, cfg, ScriptedLlmClient([LlmResponse(json.dumps({"nope": "x"}), 10, 10)]), "c", FACTS, MONTH) is None
