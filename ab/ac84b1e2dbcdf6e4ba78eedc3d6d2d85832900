@@ -1,0 +1,22 @@
+tests/test_domain_formatting.py
+  s_703528d2945188::t_f349348a4246bf 100-138
+  s_703528d2945188::t_6b32e693087ec8 13
+julius/domain/formatting.py
+  s_703528d2945188::t_ab47efc99d2af0 48-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "abac84b1e2dbcdf6e4ba78eedc3d6d2d85832900",
+  "prompts": {},
+  "sessions": {
+    "s_703528d2945188": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6995d6b-ed00-47d8-9d91-ba6b5ed6e563",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
