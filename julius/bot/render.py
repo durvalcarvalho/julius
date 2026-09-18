@@ -93,6 +93,57 @@ def render_records(records: Sequence[PriceRecord], *, today: date | None = None)
     return fit("\n\n".join(blocks))
 
 
+def records_facts(records: Sequence[PriceRecord], *, today: date | None = None) -> str:
+    """Plain-text facts for the persona (ticket 163's `narrate`) -- no HTML, nothing the model
+    was not handed. One line per record, same source data as `_record_line`."""
+    lines = []
+    for record in records:
+        tag = {"lowest": " (mais barato)", "highest": " (mais caro)"}.get(record.highlight or "", "")
+        per_content = (
+            f" · {money(record.price_per_content)}/{record.content_unit}" if record.price_per_content is not None else ""
+        )
+        lines.append(
+            f"{record.canonical_name} · {money(record.unit_price)}{per_content}{tag} · "
+            f"{br_date(record.purchased_at)} ({relative_age(record.purchased_at, today=today)}) · "
+            f"{record.store_nickname}"
+        )
+    return "\n".join(lines)
+
+
+def comparison_facts(comparison: StoreComparison, *, today: date | None = None) -> str:
+    """Same shape as `records_facts`, one line per store entry per group -- same source data as
+    `_comparison_block`, no HTML."""
+    labels = store_labels(comparison)
+    lines = []
+    for group in comparison.comparisons:
+        cheapest, dearest = group.entries[0].price, group.entries[-1].price
+        for entry in group.entries:
+            tag = (
+                " (mais barato)"
+                if entry.price == cheapest
+                else " (mais caro)" if entry.price == dearest else ""
+            )
+            lines.append(
+                f"{group.kind} · {labels[entry.store_cnpj]} · {money(entry.price)}{tag} · "
+                f"{br_date(entry.purchased_at)} ({relative_age(entry.purchased_at, today=today)})"
+            )
+    return "\n".join(lines)
+
+
+def products_facts(products: Sequence[Product]) -> str:
+    """A count, not an enumeration -- narrating a 100-row catalogue in prose is the wall-of-text
+    problem the design's Modo B exists to avoid."""
+    if not products:
+        return ""
+    return f"{len(products)} produtos no catálogo"
+
+
+def stores_facts(stores: Sequence[Store]) -> str:
+    if not stores:
+        return ""
+    return f"{len(stores)} mercados importados"
+
+
 def _comparison_block(group: KindComparison, labels: dict[str, str], today: date | None) -> str:
     if group.basis == "price_per_content":
         basis = f"por {group.content_unit} (por conteúdo)"

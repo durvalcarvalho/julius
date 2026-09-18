@@ -62,6 +62,58 @@ def test_render_records_one_block_per_unit_in_input_order():
     assert text.count("<pre>") == 2
 
 
+def test_records_facts_one_line_per_record_no_html():
+    text = render.records_facts(
+        [_record(highlight="lowest", unit_price=3.79, store_nickname="Costa Atacadao")], today=TODAY
+    )
+
+    assert text == "Picanha bovina · R$ 3,79 (mais barato) · 12/09/2026 (há 5 dias) · Costa Atacadao"
+    assert "<" not in text and ">" not in text
+
+
+def test_records_facts_marks_highest_and_carries_content_price():
+    text = render.records_facts([_egg(1, 12.0, 0.60), _egg(2, 16.5, 0.55)], today=TODAY)
+    lines = text.split("\n")
+
+    assert "R$ 12,00 · R$ 0,60/UN" in lines[0]
+    assert "R$ 16,50 · R$ 0,55/UN" in lines[1]
+    assert "(mais barato)" not in text and "(mais caro)" not in text  # neither record carries `highlight` here
+
+
+def test_records_facts_empty_is_empty_string():
+    assert render.records_facts([]) == ""
+
+
+def test_comparison_facts_one_line_per_entry_with_markers():
+    comparison = _comparison(
+        _group("tomate", _entry("Assaí", "1", 11.89), _entry("Dona de Casa", "2", 14.99)),
+    )
+
+    text = render.comparison_facts(comparison, today=TODAY)
+    lines = text.split("\n")
+
+    assert lines[0] == "tomate · Assaí · R$ 11,89 (mais barato) · 12/09/2026 (há 5 dias)"
+    assert lines[1] == "tomate · Dona de Casa · R$ 14,99 (mais caro) · 12/09/2026 (há 5 dias)"
+
+
+def test_comparison_facts_empty_is_empty_string():
+    assert render.comparison_facts(_comparison()) == ""
+
+
+def test_products_facts_counts():
+    products = [Product(id=3, canonical_name="Ovos"), Product(id=4, canonical_name="Alho")]
+
+    assert render.products_facts(products) == "2 produtos no catálogo"
+    assert render.products_facts([]) == ""
+
+
+def test_stores_facts_counts():
+    stores = [Store(cnpj="11832478000285", legal_name="DONA DE CASA S/A", nickname="Dona de Casa")]
+
+    assert render.stores_facts(stores) == "1 mercados importados"
+    assert render.stores_facts([]) == ""
+
+
 def test_render_records_markers():
     text = render.render_records(
         [
