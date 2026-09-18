@@ -9,6 +9,7 @@ from __future__ import annotations
 import html
 from collections.abc import Sequence
 from datetime import date
+from typing import TYPE_CHECKING
 
 from julius.domain.comparison_basis import comparison_basis
 from julius.domain.formatting import (
@@ -22,6 +23,9 @@ from julius.domain.formatting import (
 )
 from julius.domain.models import KindComparison, PriceRecord, Product, Store, StoreComparison
 from julius.domain.normalization import store_place
+
+if TYPE_CHECKING:  # runtime-free: actions imports pydantic_ai, and rendering text must not.
+    from julius.bot.actions import PendingWrite, WriteResult
 
 MAX_MESSAGE_CHARS = 4096
 
@@ -169,6 +173,20 @@ def render_stores(stores: Sequence[Store]) -> str:
         suffix = f" · {escape(place)}" if place else ""
         lines.append(f"{escape(store.cnpj)} · {escape(store.nickname)}{suffix}")
     return fit("<pre>" + "\n".join(lines) + "</pre>")
+
+
+def render_pending(pending: PendingWrite) -> str:
+    """The message the user reads before tapping. The preview was built from the database, never
+    from the text the model typed."""
+    return f"⚠️ <b>Confirmar?</b>\n{escape(pending.preview)}"
+
+
+def render_result(result: WriteResult) -> str:
+    return f"✅ {escape(result.summary)}\nDesfazer: <code>{escape(result.undo)}</code>"
+
+
+def render_failure(reason: str) -> str:
+    return f"❌ Não executado: {escape(reason)}"
 
 
 def fit(text: str) -> str:

@@ -7,7 +7,10 @@ The model never sees `conn` or `config`: those arrive through RunContext[Deps], 
 
 from __future__ import annotations
 
+import secrets
 import sqlite3
+import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from pydantic_ai import ModelRetry, RunContext
@@ -150,3 +153,195 @@ async def list_stores(ctx: RunContext[Deps]) -> StoreListing:
 
 
 READ_ACTIONS = (search_prices, compare_stores, list_products, list_stores)
+
+
+@dataclass(frozen=True)
+class PendingWrite:
+    """What a write *would* do. Nothing is stored until the tap calls execute.
+
+    `args` carries resolved ids, never the text the model typed: re-resolving a name at execution
+    time could land on a different product than the one the preview described."""
+
+    action: str
+    args: Mapping[str, object]
+    preview: str
+    nonce: str
+    created_at: float
+
+
+@dataclass(frozen=True)
+class WriteResult:
+    summary: str
+    undo: str
+
+
+class WriteFailed(Exception):
+    """A escrita não aconteceu; str(exc) é o motivo, em português."""
+
+
+def _pending(action: str, args: Mapping[str, object], preview: str) -> PendingWrite:
+    return PendingWrite(
+        action=action,
+        args=args,
+        preview=preview,
+        nonce=secrets.token_urlsafe(8),
+        created_at=time.monotonic(),
+    )
+
+
+def _required(value: str, what: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        raise ModelRetry(f"{what} não pode ficar vazio.")
+    return stripped
+
+
+async def rename_product(ctx: RunContext[Deps], product: str, name: str) -> PendingWrite:
+    """Dá um nome legível a um produto (o nome inicial é a descrição crua do cupom).
+
+    Args:
+        product: o produto, pelo id que uma listagem mostrou ou pelo nome como o usuário falou.
+        name: o nome novo, em português e com acentos.
+    """
+    name = _required(name, "O nome")
+    found = resolve_product(ctx.deps.conn, product)
+    return _pending(
+        "rename_product",
+        {"product_id": found.id, "name": name},
+        f"Renomear o produto {found.id} «{found.canonical_name}» para «{name}»",
+    )
+
+
+async def rename_store(ctx: RunContext[Deps], store: str, nickname: str) -> PendingWrite:
+    """Dá um apelido reconhecível a um mercado (a razão social do cupom raramente ajuda).
+
+    Args:
+        store: o mercado, pelo CNPJ ou por um trecho do apelido/razão social.
+        nickname: o apelido novo. Vale incluir o bairro quando há duas filiais da mesma rede.
+    """
+    nickname = _required(nickname, "O apelido")
+    found = resolve_store(ctx.deps.conn, store)
+    return _pending(
+        "rename_store",
+        {"cnpj": found.cnpj, "nickname": nickname},
+        f"Dar ao mercado {found.cnpj} «{found.nickname}» o apelido «{nickname}»",
+    )
+
+
+async def tag_product(ctx: RunContext[Deps], product: str, tag: str) -> PendingWrite:
+    """Marca um produto com uma categoria de corredor (hortifruti, limpeza, bebidas...).
+
+    Args:
+        product: o produto, pelo id ou pelo nome.
+        tag: a categoria, uma palavra em minúsculas.
+    """
+    tag = _required(tag, "A tag").lower()
+    found = resolve_product(ctx.deps.conn, product)
+    if tag in found.tags:
+        raise ModelRetry(f"O produto {found.id} já tem a tag «{tag}».")
+    return _pending(
+        "tag_product",
+        {"product_id": found.id, "tag": tag},
+        f"Marcar o produto {found.id} «{found.canonical_name}» com a tag «{tag}»",
+    )
+
+
+async def untag_product(ctx: RunContext[Deps], product: str, tag: str) -> PendingWrite:
+    """Tira uma categoria de um produto.
+
+    Args:
+        product: o produto, pelo id ou pelo nome.
+        tag: a categoria a remover.
+    """
+    tag = _required(tag, "A tag").lower()
+    found = resolve_product(ctx.deps.conn, product)
+    if tag not in found.tags:
+        have = ", ".join(found.tags) if found.tags else "nenhuma"
+        raise ModelRetry(f"O produto {found.id} não tem a tag «{tag}»; tem: {have}.")
+    return _pending(
+        "untag_product",
+        {"product_id": found.id, "tag": tag},
+        f"Remover a tag «{tag}» do produto {found.id} «{found.canonical_name}»",
+    )
+
+
+def _quotable(text: str) -> str:
+    """A name with a double quote would break the undo command the user is meant to paste."""
+    return text.replace('"', "'")
+
+
+def _product_now(conn: sqlite3.Connection, product_id: int) -> Product:
+    product = catalog.get_product(conn, product_id)
+    if product is None:
+        raise WriteFailed(f"O produto {product_id} não existe mais.")
+    return product
+
+
+def _store_now(conn: sqlite3.Connection, cnpj: str) -> Store:
+    for store in catalog.list_stores(conn):
+        if store.cnpj == cnpj:
+            return store
+    raise WriteFailed(f"O mercado {cnpj} não existe mais.")
+
+
+def _do_rename_product(deps: Deps, args: Mapping[str, object]) -> WriteResult:
+    product_id, name = int(args["product_id"]), str(args["name"])
+    before = _product_now(deps.conn, product_id).canonical_name
+    catalog.rename_product(deps.conn, product_id, name)
+    return WriteResult(
+        summary=f"Produto {product_id} agora é «{name}» (antes: «{before}»)",
+        undo=f'julius produtos renomear {product_id} "{_quotable(before)}"',
+    )
+
+
+def _do_rename_store(deps: Deps, args: Mapping[str, object]) -> WriteResult:
+    cnpj, nickname = str(args["cnpj"]), str(args["nickname"])
+    before = _store_now(deps.conn, cnpj).nickname
+    catalog.rename_store(deps.conn, cnpj, nickname)
+    return WriteResult(
+        summary=f"Mercado {cnpj} agora é «{nickname}» (antes: «{before}»)",
+        undo=f'julius mercados renomear {cnpj} "{_quotable(before)}"',
+    )
+
+
+def _do_tag_product(deps: Deps, args: Mapping[str, object]) -> WriteResult:
+    product_id, tag = int(args["product_id"]), str(args["tag"])
+    product = _product_now(deps.conn, product_id)
+    catalog.tag_product(deps.conn, product_id, tag)
+    return WriteResult(
+        summary=f"Produto {product_id} «{product.canonical_name}» marcado com «{tag}»",
+        undo=f"julius produtos tag {product_id} {tag} --remover",
+    )
+
+
+def _do_untag_product(deps: Deps, args: Mapping[str, object]) -> WriteResult:
+    product_id, tag = int(args["product_id"]), str(args["tag"])
+    product = _product_now(deps.conn, product_id)
+    catalog.untag_product(deps.conn, product_id, tag)
+    return WriteResult(
+        summary=f"Tag «{tag}» removida do produto {product_id} «{product.canonical_name}»",
+        undo=f"julius produtos tag {product_id} {tag}",
+    )
+
+
+_EXECUTORS = {
+    "rename_product": _do_rename_product,
+    "rename_store": _do_rename_store,
+    "tag_product": _do_tag_product,
+    "untag_product": _do_untag_product,
+}
+
+
+def execute(deps: Deps, pending: PendingWrite) -> WriteResult:
+    """Applies a confirmed write. Reads the state as it is *now* to build the undo, not the state
+    the preview described -- the user may have changed it from the CLI in between."""
+    executor = _EXECUTORS.get(pending.action)
+    if executor is None:
+        raise WriteFailed(f"ação desconhecida: {pending.action}")
+    try:
+        return executor(deps, pending.args)
+    except (ValueError, LookupError) as error:
+        raise WriteFailed(str(error)) from None
+
+
+WRITE_ACTIONS = (rename_product, rename_store, tag_product, untag_product)
