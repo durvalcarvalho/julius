@@ -9,7 +9,8 @@ from rich.table import Table
 
 from julius import config
 from julius.cli._common import HIGHLIGHT_STYLE, br_date, console, date_cell, fail, money, open_db
-from julius.domain.models import KindComparison, StoreComparison, StoreNaming
+from julius.domain.formatting import coverage_text, plural_groups, store_labels
+from julius.domain.models import KindComparison, StoreNaming
 from julius.domain.normalization import digits_only
 from julius.infra import ai_log
 from julius.infra.llm_client import HttpLlmClient
@@ -65,10 +66,10 @@ def compare_stores() -> None:
             console.print("Nenhum produto tem tipo ainda. Rode: julius produtos revisar")
         else:
             console.print("Nenhum tipo de produto foi comprado em dois mercados ainda — sem base para comparar.")
-            console.print(f"Cobertura: {_coverage(comparison)}.", style="dim")
+            console.print(f"Cobertura: {coverage_text(comparison)}.", style="dim")
         return
 
-    labels = _labels(comparison)
+    labels = store_labels(comparison)
     for group in comparison.comparisons:
         console.print(_comparison_table(group, labels))
 
@@ -76,50 +77,15 @@ def compare_stores() -> None:
     wins = Counter(group.entries[0].store_cnpj for group in comparison.comparisons)
     width = max(len(labels[cnpj]) for cnpj in appearances)
     for cnpj, total in sorted(appearances.items(), key=lambda item: (-wins[item[0]] / item[1], labels[item[0]])):
-        console.print(f"{labels[cnpj].ljust(width)}  mais barato em {wins[cnpj]} de {total} {_plural(total)}")
+        console.print(f"{labels[cnpj].ljust(width)}  mais barato em {wins[cnpj]} de {total} {plural_groups(total)}")
 
     first, last = comparison.first_purchase, comparison.last_purchase
     count = len(comparison.comparisons)
-    base = f"base: {count} {_plural(count)} · {br_date(first)} a {br_date(last)}"
+    base = f"base: {count} {plural_groups(count)} · {br_date(first)} a {br_date(last)}"
     if comparison.kinds_single_store:
-        base += f" · {_coverage(comparison)}"
+        base += f" · {coverage_text(comparison)}"
     console.print(base)
     console.print("Período largo: parte da diferença pode ser variação de preço no mês, não o mercado.", style="dim")
-
-
-def _plural(count: int) -> str:
-    return "grupo" if count == 1 else "grupos"
-
-
-def _coverage(comparison: StoreComparison) -> str:
-    """Why the output is this small. Comparing needs the same kind in two stores, and measured on
-    the real database 80 of 87 kinds were bought in a single one — the tables can only ever show
-    the rest. Without this the smallness reads as a missing feature."""
-    total, single = comparison.kinds_total, comparison.kinds_single_store
-    if single < total:
-        return f"{single} dos {total} tipos comprados em um mercado só"
-    if total == 1:
-        return "o único tipo comprado saiu de um mercado só"
-    return f"todos os {total} tipos comprados saíram de um mercado só"
-
-
-def _labels(comparison: StoreComparison) -> dict[str, str]:
-    """A name per CNPJ. Two branches of one chain carry the same nickname until the user renames
-    them, and two identical rows in a table is the one thing worse than dropping the group — so a
-    shared nickname gets its CNPJ appended. `julius mercados listar` shows which address is which."""
-    by_nickname: dict[str, set[str]] = {}
-    for group in comparison.comparisons:
-        for entry in group.entries:
-            by_nickname.setdefault(entry.store_nickname, set()).add(entry.store_cnpj)
-    return {
-        entry.store_cnpj: (
-            f"{entry.store_nickname} · {entry.store_cnpj}"
-            if len(by_nickname[entry.store_nickname]) > 1
-            else entry.store_nickname
-        )
-        for group in comparison.comparisons
-        for entry in group.entries
-    }
 
 
 def _comparison_table(group: KindComparison, labels: dict[str, str]) -> Table:
