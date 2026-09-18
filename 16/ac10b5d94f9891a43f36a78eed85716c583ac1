@@ -1,0 +1,26 @@
+tests/_fakes.py
+  s_703528d2945188::t_254f4d9dca939e 17
+tests/test_services_suggestions.py
+  s_703528d2945188::t_bed292757a1520 588-646
+julius/services/suggestions.py
+  s_703528d2945188::t_e29534f5f53c39 587-627
+  s_703528d2945188::t_130f1aadd3cff9 134-148
+  s_703528d2945188::t_ad411327f94b7d 4
+  s_703528d2945188::t_3614a4d873b035 26-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "16ac10b5d94f9891a43f36a78eed85716c583ac1",
+  "prompts": {},
+  "sessions": {
+    "s_703528d2945188": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6995d6b-ed00-47d8-9d91-ba6b5ed6e563",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
