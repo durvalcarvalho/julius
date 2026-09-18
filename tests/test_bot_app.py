@@ -107,6 +107,7 @@ def test_build_application_registers_three_handlers():
     assert len(application.handlers[0]) == 3
     assert application.bot_data["agent"] is agent
     assert application.bot_data["settings"] is settings
+    assert application.error_handlers
 
 
 def test_build_application_stores_a_client_when_ai_is_configured():
@@ -166,3 +167,48 @@ def test_the_bot_reads_no_environment_of_its_own():
         text = path.read_text(encoding="utf-8")
         assert "os.environ" not in text, path
         assert "getenv" not in text, path
+
+
+# --- "digitando..." (ticket 173) ---------------------------------------------------
+
+import asyncio  # noqa: E402
+from unittest.mock import AsyncMock  # noqa: E402
+
+from telegram.constants import ChatAction  # noqa: E402
+
+
+def _context_with_bot():
+    return SimpleNamespace(bot=AsyncMock())
+
+
+def test_show_typing_sends_the_action_for_the_right_chat():
+    context = _context_with_bot()
+
+    asyncio.run(bot_app._show_typing(_update(42), context))
+
+    context.bot.send_chat_action.assert_awaited_once_with(chat_id=42, action=ChatAction.TYPING)
+
+
+def test_show_typing_without_a_chat_sends_nothing():
+    context = _context_with_bot()
+
+    asyncio.run(bot_app._show_typing(_update(None), context))
+
+    context.bot.send_chat_action.assert_not_awaited()
+
+
+def test_show_typing_failure_is_swallowed():
+    context = _context_with_bot()
+    context.bot.send_chat_action.side_effect = RuntimeError("rede caiu")
+
+    asyncio.run(bot_app._show_typing(_update(42), context))  # must not raise
+
+
+def test_no_module_level_sleep_is_used_for_the_typing_delay():
+    """Deliberate: the AI call's own latency already sits in the window the research calls ideal;
+    stacking a fixed sleep on top of it risks crossing the ~3s mark where perceived
+    responsiveness drops (see _show_typing's docstring and ticket 173)."""
+    from pathlib import Path
+
+    text = (Path(bot_app.__file__)).read_text(encoding="utf-8")
+    assert "asyncio.sleep(" not in text

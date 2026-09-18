@@ -7,7 +7,7 @@ import logging
 import sys
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.constants import ParseMode
+from telegram.constants import ChatAction, ParseMode
 from telegram.error import BadRequest
 from telegram.ext import (
     Application,
@@ -122,6 +122,22 @@ def _settings_and_agent(context: ContextTypes.DEFAULT_TYPE) -> tuple[Config, Bot
     return context.bot_data["settings"], context.bot_data["agent"]
 
 
+async def _show_typing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """The one low-cost finding from the humanization research
+    (claudedocs/research_chatbot_humanizacao_20260918.md): a "digitando..." cue before the reply
+    reads as more natural than an instant one. No `asyncio.sleep` on top of this -- the AI call's
+    own latency (~1-2s, measured in the v2.7 smoke) already sits in the window the research calls
+    ideal, and stacking an artificial delay on it would risk crossing the ~3s mark where perceived
+    responsiveness drops. A failure here must never block the real reply."""
+    chat = update.effective_chat
+    if chat is None:
+        return
+    try:
+        await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+    except Exception:
+        log.debug("não consegui mandar o indicador de digitando", exc_info=True)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings, _ = _settings_and_agent(context)
     if not _authorized(update, settings):
@@ -137,6 +153,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     if update.message is None or not update.message.text:
         return
+    await _show_typing(update, context)
     state = context.chat_data.setdefault("state", ChatState())
     conn = db.connect(settings.db_path)
     try:
@@ -166,6 +183,7 @@ async def on_tap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         _, nonce, verdict = (query.data or "").split("|", 2)
     except ValueError:
         return
+    await _show_typing(update, context)
     state = context.chat_data.setdefault("state", ChatState())
     conn = db.connect(settings.db_path)
     try:
@@ -183,6 +201,13 @@ async def on_tap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _send(update, reply.text)
 
 
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Long polling drops the connection now and then (rede caseira); a biblioteca já tenta de
+    # novo sozinha (network_retry_loop, max_retries=-1) -- sem handler aqui, ela loga o traceback
+    # inteiro como se o bot tivesse caído.
+    log.warning("Falha de rede no polling, tentando de novo: %s", context.error)
+
+
 def build_application(settings: Config, agent: BotAgent) -> Application:
     application = Application.builder().token(settings.bot_token).build()
     application.bot_data["settings"] = settings
@@ -193,6 +218,7 @@ def build_application(settings: Config, agent: BotAgent) -> Application:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     application.add_handler(CallbackQueryHandler(on_tap, pattern=r"^confirm\|"))
+    application.add_error_handler(on_error)
     return application
 
 
