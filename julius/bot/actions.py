@@ -19,6 +19,7 @@ from julius.config import Config
 from julius.domain.models import Product, SearchOutcome, Store, StoreComparison
 from julius.domain.formatting import content_text
 from julius.domain.normalization import digits_only, normalize_content, normalize_text
+from julius.infra.llm_client import LlmClient
 from julius.services import catalog, comparison as comparison_service, search as search_service
 
 MAX_CANDIDATES = 8  # what fits in a question to the user without becoming a listing
@@ -28,6 +29,9 @@ MAX_CANDIDATES = 8  # what fits in a question to the user without becoming a lis
 class Deps:
     conn: sqlite3.Connection
     config: Config
+    # For turn.py's narrate() calls (voz do Julius, ticket 166) -- None means "answer without the
+    # persona", same as IA not being configured at all.
+    client: LlmClient | None = None
 
 
 @dataclass(frozen=True)

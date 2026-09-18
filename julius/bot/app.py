@@ -24,6 +24,7 @@ from julius.bot.agent import BotAgent, build_agent
 from julius.bot.turn import DENIED_TAP, EXPIRED_TAP, STALE_TAP, ChatState, handle_tap, handle_text
 from julius.config import Config
 from julius.infra import db
+from julius.infra.llm_client import HttpLlmClient
 
 log = logging.getLogger("julius.bot")
 
@@ -139,7 +140,8 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state = context.chat_data.setdefault("state", ChatState())
     conn = db.connect(settings.db_path)
     try:
-        reply = await handle_text(agent, state, Deps(conn=conn, config=settings), update.message.text)
+        deps = Deps(conn=conn, config=settings, client=context.bot_data.get("client"))
+        reply = await handle_text(agent, state, deps, update.message.text)
     finally:
         conn.close()
     await _send(update, reply.text, _keyboard(reply.pending.nonce) if reply.pending else None)
@@ -184,6 +186,9 @@ def build_application(settings: Config, agent: BotAgent) -> Application:
     application = Application.builder().token(settings.bot_token).build()
     application.bot_data["settings"] = settings
     application.bot_data["agent"] = agent
+    # Same client class every other suggestion call uses (ticket 166); None only when IA is not
+    # configured, which check_startup already refuses to let the bot run without.
+    application.bot_data["client"] = HttpLlmClient.from_config(settings)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     application.add_handler(CallbackQueryHandler(on_tap, pattern=r"^confirm\|"))

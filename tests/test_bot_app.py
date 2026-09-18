@@ -109,6 +109,17 @@ def test_build_application_registers_three_handlers():
     assert application.bot_data["settings"] is settings
 
 
+def test_build_application_stores_a_client_when_ai_is_configured():
+    from julius.infra.llm_client import HttpLlmClient
+
+    settings = _settings()
+    agent = build_agent(settings, model=FunctionModel(lambda m, i: ModelResponse(parts=[TextPart("x")])))
+
+    application = bot_app.build_application(settings, agent)
+
+    assert isinstance(application.bot_data["client"], HttpLlmClient)
+
+
 @pytest.mark.parametrize(
     ("reply_text", "expected"),
     [

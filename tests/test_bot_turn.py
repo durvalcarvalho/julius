@@ -40,6 +40,11 @@ def deps(conn, cfg, tmp_path):
     return Deps(conn=conn, config=cfg)
 
 
+def test_deps_client_defaults_to_none(deps):
+    """ticket 166: additive field, every existing Deps(...) call keeps working unchanged."""
+    assert deps.client is None
+
+
 def _model(*responses):
     state = {"calls": 0}
 
