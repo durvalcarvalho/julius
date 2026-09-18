@@ -1,5 +1,8 @@
 # 150: `domain/formatting.py` — os formatadores puros saem da CLI
 
+<!-- status:done implemented:2026-09-17 commit:77b344c -->
+<!-- adjustments: none -->
+
 > As funções de texto que as duas interfaces precisam passam a morar na única camada que as duas podem importar.
 
 ## Contexto

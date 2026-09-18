@@ -1,5 +1,8 @@
 # 152: `suggestions.record_usage` — cobrar e logar uma chamada vira função pública
 
+<!-- status:done implemented:2026-09-17 commit:cae53d8 -->
+<!-- adjustments: carga cobrada depois do parse, não antes; nada entre os dois pode falhar -->
+
 > O bot vai gastar do mesmo orçamento e escrever no mesmo log da curadoria; para isso a cobrança que hoje é privada em `_ask` precisa ter nome.
 
 ## Contexto

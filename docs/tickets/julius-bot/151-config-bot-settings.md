@@ -1,5 +1,8 @@
 # 151: `Config` — o token do bot e a allowlist de um único chat
 
+<!-- status:done implemented:2026-09-17 commit:120f4aa -->
+<!-- adjustments: none -->
+
 > Duas variáveis de ambiente novas, lidas no único lugar que lê ambiente.
 
 ## Contexto

@@ -1,5 +1,8 @@
 # 161: `bot/app.py` e `julius-bot` — partida, handlers, allowlist, polling
 
+<!-- status:done implemented:2026-09-17 commit:6f31eaa -->
+<!-- adjustments: none -->
+
 > O único módulo que sabe o que é um `Update`. Tudo o que ele faz é: recusar subir aberto, checar quem fala, abrir a conexão do turno e entregar a resposta.
 
 ## Contexto

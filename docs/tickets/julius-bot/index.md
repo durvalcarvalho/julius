@@ -1,7 +1,8 @@
 # Julius v2.6 — bot no Telegram: tickets de implementação
 
 > Gerado a partir de: `docs/design/telegram-bot.md` (design), `docs/requirements/messaging-bot-integration.md` (requisitos), `claudedocs/research_messaging_bot_integration_20260917.md` e `claudedocs/research_bot_stack_libraries_20260917.md` (pesquisas), `../majordomo` (referência externa, estudada com desconfiança).
-> Gerado em: 2026-09-17 · Estado do código **na geração**: commit `0b2b12d`, docs desta frente ainda não versionados, suíte verde (754 testes). O estado atual é a coluna "Estado" da trilha — este cabeçalho não a repete.
+> Gerado em: 2026-09-17 · Estado do código **na geração**: commit `0b2b12d`, docs desta frente ainda não versionados, suíte verde (754 testes).
+> **Trilha concluída em 2026-09-17**: 150–162 feitos, um commit por ticket, **906 testes verdes**, nenhum `NotImplementedError`. O §4.3 **não** foi vetado — as ações são *output functions*, e a implementação confirmou a premissa. O que a implementação descobriu contra o que os tickets diziam está em cada bloco `<!-- adjustments: … -->` e, consolidado, em `docs/design/telegram-bot.md` §9.1 e §9.2. Falta só o **smoke real**, que é do usuário (lista no ticket 162).
 > **Premissa deste índice**: o §4.3 do design (*output functions* em vez de *Deferred Tools*) foi marcado para veto do usuário e **ainda não foi vetado**. Os tickets seguem o design como está. Se o veto vier, mudam 156–160 (a pendência passaria a ser `DeferredToolRequests`, o tap a `agent.run(deferred_tool_results=…)`, e a resposta a ser lida do `ToolReturnPart`); 150–155, 158 e 161 ficam.
 
 ## Visão geral
@@ -43,19 +44,19 @@ Trilha única (o projeto não tem frontend). A numeração continua a global do 
 
 | # | Ticket | Depende de | Esforço | Estado | Entrega |
 |---|---|---|---|---|---|
-| 150 | [`domain/formatting.py`](150-domain-formatting.md) | — | S | a fazer | `money`/`br_date`/`relative_age`/`content_text`/`store_labels`/`coverage_text`/`plural_groups` em `domain`; `cli` reexporta |
-| 151 | [`Config` do bot](151-config-bot-settings.md) | — | S | a fazer | `bot_token`, `bot_allowed_chat_id`, `bot_configured`; `JULIUS_BOT_*`; isolamento no `conftest` |
-| 152 | [`suggestions.record_usage`](152-suggestions-record-usage.md) | — | S | a fazer | cobrança + log públicos; `_ask` usa; `prompt_version` explícito |
+| 150 | [`domain/formatting.py`](150-domain-formatting.md) | — | S | **feito** (`77b344c`) | `money`/`br_date`/`relative_age`/`content_text`/`store_labels`/`coverage_text`/`plural_groups` em `domain`; `cli` reexporta |
+| 151 | [`Config` do bot](151-config-bot-settings.md) | — | S | **feito** (`120f4aa`) | `bot_token`, `bot_allowed_chat_id`, `bot_configured`; `JULIUS_BOT_*`; isolamento no `conftest` |
+| 152 | [`suggestions.record_usage`](152-suggestions-record-usage.md) | — | S | **feito** (`cae53d8`) | cobrança + log públicos; `_ask` usa; `prompt_version` explícito |
 | 153 | [Dependências, DAG, guardas](153-bot-packaging-dag-guards.md) | — | S | **feito** (`4a759ac`) | extras `bot`/`dev`; linha `bot` em `ALLOWED_IMPORTS`; `import julius.cli` sem deps do bot; `ALLOW_MODEL_REQUESTS=False` |
-| 154 | [`bot/render.py`](154-bot-render.md) | 150, 153 | M | a fazer | `escape`, `render_records`/`comparison`/`products`/`stores`, `fit` (4096) |
-| 155 | [`bot/actions.py` — leitura](155-bot-actions-read.md) | 153 | M | a fazer | `Deps`, `ProductListing`/`StoreListing`, `resolve_product`/`resolve_store`, 4 ações; `search.matching_product_ids` |
-| 156 | [`bot/actions.py` — nome e tag](156-bot-actions-write-names-tags.md) | 154, 155 | M | a fazer | `PendingWrite`/`WriteResult`/`WriteFailed`, `execute`, 4 escritas; `render_pending`/`result`/`failure` |
-| 157 | [`bot/actions.py` — tipo, conteúdo, fusão](157-bot-actions-write-kind-content-merge.md) | 156 | M | a fazer | 6 escritas, `execute` completo, `ALL_ACTIONS` (14) |
-| 158 | [`bot/agent.py`](158-bot-agent.md) | 155–157 | M | a fazer | `build_model`, `build_agent` (output functions, `extra_body`), `SYSTEM_PROMPT` v1 |
-| 159 | [`bot/turn.py` — texto](159-bot-turn-text.md) | 152, 154, 158 | M | a fazer | `ChatState`, `Reply`, `handle_text`: orçamento → agente → render/pendência → cobrança/logs |
-| 160 | [`bot/turn.py` — tap](160-bot-turn-tap.md) | 159 | S | a fazer | `handle_tap`, TTL 300 s, `_expired`, fail-closed com `finally` |
-| 161 | [`bot/app.py` + `julius-bot`](161-bot-app-entrypoint.md) | 151, 153, 160 | M | a fazer | partida fail-fast, logger capado, 3 handlers, allowlist, botões, `run_polling`; script e `make install-bot` |
-| 162 | [e2e, docs, smoke](162-bot-e2e-docs.md) | 161 | M | a fazer | `test_e2e.py` do bot; `README`/`CLAUDE.md`; lista do smoke real (dono: usuário) |
+| 154 | [`bot/render.py`](154-bot-render.md) | 150, 153 | M | **feito** (`128b277`) | `escape`, `render_records`/`comparison`/`products`/`stores`, `fit` (4096) |
+| 155 | [`bot/actions.py` — leitura](155-bot-actions-read.md) | 153 | M | **feito** (`241cb42`) | `Deps`, `ProductListing`/`StoreListing`, `resolve_product`/`resolve_store`, 4 ações; `search.matching_product_ids` |
+| 156 | [`bot/actions.py` — nome e tag](156-bot-actions-write-names-tags.md) | 154, 155 | M | **feito** (`6d3a3ae`) | `PendingWrite`/`WriteResult`/`WriteFailed`, `execute`, 4 escritas; `render_pending`/`result`/`failure` |
+| 157 | [`bot/actions.py` — tipo, conteúdo, fusão](157-bot-actions-write-kind-content-merge.md) | 156 | M | **feito** (`4850540`) | 6 escritas, `execute` completo, `ALL_ACTIONS` (14) |
+| 158 | [`bot/agent.py`](158-bot-agent.md) | 155–157 | M | **feito** (`61af069`) | `build_model`, `build_agent` (output functions, `extra_body`), `SYSTEM_PROMPT` v1 |
+| 159 | [`bot/turn.py` — texto](159-bot-turn-text.md) | 152, 154, 158 | M | **feito** (`2a03260`) | `ChatState`, `Reply`, `handle_text`: orçamento → agente → render/pendência → cobrança/logs |
+| 160 | [`bot/turn.py` — tap](160-bot-turn-tap.md) | 159 | S | **feito** (`5b2567d`) | `handle_tap`, TTL 300 s, `_expired`, fail-closed com `finally` |
+| 161 | [`bot/app.py` + `julius-bot`](161-bot-app-entrypoint.md) | 151, 153, 160 | M | **feito** (`6f31eaa`) | partida fail-fast, logger capado, 3 handlers, allowlist, botões, `run_polling`; script e `make install-bot` |
+| 162 | [e2e, docs, smoke](162-bot-e2e-docs.md) | 161 | M | **feito** | `test_e2e.py` do bot; `README`/`CLAUDE.md`; lista do smoke real (dono: usuário) |
 
 ## Dependências e caminho crítico
 

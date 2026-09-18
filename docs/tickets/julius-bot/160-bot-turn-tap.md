@@ -1,5 +1,8 @@
 # 160: `bot/turn.py` — o tap: confirmar, cancelar, expirar
 
+<!-- status:done implemented:2026-09-17 commit:5b2567d -->
+<!-- adjustments: none -->
+
 > A segunda passada da escrita: um nonce, um relógio, e nada executa a menos que tudo bata.
 
 ## Contexto

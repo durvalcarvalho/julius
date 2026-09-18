@@ -1,5 +1,8 @@
 # 158: `bot/agent.py` — o agente, o modelo e o prompt
 
+<!-- status:done implemented:2026-09-17 commit:61af069 -->
+<!-- adjustments: teste do menu compara nomes sem o prefixo final_result_ e afirma o prefixo -->
+
 > Onde as catorze ações viram um menu fechado para a IA, e onde as três variáveis `JULIUS_AI_*` de sempre viram o modelo do PydanticAI.
 
 ## Contexto

@@ -1,5 +1,8 @@
 # 154: `bot/render.py` — os dados do Julius em texto de celular
 
+<!-- status:done implemented:2026-09-17 commit:128b277 -->
+<!-- adjustments: none -->
+
 > A regra de negócio chega pronta de `services`; este módulo só decide como ela aparece numa tela de 40 colunas sem cor.
 
 ## Contexto

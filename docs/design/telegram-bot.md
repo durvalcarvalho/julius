@@ -2,6 +2,7 @@
 
 > `/sc:design` de 2026-09-17, a partir de `docs/requirements/messaging-bot-integration.md` (F1–F12, RF1–RF9, RNF1–RNF5) e das duas pesquisas do mesmo dia (`claudedocs/research_messaging_bot_integration_20260917.md`, `claudedocs/research_bot_stack_libraries_20260917.md`). Especificação de alto nível; **nenhum código foi alterado.**
 > Referência estudada com desconfiança: `../majordomo` (fora deste repo). §8 lista o que foi adaptado dele e o que foi deixado lá, com o motivo de cada um.
+> **Implementado em 2026-09-17 (tickets 150–162).** O §4.3 não foi vetado: as ações são *output functions*, e a implementação confirmou a premissa — a chamada encerra o run e o resultado não volta ao modelo (teste que conta chamadas de modelo). O que mudou em relação ao texto abaixo está registrado em §9.
 > **Um ponto da pilha pesquisada fica mais estreito neste design** (§4.3): o mecanismo de confirmação do PydanticAI ("Deferred Tools") passa de "o mecanismo" para "alternativa documentada" — a leitura da documentação mostrou que ele devolve o resultado da escrita **ao modelo**, que gera a frase final, e é exatamente essa frase que o próprio brief manda não usar como resposta. O requisito (RF8) não muda; o encaixe muda. Decisão do usuário, registrada para veto.
 
 ## 0. O que os requisitos já decidiram e este design obedece
@@ -222,6 +223,17 @@ E um princípio do `majordomo` que confirma um do Julius: a seção "Deliberatel
 3. Nomes dos campos de `result.usage()` na versão instalada do PydanticAI, para a cobrança de §5.1.
 4. Texto do prompt de sistema do bot — em português, versionado em `PROMPT_VERSIONS`, e **medido** contra uma dúzia de frases reais antes de fechar (o projeto já aprendeu que mexer em prompt medido invalida a medição; este nasce medido).
 5. Como o PTB é iniciado quando o PC liga fica de fora, como os requisitos já disseram (§5 deles): `julius-bot` na mão até incomodar.
+
+### 9.1 Respondido pela implementação (2026-09-17, pydantic-ai 2.44.0, python-telegram-bot 22.8)
+
+- **Item 2 — resolvido, e com uma pegadinha.** *Output functions* convivem com `str` e com `ModelRetry` exatamente como o design supôs: a chamada encerra o run (um teste conta as chamadas de modelo e exige **uma**), `ModelRetry` devolve o turno ao modelo, e prosa vira `str`. O plano B (*Deferred Tools*) **não** foi necessário. A pegadinha: o PydanticAI expõe a ação como **`final_result_<nome>`**, não pelo nome da função — chamar o nome nu cai no caminho de "Unknown tool", que **ainda assim termina o run** com a prosa do modelo como saída. Os testes derivam o nome de `__name__` e um deles afirma a convenção, para que uma mudança de biblioteca falhe em vez de passar em silêncio.
+- **Item 3 — respondido.** `result.usage` é **propriedade**, não método (`result.usage()` levanta `TypeError`). Os campos `input_tokens`/`output_tokens` estão corretos.
+- **Item 4 — parcialmente.** O prompt nasceu em português e versionado, mas em `BOT_PROMPT_VERSION` e **fora** de `PROMPT_VERSIONS` (esse dict é dos prompts da curadoria; o bot passa a versão explicitamente em `record_usage`). Ele **ainda não foi medido** contra frases reais: o `FunctionModel` da suíte não exercita prompt nenhum. A medição é o smoke do usuário.
+- **Itens 1 e 5 — ainda do usuário.** O smoke real é o que confirma se o `deepseek-flash` escolhe ação de forma confiável com catorze opções e se o `extra_body` desliga o *thinking* no caminho do PydanticAI. A assinatura da falha é a de 15/09: `output_tokens` na casa dos milhares em vez de dezenas, ou `error` preenchido em `ai_calls.jsonl`. Lista completa do smoke em `docs/tickets/julius-bot/162-bot-e2e-docs.md`; **anote o resultado aqui**.
+
+### 9.2 O que a implementação descobriu e o design não previa
+
+- `catalog.get_product` resolve para a **raiz do grupo**, então `Product.merged_into` nunca chega preenchido por `services`: a pré-checagem de `unmerge_product` foi refeita perguntando por id e comparando o que volta (id diferente **é** a fusão). Duas consequências, as duas mais seguras do que o desenho supunha: um ciclo de fusão não pode nem ser **proposto** pela ação, e desfundir por nome não pode errar de linha. Limite anotado no código: o `undo` do desfundir refunde na raiz, que é o pai direto de toda fusão feita em um passo.
 
 ## 10. Fora do escopo, de propósito
 

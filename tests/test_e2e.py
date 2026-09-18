@@ -623,3 +623,119 @@ def test_v24_divergent_content_is_never_merged(monkeypatch):
     assert result.exit_code == 0, result.output
     output = _run("produtos", "listar").output
     assert "Refrigerante Pepsi 2L" in output and "REFRI ANT GUARANA PET 1.5L" in output
+
+
+# --- the bot, wired end to end (ticket 162) ---------------------------------------
+
+import asyncio  # noqa: E402
+
+from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart  # noqa: E402
+from pydantic_ai.models.function import FunctionModel  # noqa: E402
+
+from julius import config as config_module  # noqa: E402
+from julius.bot.actions import Deps  # noqa: E402
+from julius.bot.agent import build_agent  # noqa: E402
+from julius.bot.turn import ChatState, handle_tap, handle_text  # noqa: E402
+from julius.repositories import ai_usage  # noqa: E402
+from julius.services import suggestions  # noqa: E402
+
+BOT_ENV = {
+    "JULIUS_AI_API_KEY": "k",
+    "JULIUS_AI_BASE_URL": "https://x/v1",
+    "JULIUS_AI_MODEL": "m",
+    "JULIUS_AI_INPUT_PRICE_USD_PER_1M": "0.30",
+    "JULIUS_AI_OUTPUT_PRICE_USD_PER_1M": "1.20",
+    "JULIUS_AI_BUDGET_USD": "5",
+}
+
+
+@pytest.fixture
+def bot_world(tmp_path):
+    """Three real receipts, a live connection, and a Config whose logs land in tmp_path."""
+    # Same path isolated_env gave the CLI, so `julius produtos listar` reads what the bot wrote.
+    settings = config_module.load({"JULIUS_DB": str(tmp_path / "prices.db"), **BOT_ENV})
+    conn = db.connect(settings.db_path)
+    for name in ("qrcode.html", "qrcode-2.html", "qrcode-3.html"):
+        importing.import_receipt(conn, restore_fixture(FIXTURES, name), DFReceiptParser())
+    yield Deps(conn=conn, config=settings)
+    conn.close()
+
+
+def _script(*responses):
+    """Replays one response per model call, and counts them -- the tap must not add one."""
+    state = {"calls": 0}
+
+    def model(messages, info):
+        response = responses[min(state["calls"], len(responses) - 1)]
+        state["calls"] += 1
+        return response(messages) if callable(response) else response
+
+    return FunctionModel(model), state
+
+
+def _call(name, args=None):
+    return ModelResponse(parts=[ToolCallPart(f"final_result_{name}", args or {})])
+
+
+def test_bot_end_to_end_read_write_confirm_read(bot_world):
+    deps = bot_world
+    picanha = next(p for p in catalog.list_products(deps.conn) if "PICANHA" in p.canonical_name.upper())
+    model, calls = _script(
+        _call("search_prices", {"words": "picanha"}),
+        _call("rename_product", {"product": str(picanha.id), "name": "Picanha bovina"}),
+        _call("search_prices", {"words": "picanha bovina"}),
+    )
+    agent = build_agent(deps.config, model=model)
+    state = ChatState()
+
+    # 1. a question answered from the database
+    first = asyncio.run(handle_text(agent, state, deps, "quanto paguei de picanha?"))
+    assert "Preços por KG" in first.text
+    assert "R$ " in first.text
+    assert first.pending is None
+    queries = [json.loads(line) for line in deps.config.query_log_path.read_text().splitlines()]
+    assert len(queries) == 1 and queries[0]["channel"] == "bot"
+
+    # 2. a write only proposes
+    second = asyncio.run(handle_text(agent, state, deps, "renomeia a picanha para Picanha bovina"))
+    assert second.pending is not None
+    assert second.text.startswith("⚠️")
+    assert catalog.get_product(deps.conn, picanha.id).canonical_name == picanha.canonical_name
+
+    # 3. the tap is what writes
+    tapped = handle_tap(state, deps, second.pending.nonce, approve=True)
+    assert tapped.text.startswith("✅")
+    assert f"<code>julius produtos renomear {picanha.id}" in tapped.text
+    assert catalog.get_product(deps.conn, picanha.id).canonical_name == "Picanha bovina"
+    assert state.pending is None
+
+    # 4. the next read sees the new name
+    third = asyncio.run(handle_text(agent, state, deps, "quanto paguei de picanha bovina?"))
+    assert "Picanha bovina" in third.text
+
+    # 5. three model calls, three charged turns -- the tap called no model
+    assert calls["calls"] == 3
+    assert ai_usage.spent_in_month(deps.conn, suggestions._current_month()) > 0
+    lines = [json.loads(line) for line in deps.config.ai_log_path.read_text().splitlines()]
+    assert [line["call_kind"] for line in lines] == ["bot_turn"] * 3
+    assert [line["raw_response"] for line in lines] == [
+        "SearchOutcome",
+        "PendingWrite:rename_product",
+        "SearchOutcome",
+    ]
+
+    # and the CLI sees exactly the same database
+    assert "Picanha bovina" in _run("produtos", "listar").output
+
+
+def test_bot_unrelated_message_is_plain_text_and_touches_nothing(bot_world):
+    deps = bot_world
+    before = [catalog.get_product(deps.conn, p.id) for p in catalog.list_products(deps.conn)]
+    model, calls = _script(ModelResponse(parts=[TextPart("Não sei apagar nada por aqui.")]))
+
+    reply = asyncio.run(handle_text(build_agent(deps.config, model=model), ChatState(), deps, "apaga tudo"))
+
+    assert reply.text == "Não sei apagar nada por aqui."
+    assert reply.pending is None
+    assert calls["calls"] == 1
+    assert [catalog.get_product(deps.conn, p.id) for p in catalog.list_products(deps.conn)] == before

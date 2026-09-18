@@ -1,5 +1,8 @@
 # 155: `bot/actions.py` — `Deps`, resolução por nome e as ações de leitura
 
+<!-- status:done implemented:2026-09-17 commit:241cb42 -->
+<!-- adjustments: output tool é final_result_<nome>, não o nome nu; helper de teste deriva de __name__ -->
+
 > As primeiras funções que a IA pode escolher: só leitura, e um jeito de transformar "o tomate" num id sem a IA adivinhar.
 
 ## Contexto

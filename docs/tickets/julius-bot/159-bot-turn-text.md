@@ -1,5 +1,8 @@
 # 159: `bot/turn.py` — o turno de texto: orçamento, agente, resposta ou pendência
 
+<!-- status:done implemented:2026-09-17 commit:2a03260 -->
+<!-- adjustments: result.usage é propriedade no pydantic-ai 2.44, não result.usage() -->
+
 > A função que os testes exercitam sem Telegram: recebe deps e o texto, devolve o que responder. É aqui que o princípio "o código responde, o modelo só roteia" vira código.
 
 ## Contexto

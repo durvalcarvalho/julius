@@ -16,10 +16,11 @@ Nome em homenagem ao pai do Chris em *Todo Mundo Odeia o Chris*: o cara que sabe
 5. [Conceitos que valem a pena entender](#conceitos-que-valem-a-pena-entender)
 6. [Configuração](#configuração)
 7. [IA opcional (orçamento mensal)](#ia-opcional-orçamento-mensal)
-8. [Arquitetura](#arquitetura)
-9. [Banco de dados](#banco-de-dados)
-10. [Desenvolvimento](#desenvolvimento)
-11. [Limitações conhecidas e próximos passos](#limitações-conhecidas-e-próximos-passos)
+8. [Bot no Telegram](#bot-no-telegram)
+9. [Arquitetura](#arquitetura)
+10. [Banco de dados](#banco-de-dados)
+11. [Desenvolvimento](#desenvolvimento)
+12. [Limitações conhecidas e próximos passos](#limitações-conhecidas-e-próximos-passos)
 
 ---
 
@@ -247,6 +248,8 @@ Tudo por variável de ambiente. Sem nenhuma, Julius funciona com os padrões.
 | `JULIUS_AI_INPUT_PRICE_USD_PER_1M` | — | Preço por milhão de tokens de entrada (obrigatório para a IA rodar). Recomendado usar o preço de **pico** do provedor, pra nunca subestimar o gasto (ex.: DeepSeek `0.30`). |
 | `JULIUS_AI_OUTPUT_PRICE_USD_PER_1M` | — | Idem, saída (ex.: DeepSeek `1.20`). |
 | `JULIUS_AI_REQUEST_EXTRAS` | `{}` | JSON mesclado no corpo do request, por cima de tudo — a válvula de escape pra peculiaridade de provedor. **DeepSeek precisa** de `'{"thinking":{"type":"disabled"}}'`: sem isso, `deepseek-flash` gasta todo o `max_tokens` "pensando" e nunca devolve o JSON pedido (medido no gate antes do primeiro ticket de IA). |
+| `JULIUS_BOT_TOKEN` | — | Token do bot do Telegram, do `@BotFather`. Só o `julius-bot` usa; a CLI ignora. |
+| `JULIUS_BOT_ALLOWED_CHAT_ID` | — | O **único** `chat_id` que o bot atende. Sem ela o bot não sobe. `0` é o modo de bootstrap: nenhum chat real tem id 0, então ele sobe fechado e só registra quem escreveu — é assim que você descobre o seu número (ver "Bot no Telegram"). |
 
 O banco e a pasta são criados no primeiro comando que precisa deles. Importar a CLI (ou rodar `--help`) não toca em disco — há teste garantindo isso.
 
@@ -272,6 +275,59 @@ Julius foi desenhado para custar zero. A IA existe pra fazer a curadoria que nin
 - **Nenhuma falha de IA quebra nada.** Sem chave, sem rede, resposta malformada, orçamento estourado: tudo vira "sem sugestão" e o comando segue com o caminho determinístico. `produtos comparar` distingue as três razões (não configurada / orçamento esgotado / chamada falhou) em vez de uma mensagem só.
 
 Testado com **DeepSeek** (`deepseek-flash`) — mas qualquer provedor que fale o formato `/chat/completions` serve, com uma ressalva real: se o modelo "raciocina" por padrão (thinking mode), configure `JULIUS_AI_REQUEST_EXTRAS` pra desligar isso, ou ele nunca converge (ver tabela de configuração acima).
+
+---
+
+## Bot no Telegram
+
+As mesmas perguntas da CLI, por mensagem, do celular. Você escreve em português; a IA escolhe **uma** ação de um menu fechado de catorze funções, e o **código** executa e responde — o texto que chega a você é montado do que o banco devolveu, não do que o modelo disse que aconteceu.
+
+Leitura responde na hora. **Escrita nunca acontece sozinha**: a ação só monta um preview com os nomes lidos do banco, e você toca em ✅ Confirmar. A resposta traz o comando de desfazer, como na CLI.
+
+### Instalação
+
+```bash
+make install-bot                      # instala o comando julius-bot (extra `bot`)
+```
+
+`julius` sozinho continua sem as dependências do bot — quem não usa Telegram não paga por ele.
+
+### Criar o bot
+
+Fale com o [@BotFather](https://t.me/BotFather) no Telegram, mande `/newbot`, escolha um nome e guarde o token que ele devolve.
+
+```bash
+export JULIUS_BOT_TOKEN='123456:ABC-DEF...'   # o token do @BotFather
+export JULIUS_BOT_ALLOWED_CHAT_ID=987654321   # o único chat que o bot atende
+```
+
+As variáveis `JULIUS_AI_*` (as mesmas da curadoria, **com os dois preços**) também são obrigatórias: toda mensagem passa pela IA, não existe modo determinístico. Faltando qualquer uma, `julius-bot` termina com código 2 e diz qual.
+
+### Descobrir o seu `chat_id`
+
+O bot não sobe aberto, e você ainda não sabe o seu número. O `0` resolve isso sem depender de nenhum outro bot — **nenhum chat do Telegram tem id 0**, então o bot sobe configurado e fechado, atendendo ninguém:
+
+```bash
+export JULIUS_BOT_ALLOWED_CHAT_ID=0
+julius-bot                                    # 1. sobe fechado
+# 2. mande /start para o seu bot no Telegram — ele não responde, de propósito
+# 3. no log: "mensagem ignorada de chat_id=987654321 (fora da allowlist)"
+export JULIUS_BOT_ALLOWED_CHAT_ID=987654321   # 4. exporte o número e reinicie
+julius-bot
+```
+
+### Segurança
+
+Só o `chat_id` da variável é atendido; qualquer outro recebe **silêncio** (responder "acesso negado" já confirmaria que há alguém aqui) e uma linha no log. A IA nunca executa nada — ela só propõe, e toda escrita espera um toque seu. O token fica fora do log: `httpx` é capado em `WARNING` antes do polling começar, porque em `INFO` ele imprime a URL do `getUpdates` com o token dentro.
+
+### Limitações declaradas
+
+- **Uma ação por mensagem.** Pedido com duas coisas: ele faz a primeira e avisa que a segunda vem na próxima.
+- **PC desligado = silêncio.** É long polling num computador doméstico; não há servidor. Mensagens enviadas enquanto ele estava fora **não** são respondidas na volta — indisponível é indisponível, e um "quanto custa X" respondido três dias depois é ruído.
+- A confirmação de uma escrita **expira em 5 minutos**; depois disso o toque não executa nada.
+- Só texto: sem foto de cupom, sem QR code, sem áudio.
+- O histórico do chat guarda os **3 últimos turnos** — ele não lembra da conversa de ontem.
+- O comportamento do `deepseek-flash` escolhendo ações ainda **está por confirmar no smoke real** (ver `docs/design/telegram-bot.md` §9); o desligamento do *thinking* via `JULIUS_AI_REQUEST_EXTRAS` é obrigatório, como na curadoria.
 
 ---
 
@@ -409,8 +465,9 @@ Adicionar uma migração é soltar um `.sql` novo na pasta. O backup é a rede d
 ## Desenvolvimento
 
 ```bash
-make test        # cria o .venv/ na primeira vez e roda os 540 testes (~5 s)
+make test        # cria o .venv/ na primeira vez e roda os 906 testes (~15 s)
 make install     # `julius` global via pipx, em modo editável: editar o código já vale
+make install-bot # `julius-bot` (o mesmo, com o extra `bot`: telegram + pydantic-ai)
 make uninstall
 ```
 

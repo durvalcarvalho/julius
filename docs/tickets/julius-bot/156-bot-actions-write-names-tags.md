@@ -1,5 +1,8 @@
 # 156: `bot/actions.py` — `PendingWrite`, `execute` e as escritas de nome e tag
 
+<!-- status:done implemented:2026-09-17 commit:6d3a3ae -->
+<!-- adjustments: render_pending/result usam os dataclasses sob TYPE_CHECKING, para render não carregar pydantic_ai -->
+
 > Uma ação de escrita não escreve: devolve o que **vai** acontecer, com os nomes lidos do banco. Quem escreve é `execute`, depois do tap.
 
 ## Contexto

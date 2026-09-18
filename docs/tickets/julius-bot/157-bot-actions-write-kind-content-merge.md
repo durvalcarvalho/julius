@@ -1,5 +1,8 @@
 # 157: `bot/actions.py` — tipo, conteúdo, fundir e desfundir
 
+<!-- status:done implemented:2026-09-17 commit:4850540 -->
+<!-- adjustments: unmerge checa fusão por id devolvido (merged_into não chega por services); undo refunde na raiz -->
+
 > As escritas que restam, no mesmo molde do 156: preview do banco, nada gravado até o tap, e o desfazer calculado do estado real.
 
 ## Contexto
