@@ -32,9 +32,11 @@ Toda compra de mercado gera um cupom fiscal eletrônico (NFC-e) com um QR code. 
 - **"Esse pacote de 30 ovos vale mais que o de 20?"** — preço por unidade, litro ou quilo, quando você informa o tamanho da embalagem.
 - **"Onde a banana estava mais barata?"** — cada mercado (e cada filial) tem um apelido que você escolhe.
 
+As mesmas perguntas valem **pelo Telegram**, do celular, em português corrido — com uma diferença: qualquer correção no catálogo pede um toque em ✅ antes de acontecer. Ver [Bot no Telegram](#bot-no-telegram).
+
 O que ele **não** é: não compara mercados em geral, não controla orçamento, não dá veredito automático de "caro" ou "barato". Ele mostra o histórico; quem decide é você.
 
-Funciona 100% offline, num arquivo SQLite no seu computador. Nada sai da sua máquina, a menos que você ligue a camada opcional de IA.
+Funciona 100% offline, num arquivo SQLite no seu computador. Nada sai da sua máquina, a menos que você ligue a camada opcional de IA (e, com ela, o bot).
 
 ---
 
@@ -101,6 +103,7 @@ flowchart LR
     DB -->|julius consultar| T[Tabela por unidade<br/>menor e maior destacados]
     DB -->|julius exportar| CSV[CSV para planilha]
     DB -->|julius mercados / produtos| C[Você ajusta apelidos,<br/>tags, embalagens, fusões]
+    DB -->|julius-bot| TG[As mesmas perguntas<br/>pelo Telegram]
 ```
 
 Três ideias sustentam tudo:
@@ -284,6 +287,8 @@ As mesmas perguntas da CLI, por mensagem, do celular. Você escreve em portuguê
 
 Leitura responde na hora. **Escrita nunca acontece sozinha**: a ação só monta um preview com os nomes lidos do banco, e você toca em ✅ Confirmar. A resposta traz o comando de desfazer, como na CLI.
 
+> **Para pôr no ar pela primeira vez, siga o [guia passo a passo](docs/como-testar-o-bot.md)** — instalação, `@BotFather`, variáveis, bootstrap do `chat_id` e a lista de verificações com o que esperar em cada uma. O que está aqui é a referência; lá é o roteiro.
+
 ### Instalação
 
 ```bash
@@ -305,16 +310,9 @@ As variáveis `JULIUS_AI_*` (as mesmas da curadoria, **com os dois preços**) ta
 
 ### Descobrir o seu `chat_id`
 
-O bot não sobe aberto, e você ainda não sabe o seu número. O `0` resolve isso sem depender de nenhum outro bot — **nenhum chat do Telegram tem id 0**, então o bot sobe configurado e fechado, atendendo ninguém:
+O bot não sobe aberto, e você ainda não sabe o seu número. O `0` resolve isso sem depender de nenhum outro bot: **nenhum chat do Telegram tem id 0**, então ele sobe configurado e fechado, atendendo ninguém e registrando no log quem escreveu — e é dali que você lê o seu número.
 
-```bash
-export JULIUS_BOT_ALLOWED_CHAT_ID=0
-julius-bot                                    # 1. sobe fechado
-# 2. mande /start para o seu bot no Telegram — ele não responde, de propósito
-# 3. no log: "mensagem ignorada de chat_id=987654321 (fora da allowlist)"
-export JULIUS_BOT_ALLOWED_CHAT_ID=987654321   # 4. exporte o número e reinicie
-julius-bot
-```
+Os passos exatos, com o que esperar em cada um, estão no **[guia de teste passo a passo](docs/como-testar-o-bot.md)** (passo 4). Este README descreve o que o bot é; aquele documento é o que você segue com as mãos.
 
 ### Segurança
 
@@ -335,13 +333,24 @@ Só o `chat_id` da variável é atendido; qualquer outro recebe **silêncio** (r
 
 Camadas com dependências em um só sentido — um grafo acíclico, checado por teste (`tests/test_architecture.py` falha se alguma camada importar o que não deve).
 
+`cli/` e `bot/` são duas interfaces sobre a mesma camada de serviços — **irmãs, e uma não importa a outra**. É isso que faz o que os dois precisam (formatar dinheiro, data, conteúdo) morar em `domain/formatting.py` em vez de ser copiado.
+
 ```mermaid
 flowchart TB
-    subgraph cli["cli/ — interface (Typer + rich)"]
+    subgraph cli["cli/ — interface de terminal (Typer + rich)"]
         direction LR
         c_receipts["receipts.py<br/>importar · consultar · exportar"]
         c_stores["stores.py<br/>mercados …"]
         c_products["products.py<br/>produtos …"]
+    end
+
+    subgraph bot["bot/ — interface de mensagem (Telegram + PydanticAI)"]
+        direction LR
+        b_app["app.py<br/>o único que conhece Update"]
+        b_turn["turn.py<br/>orçamento → agente → resposta/pendência"]
+        b_agent["agent.py<br/>menu fechado de 14 ações"]
+        b_actions["actions.py<br/>4 leituras · 10 escritas · execute"]
+        b_render["render.py<br/>HTML de celular · teto de 4096"]
     end
 
     subgraph services["services/ — casos de uso (devolvem dados, nunca imprimem)"]
@@ -349,8 +358,11 @@ flowchart TB
         s_importing["importing.py"]
         s_search["search.py<br/>rapidfuzz · highlight por unidade"]
         s_catalog["catalog.py<br/>renomear · fundir · tag · conteúdo · comparar"]
+        s_comparison["comparison.py<br/>preço por tipo entre mercados"]
         s_export["export.py"]
-        s_suggestions["suggestions.py<br/>orçamento + prompts"]
+        s_suggestions["suggestions.py<br/>orçamento + prompts + cobrança"]
+        s_curation["curation.py<br/>o que a IA aplica × o que pergunta"]
+        s_guidance["guidance.py<br/>dicas de uso (só a CLI usa)"]
     end
 
     subgraph repositories["repositories/ — SQL por agregado (funções que recebem conn)"]
@@ -374,6 +386,8 @@ flowchart TB
     subgraph domain["domain/ — puro, sem I/O"]
         d_models["models.py<br/>Store · Product · Receipt · PriceRecord …"]
         d_norm["normalization.py<br/>UNIT_MAP · decimais pt-BR · texto"]
+        d_basis["comparison_basis.py<br/>em que base dois preços se comparam"]
+        d_fmt["formatting.py<br/>money · datas · conteúdo (as duas interfaces)"]
     end
 
     config["config.py<br/>env → Config"]
@@ -382,6 +396,10 @@ flowchart TB
     cli --> parsers
     cli --> infra
     cli --> config
+    bot --> services
+    bot --> infra
+    bot --> config
+    bot --> domain
     services --> repositories
     services --> parsers
     services --> infra
@@ -402,7 +420,10 @@ flowchart TB
 | `parsers/` | Transformar o HTML de um estado num `Receipt` já normalizado. | `domain` |
 | `repositories/` | SQL de um agregado. Sem regra de negócio. | `domain` |
 | `services/` | Casos de uso: orquestram parser + repositórios, aplicam as regras. | tudo acima |
-| `cli/` | Traduzir argumentos em chamadas de serviço e dados em tabelas. É o *composition root*: o único lugar que instancia o parser e o cliente de IA concretos. | `services`, `parsers`, `infra`, `config`, `domain` |
+| `cli/` | Traduzir argumentos em chamadas de serviço e dados em tabelas `rich`. É um *composition root*: instancia o parser e o cliente de IA concretos. | `services`, `parsers`, `infra`, `config`, `domain` |
+| `bot/` | Traduzir uma mensagem de Telegram numa escolha de ação da IA, executar em código e responder em HTML. O outro *composition root*. **Sem `parsers`** (não lê recibo) e **sem `repositories`** (o SQL é dos serviços). | `services`, `infra`, `config`, `domain` |
+
+Ninguém importa `cli/` nem `bot/`: são as folhas do grafo, e elas não se conhecem. Um teste garante que `import julius.cli` não carrega `telegram` nem `pydantic-ai` — quem só usa o terminal não paga pelo bot.
 
 ### Decisões que explicam a forma do código
 
@@ -465,7 +486,7 @@ Adicionar uma migração é soltar um `.sql` novo na pasta. O backup é a rede d
 ## Desenvolvimento
 
 ```bash
-make test        # cria o .venv/ na primeira vez e roda os 906 testes (~15 s)
+make test        # cria o .venv/ na primeira vez e roda os 908 testes (~18 s)
 make install     # `julius` global via pipx, em modo editável: editar o código já vale
 make install-bot # `julius-bot` (o mesmo, com o extra `bot`: telegram + pydantic-ai)
 make uninstall
@@ -522,7 +543,13 @@ Fixtures são só o `.html` — nunca a pasta `_files/` que o navegador salva ju
 - `mercados comparar` só enxerga grupos comprados em dois mercados; sem tipo atribuído, não há o que comparar.
 - Sem cache de respostas de IA (de propósito — a solução durável é corrigir o dado, não lembrar a resposta antiga).
 
+**No bot**
+
+- **Implementado e ainda não verificado contra o modelo de verdade.** Os 908 testes passam com um modelo falso; se o `deepseek-flash` escolhe as ações com confiabilidade é o que o [guia de teste](docs/como-testar-o-bot.md) responde. Até lá, nada aqui afirma esse comportamento.
+- Uma ação por mensagem; PC desligado é silêncio, e o que chegou enquanto ele estava fora não é respondido na volta; só texto (sem foto nem QR); memória de 3 turnos; confirmação expira em 5 minutos.
+- As dicas de uso (`guidance`) não aparecem no bot: quando uma busca vem vazia ele diz "Nenhum resultado." sem o "parecidos: …" que a CLI dá. Os textos vivem em `cli/_hints.py`; trazê-los exigiria movê-los para `domain/`, como foi feito com os formatadores.
+
 **Evoluções plausíveis** (nenhuma prometida)
 
 - Parsers para outros estados, com seleção automática pelo HTML.
-- Um bot (Telegram) recebendo o HTML e chamando os mesmos serviços — a CLI foi feita para ser *uma* interface, não a única.
+- Mandar a **foto do cupom** (ou do QR code) para o bot. São três coisas diferentes por baixo — o canal já existe, mas ler um QR só dá a URL que tem captcha, e OCR de cupom impresso é um pipeline inteiramente outro.

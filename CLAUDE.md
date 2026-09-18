@@ -8,9 +8,9 @@ Não é uma ferramenta de comparação entre mercados em geral nem de controle d
 
 ## Status
 
-Fase: **v2.6 implementada** — o bot no Telegram, tickets 150–162 de `docs/tickets/julius-bot/`, um commit por ticket, sem migração (parágrafo próprio abaixo). Antes dela vieram a v2.4, a v2.5 e a v2.5.1, depois dos 36 tickets da v2: a v2.5 é a nomeação automática de mercado e a v2.5.1 a data legível, as duas sem ticket numerado em `docs/tickets/` e sem migração — ver abaixo. Em paralelo, os tickets 147–148 entregaram o **RF0** da frente "nenhuma comparação sem os dois nomes" (coluna "Produto" no `mercados comparar`, nome do produto batido no sinal do `importar`); o RF1 e o RF2 dessa frente seguem abertos por decisão do próprio design (`docs/design/differentiated-kinds.md` §7). Os 36 tickets de `docs/tickets/julius-v2/` estão feitos (101–114 da v2, 115–116 da v2.1, 117–130 da v2.2, 131–136 da v2.3), um commit por ticket. Somando tudo: **906 testes verdes** (`.venv/bin/pytest -q`), nenhum `NotImplementedError`, nenhum identificador em português. Provedor de IA: DeepSeek, modelo `deepseek-flash`, `thinking` desligado via `JULIUS_AI_REQUEST_EXTRAS='{"thinking":{"type":"disabled"}}'` (sem isso o modelo raciocina em vez de responder — ver "Fatos e pegadinhas"). Orçamento US$5/mês.
+Fase: **v2.6 implementada** — o bot no Telegram, tickets 150–162 de `docs/tickets/julius-bot/`, um commit por ticket, sem migração (parágrafo próprio abaixo). Antes dela vieram a v2.4, a v2.5 e a v2.5.1, depois dos 36 tickets da v2: a v2.5 é a nomeação automática de mercado e a v2.5.1 a data legível, as duas sem ticket numerado em `docs/tickets/` e sem migração — ver abaixo. Em paralelo, os tickets 147–148 entregaram o **RF0** da frente "nenhuma comparação sem os dois nomes" (coluna "Produto" no `mercados comparar`, nome do produto batido no sinal do `importar`); o RF1 e o RF2 dessa frente seguem abertos por decisão do próprio design (`docs/design/differentiated-kinds.md` §7). Os 36 tickets de `docs/tickets/julius-v2/` estão feitos (101–114 da v2, 115–116 da v2.1, 117–130 da v2.2, 131–136 da v2.3), um commit por ticket. Somando tudo: **908 testes verdes** (`.venv/bin/pytest -q`), nenhum `NotImplementedError`, nenhum identificador em português. Provedor de IA: DeepSeek, modelo `deepseek-flash`, `thinking` desligado via `JULIUS_AI_REQUEST_EXTRAS='{"thinking":{"type":"disabled"}}'` (sem isso o modelo raciocina em vez de responder — ver "Fatos e pegadinhas"). Orçamento US$5/mês.
 
-Ambiente: `make install` instala `julius` global via `pipx install --editable .` (aponta pro código do diretório — editar ou trocar de branch já vale, sem reinstalar; rode de novo só se o `pyproject.toml` mudar). `make test` cria o `.venv/` na primeira vez e roda o pytest. `make uninstall` remove.
+Ambiente: `make install` instala `julius` global via `pipx install --editable .` (aponta pro código do diretório — editar ou trocar de branch já vale, sem reinstalar; rode de novo só se o `pyproject.toml` mudar). `make install-bot` faz o mesmo com o extra `bot`, e é o que deixa o executável `julius-bot` disponível. `make test` cria o `.venv/` na primeira vez e roda o pytest. `make uninstall` remove. **O `.venv` desta máquina é Python 3.14**; se `VIRTUAL_ENV` estiver exportado apontando para outro projeto, `python3 -m venv` do Makefile pega o interpretador errado — use `env -u VIRTUAL_ENV /usr/bin/python3` ao recriar o `.venv` do zero.
 
 **v1.1 (módulo de dicas de uso)** — tickets 015 e 016 (v1). Nasceu do primeiro uso real (`consultar` num banco vazio dizia só "Nenhum resultado."). Ver "Dicas de uso (`guidance`)"; a única diferença em relação ao design original está registrada lá (`closest_names` compara palavra a palavra, não por faixa de WRatio).
 
@@ -50,6 +50,8 @@ Ambiente: `make install` instala `julius` global via `pipx install --editable .`
 
 **O que a camada de serviços ensinou ao bot, e não o contrário.** `catalog.get_product` resolve para a **raiz do grupo**, então `Product.merged_into` nunca chega preenchido por `services` — a pré-checagem que o ticket do `unmerge_product` pedia é impossível sem furar a DAG. A pergunta é respondida dentro da camada pedindo por id e comparando o que volta: **id diferente é a fusão**. Duas consequências medidas, as duas mais seguras do que o desenho supunha: um **ciclo de fusão não pode nem ser proposto** (resolver o id absorvido devolve a raiz, então os dois lados voltam iguais e a ação recusa antes do serviço), e **desfundir por nome não pode errar de linha** (depois da fusão o grupo mostra um nome só). Limite anotado no código: o `undo` do desfundir refunde na **raiz**, que é o pai direto de toda fusão feita em um passo; numa cadeia `A→B→C` montada à mão ele poria A sob C — mesmo grupo, nada visível muda, mas um desfundir posterior de B não levaria A junto. Reversão exata exigiria o pai direto, que nenhum serviço expõe.
 
+**Onde está o que, na v2.6:** contrato e decisões em `docs/design/telegram-bot.md` (§9.1/§9.2 guardam o que a implementação descobriu contra o que o design supunha); tickets em `docs/tickets/julius-bot/`, cada um com o commit no bloco `<!-- status:done … -->`; **roteiro de teste manual em `docs/como-testar-o-bot.md`** — é ele que fecha a v2.6, e o resultado volta para o §9.1 do design.
+
 **Regra de teste que a v2.6 tornou obrigatória:** nenhum teste fala com um modelo de verdade — `pydantic_ai.models.ALLOW_MODEL_REQUESTS = False` é `autouse` no `conftest`, irmão do `_no_cnpj_lookup`, e o roteamento é sempre `FunctionModel`. Expiração é testada por `now` injetado, **nunca** por `time.sleep`. O turno inteiro (texto e toque) é exercitado sem `python-telegram-bot`: só `bot/app.py` sabe o que é um `Update`.
 
 **O que só a rodada real pode confirmar** (lista em `docs/tickets/julius-bot/162-bot-e2e-docs.md`, resultado a anotar em `docs/design/telegram-bot.md` §9): se o `deepseek-flash` **escolhe ação** de forma confiável com catorze opções, e se o `extra_body` de fato desliga o *thinking* no caminho do PydanticAI — a assinatura da falha é a mesma de 15/09: `output_tokens` na casa dos milhares em vez de dezenas. Nada no `README` ou aqui afirma esse comportamento antes disso.
@@ -63,7 +65,9 @@ Resolvido nesta fase (ver "Requisitos novos" para o texto original):
 Ainda em aberto (questões de gosto, não bugs):
 - Empates de preço em `consultar`: todas as linhas com o menor/maior preço são mantidas mesmo fora de `--limite` (honesto, mas com 4 preços iguais a tabela cresce). Ajustar se incomodar.
 
-Próximo passo sugerido: rodar `julius importar` (sem argumento, varre a pasta de entrada) para o backfill do endereço e `julius produtos revisar` para curar o catálogo acumulado; depois, usar de verdade por mais algumas semanas antes de cogitar v3 (outros estados, Telegram). **Atenção desde a v2.2:** o import continua idempotente *no banco*, mas não no sistema de arquivos — todo HTML importado com sucesso é **movido** para `entrada/importados/`. Hoje `~/.local/share/julius/entrada/` ainda tem `qrcode-4.html` e `qrcode-5.html` (os cupons com `Gf`/`PC` reservados como fixture futuro de regressão do mapa de unidade); eles serão importados e realocados nessa primeira rodada. Reimportar um arquivo já arquivado é seguro (nada é apagado), mas se quiser manter esses dois fora do fluxo, tire-os da pasta antes.
+**Próximo passo, e é um só: rodar o smoke do bot.** `docs/como-testar-o-bot.md` é o roteiro passo a passo (dono: o usuário). Ele é o que decide se a v2.6 está pronta ou não — os 908 testes passam com `FunctionModel`, e **nenhuma chamada real ao modelo jamais passou por este código**. As duas perguntas abertas são se o `deepseek-flash` escolhe ação de forma confiável com catorze opções e se o `extra_body` desliga o *thinking* pelo caminho do PydanticAI; o resultado vai para `docs/design/telegram-bot.md` §9.1. Enquanto isso não acontecer, nem o README nem este documento afirmam esse comportamento — e **nada de v3 (outros estados, foto/OCR) antes disso**.
+
+**Pendente desde antes da v2.6, e continua valendo:** rodar `julius importar` (sem argumento, varre a pasta de entrada) para o backfill do endereço e `julius produtos revisar` para curar o catálogo acumulado. Estado medido em 18/09/2026: o banco real tem **105 produtos, 132 preços, 5 mercados**, `~/.local/share/julius/entrada/` tem `qrcode-2.html`, `qrcode-3.html` e `qrcode-4.html` esperando, e `entrada/importados/` está **vazia** — ou seja, o `importar` sem argumento nunca rodou. (`qrcode-5.html` saiu da pasta em algum momento; `qrcode-4.html` é o cupom com `Gf`/`PC`, reservado como fixture futuro de regressão do mapa de unidade.) **Atenção desde a v2.2:** o import continua idempotente *no banco*, mas não no sistema de arquivos — todo HTML importado com sucesso é **movido** para `entrada/importados/`. Reimportar um arquivo já arquivado é seguro (nada é apagado), mas se quiser manter o `qrcode-4.html` fora do fluxo, tire-o da pasta antes.
 
 ## Convenções de código (regra dura, veio de irritação real do usuário)
 
@@ -482,9 +486,12 @@ julius/
 │   ├── stores.py · products.py (skus, tags, conteúdo) · prices.py · ai_usage.py     (tickets)
 ├── services/                 # L3 · casos de uso; devolvem dados, nunca imprimem
 │   ├── importing.py · search.py · catalog.py · export.py · suggestions.py           (tickets)
-└── cli/                      # L4 · Typer; só chama services e formata com rich
-    ├── __init__.py           #      app + callback raiz (nenhuma conexão aberta em import)
-    └── receipts.py · stores.py · products.py                                          (tickets)
+├── cli/                      # L4 · Typer; só chama services e formata com rich
+│   ├── __init__.py           #      app + callback raiz (nenhuma conexão aberta em import)
+│   └── receipts.py · stores.py · products.py                                          (tickets)
+└── bot/                      # L4 (v2.6) · irmão de cli/, não o importa nem é importado
+    ├── app.py                #      o único módulo que conhece Update/Telegram
+    ├── turn.py · agent.py · actions.py · render.py
 ```
 
 **Adições de v1.1 e v2** (a árvore acima é a original do design v1; ficou como registro histórico em vez de reescrita):
@@ -583,6 +590,8 @@ julius produtos definir-conteudo ID [QTD UNIDADE] [--remover]
 julius produtos comparar ID_A ID_B
 julius produtos revisar [--sim] [--ultimas-acoes]   # --sim: não perguntar nada
 ```
+
+`julius-bot` **(v2.6)** é um executável separado, não um subcomando: não aceita argumento nenhum, lê tudo de variável de ambiente e fica em long polling até Ctrl+C. Ver o parágrafo da v2.6 e `docs/como-testar-o-bot.md`.
 
 Nomes de comando em português (são UI); cada um mapeia pra uma função em inglês em `julius/cli/*.py` via `@app.command("importar")`. Todo comando abre a conexão com `infra.db.connect(config.load().db_path)` **dentro do handler** — nunca em import. Um comando só é registrado quando o serviço que ele chama existe (sem stub `NotImplementedError` exposto).
 
