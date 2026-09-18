@@ -1,0 +1,22 @@
+docs/tickets/julius-bot/index.md
+  s_2696c997dae14b::t_fdf7be4f6b1279 49
+  s_2696c997dae14b::t_6f7495513c34d3 4
+docs/tickets/julius-bot/153-bot-packaging-dag-guards.md
+  s_2696c997dae14b::t_fdf7be4f6b1279 3-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "16d770657b6e52aa6945887ab039993e79ec9c82",
+  "prompts": {},
+  "sessions": {
+    "s_2696c997dae14b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47bd6331-591b-4f18-a95a-1c9c00a35931",
+        "model": "claude-opus-5"
+      },
+      "human_author": null
+    }
+  }
+}
