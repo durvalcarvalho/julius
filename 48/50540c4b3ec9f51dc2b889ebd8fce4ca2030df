@@ -1,0 +1,24 @@
+julius/bot/actions.py
+  s_2696c997dae14b::t_d57a1f5c56b147 20-21,328-440,442,445-446,448,459-460,463-529,531,538,541-543,549-554,570-583
+  s_2696c997dae14b::t_244e34be56ecc9 441,443-444,447,449-458,461-462,530,532-537,539-540
+tests/test_bot_actions_write.py
+  s_2696c997dae14b::t_c9a3a176fe22ef 9,52,110,118-122,260,262-367,371-375,381-383,385-386,388,391-392,404-411,413-414,416,433-441
+  s_2696c997dae14b::t_a761bdc85d8c5d 368-370,389-390,403,412,415,417-418,428,430
+  s_2696c997dae14b::t_ef244fe30b971e 376-380,384,387,393-402,419-427,429,431-432
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4850540c4b3ec9f51dc2b889ebd8fce4ca2030df",
+  "prompts": {},
+  "sessions": {
+    "s_2696c997dae14b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47bd6331-591b-4f18-a95a-1c9c00a35931",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
