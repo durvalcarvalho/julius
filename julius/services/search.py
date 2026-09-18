@@ -127,7 +127,7 @@ def catalog_for_matching(conn: sqlite3.Connection) -> list[tuple[int, str, tuple
 def closest_names(conn: sqlite3.Connection, term: str, limit: int = 3) -> list[tuple[str, int]]:
     """Names that search_prices would NOT match but have one word close to the term, best first."""
     normalized_term = normalize_text(term)
-    matched = _matching_ids(conn, term)
+    matched = matching_product_ids(conn, term)
     scores: dict[str, int] = {}
     for product_id, name in products.product_names(conn):
         if product_id in matched:
@@ -152,7 +152,7 @@ def _name_score(term_words: Sequence[str], name_words: Sequence[str]) -> float:
     )
 
 
-def _matching_ids(conn: sqlite3.Connection, term: str) -> set[int]:
+def matching_product_ids(conn: sqlite3.Connection, term: str) -> set[int]:
     term_words = normalize_text(term).split()
     return {
         product_id
@@ -164,7 +164,7 @@ def _matching_ids(conn: sqlite3.Connection, term: str) -> set[int]:
 def _candidate_ids(conn: sqlite3.Connection, term: str | None, tag: str | None) -> set[int]:
     ids: set[int] | None = None
     if term is not None:
-        ids = _matching_ids(conn, term)
+        ids = matching_product_ids(conn, term)
     if tag is not None:
         tagged = set(products.product_ids_with_tag(conn, tag.strip().lower()))
         ids = tagged if ids is None else ids & tagged
