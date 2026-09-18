@@ -16,6 +16,9 @@ ALLOWED_IMPORTS = {
     "services": {"domain", "config", "infra", "parsers", "repositories"},
     # cli is the composition root: it instantiates the concrete parser and passes it to services.
     "cli": {"domain", "config", "infra", "parsers", "services"},
+    # bot is the other composition root, a sibling of cli that neither imports nor is imported by it.
+    # No parsers (it never reads a receipt) and no repositories (services own the SQL).
+    "bot": {"domain", "config", "infra", "services"},
 }
 
 

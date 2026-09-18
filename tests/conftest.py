@@ -30,6 +30,15 @@ def _clean_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_model_requests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nenhum teste fala com um modelo de verdade — irmão de _no_cnpj_lookup. O import é local
+    para nada fora de julius/bot/ carregar pydantic_ai no nível do módulo."""
+    from pydantic_ai import models
+
+    monkeypatch.setattr(models, "ALLOW_MODEL_REQUESTS", False)
+
+
+@pytest.fixture(autouse=True)
 def _no_cnpj_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
     """Nenhum teste consulta o registro de CNPJ de verdade: dar apelido a um mercado não pode
     depender da rede numa rodada de teste. Um teste que queira uma resposta substitui isto."""
