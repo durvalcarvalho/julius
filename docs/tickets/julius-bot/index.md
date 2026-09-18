@@ -106,6 +106,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a global do 
 > Gerado a partir de: o design "voz do Julius no bot (v2.7)" combinado em chat na sessão de 2026-09-18 (brainstorm → design, sem documento de design próprio ainda — o ticket 169 decide se um nasce em `docs/design/`), reagindo ao caso real do screenshot de 2026-09-18 16:09 (busca de preço respondida como tabela de log, sem personagem).
 > Gerado em: 2026-09-18 · Estado do código **na geração**: commit `5e6d412` (162 fechado), working tree com um protótipo descartado (ver nota abaixo) e `persona-julius-rock.md` não rastreado na raiz.
 > **Antes de começar o 163**: descarte o protótipo em `julius/bot/{actions,app,render,turn}.py`, `julius/services/suggestions.py` e os três `tests/test_bot_*`/`test_services_suggestions.py` (`git checkout -- <arquivos>` ou `git stash`) — ele não segue o corte Modo A/B nem o ponto único `narrate` que esta trilha define, e implementar por cima dele reabriria a mesma discussão de design.
+> **Trilha implementada em 2026-09-18**: 163–169 feitos, um commit por ticket, **949 testes verdes**. Achado real durante a implementação (não no smoke): `asyncio.to_thread(suggestions.narrate, deps.conn, ...)` quebra porque `sqlite3.Connection` não atravessa thread — corrigido no 167, chamando `narrate()` direto; ver `<!-- adjustments -->` no topo do ticket 167. Falta só o **smoke real** (dono: o usuário), roteiro em `docs/como-testar-o-bot.md` passos 16–20 — é ele que confirma se os cortes `NARRATE_FULL_MAX_RECORDS`/`NARRATE_FULL_MAX_GROUPS` (chute, não medição) e o tom da persona funcionam contra o `deepseek-flash` de verdade.
 
 ### Visão geral
 
@@ -132,7 +133,7 @@ Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo
 | 166 | [`Deps.client` + fiação](166-deps-client-wiring.md) | — | S | **feito** (`650c261`) | `Deps.client`, `HttpLlmClient` em `build_application`/`on_text` |
 | 167 | [`turn.py` — leituras](167-turn-narration-reads.md) | 163, 164, 165, 166 | M | **feito** | Modo A/B nas 4 leituras, `_narrate`, cortes de tamanho — achado: `asyncio.to_thread` quebra com `sqlite3` (ver ticket) |
 | 168 | [`turn.py` — escrita](168-turn-narration-writes.md) | 163, 166 | M | **feito** | comentário em `PendingWrite`/`WriteResult`/`WriteFailed`, `client` em `on_tap` |
-| 169 | [docs + smoke](169-docs-and-smoke.md) | 167, 168 | S | pendente | `CLAUDE.md` v2.7, roteiro de smoke, destino de `persona-julius-rock.md` |
+| 169 | [docs + smoke](169-docs-and-smoke.md) | 167, 168 | S | **feito** | `CLAUDE.md` v2.7, roteiro de smoke (passos 16–20), `julius-rock-persona.md` movido para `docs/requirements/` |
 
 ### Dependências e caminho crítico
 

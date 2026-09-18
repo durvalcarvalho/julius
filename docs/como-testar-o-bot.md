@@ -281,6 +281,50 @@ jq -s 'map(select(.call_kind=="bot_turn")) | {chamadas: length, custo_total: (ma
 
 ---
 
+## Passo 16 — A voz do Julius numa busca pequena
+
+Depois da v2.7 (`narrate()`, tickets 163–168), uma busca com poucos resultados não deve mais vir como tabela. Pergunte de novo por algo com poucas compras (idealmente 1–6 linhas, o corte de `NARRATE_FULL_MAX_RECORDS` em `julius/bot/turn.py`):
+
+```
+quanto paguei de banana?
+```
+
+**Esperado:** 1–3 frases, sem `<pre>`, sem ▼/▲, no tom direto e "preço na ponta da língua" do personagem. Confira `ai_calls.jsonl`: duas linhas novas por mensagem (`bot_turn` do roteamento + `persona` da narração).
+
+```bash
+jq -s 'map(select(.call_kind=="persona"))[-1] | {reply: (.raw_response | fromjson? // .raw_response), custo: .cost_usd, latencia_ms: .latency_ms}' ~/.local/share/julius/ai_calls.jsonl
+```
+
+## Passo 17 — Um resultado grande (Modo B)
+
+Pergunte por algo com muitas compras, ou compare mercados se o catálogo tiver mais de 3 tipos comparáveis (`NARRATE_FULL_MAX_GROUPS`):
+
+```
+quais mercados são mais baratos?
+```
+
+**Esperado:** um comentário curto **em cima** da tabela de sempre, não no lugar dela — a tabela continua idêntica ao que já existia antes da v2.7.
+
+## Passo 18 — Derrubar a IA de propósito
+
+Isso testa o critério mais importante da trilha inteira: **a resposta nunca pode voltar a ser a tabela crua da screenshot que abriu esta frente.**
+
+```bash
+export JULIUS_AI_BUDGET_USD=0
+```
+
+Reinicie o bot e repita o passo 16. **Esperado:** uma frase determinística (`search_fallback_line`, sem chamar a IA — confira que não aparece linha nova em `ai_calls.jsonl`), nunca a tabela. Depois, restaure `JULIUS_AI_BUDGET_USD` para o valor de sempre e reinicie de novo.
+
+## Passo 19 — Uma escrita com comentário
+
+Repita os passos 10–11 (o preview e o toque de confirmar). **Esperado:** o preview (`⚠️ Confirmar?`) e o resultado (`✅ ...`) ganham uma frase de comentário antes — mas o comando de desfazer dentro de `<code>...</code>` continua exatamente igual, copiável e executável sem erro. Cole o comando na CLI e confira que funciona.
+
+## Passo 20 — Achado qualitativo
+
+Sem métrica pra isso — é leitura sua. Anote em `CLAUDE.md` (parágrafo v2.7): a persona soou como o personagem, ou como um chatbot educado demais? Os cortes de tamanho dos passos 16/17 pareceram baixos, altos, ou razoáveis pro seu catálogo real?
+
+---
+
 ## Onde anotar o resultado
 
 Abra `docs/design/telegram-bot.md`, seção **§9.1**, e escreva o que aconteceu — principalmente:
@@ -289,6 +333,7 @@ Abra `docs/design/telegram-bot.md`, seção **§9.1**, e escreva o que aconteceu
 2. `output_tokens` típico e `latency_ms` típico (passo 9).
 3. O nome do modelo que funcionou (passo 14).
 4. Custo de ~12 mensagens (passo 15).
+5. **v2.7**: a persona soou como o Julius, os cortes de tamanho couberam no seu catálogo, e o fallback sem IA nunca voltou a ser a tabela crua (passos 16–20).
 
 Se o prompt precisar de ajuste, ele está em `julius/bot/agent.py` (`SYSTEM_PROMPT`), versionado em `BOT_PROMPT_VERSION` — **suba a versão ao mexer no texto**, é a disciplina que o projeto já aplica aos prompts da curadoria.
 

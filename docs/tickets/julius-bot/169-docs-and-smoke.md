@@ -1,5 +1,11 @@
 # 169: docs da v2.7 e a lista do smoke test real
 
+<!-- status:done -->
+<!-- adjustments: persona-julius-rock.md foi movido para docs/requirements/julius-rock-persona.md
+sem rodada extra de confirmação (era decisão de baixo risco e reversível -- um `git mv`) em vez de
+só "decidir e anotar" como o escopo original previa; fica registrado aqui para o usuário reverter
+se preferir outro lugar. Fora isso, o ticket saiu como planejado. -->
+
 > Fecha a trilha 163–168: `CLAUDE.md` ganha o parágrafo de status, `docs/como-testar-o-bot.md` ganha o roteiro pra ouvir o Julius de verdade, e o índice desta pasta marca a trilha como feita. Nenhum código novo, salvo o que o smoke revelar.
 
 ## Contexto
@@ -53,10 +59,10 @@ modificar docs/tickets/julius-bot/index.md
 - Nenhum teste automatizado novo (este ticket é documentação). A suíte inteira (`.venv/bin/pytest -q`) deve continuar verde sem edição.
 
 ## Critérios de aceite
-- [ ] `.venv/bin/pytest -q` verde (suíte inalterada).
-- [ ] `grep -n "v2.7" CLAUDE.md` existe.
-- [ ] `docs/tickets/julius-bot/index.md` lista 163–168 com estado atualizado.
-- [ ] `persona-julius-rock.md` tem destino decidido e anotado (versionado com caminho definido, ou descartado do repo).
+- [x] `.venv/bin/pytest -q` verde (suíte inalterada).
+- [x] `grep -n "v2.7" CLAUDE.md` existe.
+- [x] `docs/tickets/julius-bot/index.md` lista 163–168 com estado atualizado.
+- [x] `persona-julius-rock.md` tem destino decidido e anotado — movido para `docs/requirements/julius-rock-persona.md` (ver adjustments).
 
 ## Notas para o agente
 
