@@ -1,0 +1,68 @@
+docs/design/telegram-bot.md
+  s_b1837f81e1080d::t_5592dc56a04cd0 1-228
+docs/tickets/julius-bot/152-suggestions-record-usage.md
+  s_b1837f81e1080d::t_15f3803aa2cb99 1-84
+docs/tickets/julius-bot/154-bot-render.md
+  s_b1837f81e1080d::t_3fcf6c5ce154f2 1-93
+docs/requirements/messaging-bot-integration.md
+  s_b1837f81e1080d::t_0926b255820bc4 54-56,66-68
+  s_b1837f81e1080d::t_34d75b84f68a71 1-3,6-18,23-31,34-36,41-48,51-53,57-65
+  s_b1837f81e1080d::t_ddfae63b3f3514 4-5
+  s_b1837f81e1080d::t_c5bd3e4dbcfe3c 49-50
+  s_b1837f81e1080d::t_a06099673f3994 19-22
+  s_b1837f81e1080d::t_ed6e42e6c36b16 32-33,37-40
+claudedocs/design_command_messaging_bot_20260917.md
+  s_b1837f81e1080d::t_17ab593a4d0fab 1-25
+docs/tickets/julius-bot/161-bot-app-entrypoint.md
+  s_b1837f81e1080d::t_f805cc4c7cd674 77
+  s_b1837f81e1080d::t_f3bab9ba876f06 33-34
+  s_b1837f81e1080d::t_93267885b5b8e0 1-32,35-41,43-76,78-94
+  s_b1837f81e1080d::t_ce2779155b4718 42
+claudedocs/research_bot_stack_libraries_20260917.md
+  s_b1837f81e1080d::t_d3e804aa5e0ae1 1-105
+docs/tickets/julius-bot/160-bot-turn-tap.md
+  s_b1837f81e1080d::t_40fbb153753ff9 1-83
+claudedocs/research_messaging_bot_integration_20260917.md
+  s_b1837f81e1080d::t_54c3a0e0fb7074 1-94
+docs/tickets/julius-bot/162-bot-e2e-docs.md
+  s_b1837f81e1080d::t_6607b8f50c7877 36
+  s_b1837f81e1080d::t_08c8a9f66a4263 1-35,37-73,75-86
+  s_b1837f81e1080d::t_ac5e32368adde4 74
+docs/tickets/julius-bot/index.md
+  s_b1837f81e1080d::t_3bca7c8fa3c261 1-99
+docs/tickets/julius-bot/150-domain-formatting.md
+  s_b1837f81e1080d::t_736865cf39eb18 1-73
+docs/tickets/julius-bot/156-bot-actions-write-names-tags.md
+  s_b1837f81e1080d::t_1715c18c6e1f06 1-115
+docs/tickets/julius-bot/158-bot-agent.md
+  s_b1837f81e1080d::t_8b562ed217d946 1-98
+docs/tickets/julius-bot/153-bot-packaging-dag-guards.md
+  s_b1837f81e1080d::t_519b95bc8f36e9 1-79
+docs/tickets/julius-bot/151-config-bot-settings.md
+  s_b1837f81e1080d::t_820bd0debbbbba 1-30,32-54,56-66
+  s_b1837f81e1080d::t_c169a47ed438d6 31
+  s_b1837f81e1080d::t_d405d3301edc41 55
+docs/tickets/julius-bot/155-bot-actions-read.md
+  s_b1837f81e1080d::t_934fdd495ba4b8 1-97,99-123
+  s_b1837f81e1080d::t_5ddf321c21c5a7 98
+docs/tickets/julius-bot/157-bot-actions-write-kind-content-merge.md
+  s_b1837f81e1080d::t_496b81530948f0 1-88
+docs/tickets/julius-bot/159-bot-turn-text.md
+  s_b1837f81e1080d::t_3b781235e675dd 1-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b3b25c2110d9f65a5057e2d60fcc47bfc4852a07",
+  "prompts": {},
+  "sessions": {
+    "s_b1837f81e1080d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "32941031-4c15-4afd-aea3-f4bba4212499",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
