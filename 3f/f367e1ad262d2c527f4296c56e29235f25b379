@@ -1,0 +1,31 @@
+docs/tickets/julius-bot/169-docs-and-smoke.md
+  s_703528d2945188::t_dfc0d42a12f7f4 62-65
+  s_703528d2945188::t_9abacf2f4fe7e2 3-8
+docs/como-testar-o-bot.md
+  s_703528d2945188::t_d5b5da462f0236 336
+  s_703528d2945188::t_bfa2e303e89198 284-327
+CLAUDE.md
+  s_703528d2945188::t_2915f2bcd76820 55-66
+  s_703528d2945188::t_2d1200ed5232f4 11
+docs/tickets/julius-bot/index.md
+  s_703528d2945188::t_6033f49bbfa18e 136
+  s_703528d2945188::t_f64ad57ef34aba 109
+docs/requirements/julius-rock-persona.md
+  s_703528d2945188::t_7a057f6ff140fd 1-160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3ff367e1ad262d2c527f4296c56e29235f25b379",
+  "prompts": {},
+  "sessions": {
+    "s_703528d2945188": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6995d6b-ed00-47d8-9d91-ba6b5ed6e563",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
