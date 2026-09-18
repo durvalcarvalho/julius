@@ -1,0 +1,23 @@
+CLAUDE.md
+  s_2696c997dae14b::t_29bea611d6eaa7 11
+julius/bot/app.py
+  s_2696c997dae14b::t_0fdea981c23063 24,46-53,149-151
+tests/test_bot_app.py
+  s_2696c997dae14b::t_0fdea981c23063 119,126-140,152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "811a69d6ca6fd032da018969264977f09c8f1965",
+  "prompts": {},
+  "sessions": {
+    "s_2696c997dae14b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47bd6331-591b-4f18-a95a-1c9c00a35931",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
