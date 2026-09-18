@@ -1,0 +1,25 @@
+docs/como-testar-o-bot.md
+  s_703528d2945188::t_b419f1f30ff7f2 284
+CLAUDE.md
+  s_703528d2945188::t_287cf5796ed554 69-80
+docs/tickets/julius-bot/index.md
+  s_703528d2945188::t_faaa7b5f4587f1 166
+  s_703528d2945188::t_9e405e14c6eb3e 200-203
+  s_703528d2945188::t_9ee55adcbdedfa 181-185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "41386afa42d0ab8ed8fd2943e304969d21599234",
+  "prompts": {},
+  "sessions": {
+    "s_703528d2945188": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6995d6b-ed00-47d8-9d91-ba6b5ed6e563",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
