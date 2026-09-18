@@ -98,3 +98,59 @@ Trilha única (o projeto não tem frontend). A numeração continua a global do 
 3. **`HISTORY_TURNS = 3`** (159): número escolhido pelo custo de tokens, sem medição de uso. Ajustar quando `ai_calls.jsonl` mostrar o custo real por turno.
 4. **Bootstrap por `0`** (151/161): resolve a circularidade "não sobe sem allowlist" × "descobre o id pelo log" sem terceiro. Se o usuário preferir `@userinfobot`, nada muda no código — só no README.
 5. **`words` no `query_log.jsonl` do bot** (159): é `term_used.split()`, não o que o usuário digitou (a IA extraiu). Registrado para quem for recalibrar cortes com esse log: filtre por `channel`.
+
+---
+
+## Trilha v2.7 — a voz do Julius
+
+> Gerado a partir de: o design "voz do Julius no bot (v2.7)" combinado em chat na sessão de 2026-09-18 (brainstorm → design, sem documento de design próprio ainda — o ticket 169 decide se um nasce em `docs/design/`), reagindo ao caso real do screenshot de 2026-09-18 16:09 (busca de preço respondida como tabela de log, sem personagem).
+> Gerado em: 2026-09-18 · Estado do código **na geração**: commit `5e6d412` (162 fechado), working tree com um protótipo descartado (ver nota abaixo) e `persona-julius-rock.md` não rastreado na raiz.
+> **Antes de começar o 163**: descarte o protótipo em `julius/bot/{actions,app,render,turn}.py`, `julius/services/suggestions.py` e os três `tests/test_bot_*`/`test_services_suggestions.py` (`git checkout -- <arquivos>` ou `git stash`) — ele não segue o corte Modo A/B nem o ponto único `narrate` que esta trilha define, e implementar por cima dele reabriria a mesma discussão de design.
+
+### Visão geral
+
+Toda resposta de leitura do bot (busca, comparação, listagens de produto/mercado) passa a poder soar como o Julius Rock, narrada por uma segunda chamada de IA (`services/suggestions.py::narrate`, ticket 163) sobre fatos já calculados pelo banco — nunca por cima de dado que a IA inventou. Resultados pequenos (busca ≤6 registros, comparação ≤3 grupos — Modo A) trocam a tabela inteira por uma frase; resultados maiores e as listagens (Modo B) ganham só um comentário por cima da tabela de sempre. As três confirmações de escrita (`PendingWrite`/`WriteResult`/`WriteFailed`) ganham o mesmo comentário, mas o preview, o resumo e o `<code>` de desfazer nunca são tocados pela IA — só cercados por ela. Quando a IA falha, some ou é rejeitada pela guarda (nenhum valor em `R$ X,XX` fora dos fatos recebidos), a leitura pequena cai numa frase-molde escrita à mão, no mesmo tom, nunca de volta à tabela crua; a leitura grande e a escrita simplesmente ficam sem comentário, exatamente como hoje.
+
+Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo de `domain/`, `services/catalog|search|comparison`, `repositories/` ou `cli/` muda — só `bot/` e a nova função em `services/suggestions.py`, que já é a camada de IA compartilhada.
+
+### Decisões aplicadas (vêm do brainstorm/design; não rediscutir dentro de ticket)
+
+- **Mecanismo é IA real por resposta**, não moldes estáticos — aceitando o custo de mais uma chamada por leitura e uma leve por escrita.
+- **Escrita entra na voz do Julius**, mas só como comentário ao redor do texto de hoje — nunca reescrevendo preview/resumo/undo.
+- **Ponto único de narração** (`narrate(conn, config, client, context, facts)`), reaproveitado por toda leitura e escrita — um prompt, uma guarda, um `call_kind` de log (`"persona"`).
+- **Guarda por dinheiro, não por identidade**: qualquer `R$ X,XX` na resposta que não esteja nos fatos derruba a resposta inteira. Guarda de nome/id de produto/mercado foi considerada e adiada por falta de caso medido — mesma disciplina do resto do projeto.
+- **Fallback com tom, mas só no Modo A** (busca/comparação pequenas): frase-molde determinística, sem IA. Modo B (listagens, escrita) degrada para "sem comentário", igual a hoje.
+- **Corte de tamanho não medido**: `NARRATE_FULL_MAX_RECORDS = 6`, `NARRATE_FULL_MAX_GROUPS = 3` — chute inicial, a corrigir no smoke (169) contra o catálogo real.
+
+### Trilha
+
+| # | Ticket | Depende de | Esforço | Estado | Entrega |
+|---|---|---|---|---|---|
+| 163 | [`suggestions.narrate`](163-suggestions-narrate.md) | — | S | pendente | `PROMPT_VERSIONS["persona"]`, `SYSTEM_PROMPTS["persona"]`, `narrate()`, guarda de dinheiro |
+| 164 | [`render.py` — fatos](164-render-facts.md) | — | S | pendente | `records_facts`, `comparison_facts`, `products_facts`, `stores_facts` |
+| 165 | [`render.py` — frases-molde](165-render-fallback-lines.md) | — | S | pendente | `search_fallback_line`, `compare_fallback_line` |
+| 166 | [`Deps.client` + fiação](166-deps-client-wiring.md) | — | S | pendente | `Deps.client`, `HttpLlmClient` em `build_application`/`on_text` |
+| 167 | [`turn.py` — leituras](167-turn-narration-reads.md) | 163, 164, 165, 166 | M | pendente | Modo A/B nas 4 leituras, `_narrate`, cortes de tamanho |
+| 168 | [`turn.py` — escrita](168-turn-narration-writes.md) | 163, 166 | M | pendente | comentário em `PendingWrite`/`WriteResult`/`WriteFailed`, `client` em `on_tap` |
+| 169 | [docs + smoke](169-docs-and-smoke.md) | 167, 168 | S | pendente | `CLAUDE.md` v2.7, roteiro de smoke, destino de `persona-julius-rock.md` |
+
+### Dependências e caminho crítico
+
+```
+163 ─┐
+164 ─┼─┐
+165 ─┤ │
+166 ─┴─┼── 167 ──┐
+       └── 168 ──┴── 169
+```
+
+163–166 são independentes entre si (podem ser feitos em paralelo); 167 e 168 dependem de 166 mas não uma da outra (também paralelizáveis); 169 fecha depois das duas.
+
+### Riscos e onde os tickets os tratam
+
+| Risco | Ticket | Mitigação |
+|---|---|---|
+| Corte de tamanho (6 registros/3 grupos) errado pro catálogo real | 167 (constantes documentadas como chute), 169 (smoke item 6) | ajuste direto no código do 167 quando o número real aparecer |
+| Persona soar mecânica/genérica apesar da guarda | 163 (prompt conciso), 169 (achado qualitativo do smoke) | sem métrica automática — é leitura humana, mesmo espírito do resto da camada de IA deste projeto |
+| Comentário de escrita insinuar que algo já foi feito antes do tap | 168 (nota para o agente) | revisão manual no smoke (169, item 5); design já exige o oposto (RF3 do brainstorm) |
+| Custo por mensagem dobrar sem se perceber | 163/167/168 (reaproveitam `_ask`/`record_usage` sem caminho novo) | `ai_calls.jsonl` já registra tudo; smoke (169) lê o custo real |
