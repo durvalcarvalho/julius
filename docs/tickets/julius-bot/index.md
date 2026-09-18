@@ -163,6 +163,7 @@ Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo
 
 > Gerado a partir de: duas rodadas de brainstorm/design em 2026-09-18 — a primeira reagindo a um screenshot real do bot (parágrafo único, sem quebra, sem veredito), a segunda incorporando `claudedocs/research_chatbot_humanizacao_20260918.md` (pesquisa externa validando os achados e trazendo o indicador de "digitando..." e a ressalva sobre erro+autocorreção).
 > Entre o fechamento da v2.7 (ticket 169) e esta trilha, o prompt `persona` já passou por uma revisão ad hoc (v2, commit `af046ba`, sem ticket próprio — feita direto em resposta a feedback de chat) que acrescentou unidade explícita e a diferença já calculada nos fatos. Esta trilha é a v3 do prompt, em cima dessa base.
+> **Trilha implementada em 2026-09-18**: 170–174 feitos, um commit por ticket, **974 testes verdes**. Smoke real (mesma cópia do banco de produção): `_collapse_repeated_prices` colapsa Cebola de 3 para 2 registros no catálogo de verdade — o caso exato da screenshot original; `max_tokens=260` truncava uma comparação real de 6 grupos, corrigido pra **500** (medido). Detalhe completo em `CLAUDE.md`, parágrafo "v2.7.1".
 
 ### Decisões aplicadas
 
@@ -177,11 +178,11 @@ Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo
 
 | # | Ticket | Depende de | Esforço | Estado | Entrega |
 |---|---|---|---|---|---|
-| 170 | [`weekday_phrase`](170-formatting-weekday-phrase.md) | — | S | pendente | `domain/formatting.py::weekday_phrase`, faixas hoje/ontem/dia da semana/dia da semana passada/delega pra `relative_age` |
-| 171 | [dedup + dia da semana nos fatos](171-render-facts-dedup-weekday.md) | 170 | S | pendente | `_collapse_repeated_prices`, `records_facts`/`comparison_facts` usando `weekday_phrase` |
-| 172 | [prompt `persona` v3](172-persona-prompt-v3.md) | 170, 171 | M | pendente | veredito, lista negra, exemplo trabalhado, `PROMPT_VERSIONS["persona"] = "3"` |
-| 173 | ["digitando..."](173-typing-indicator.md) | — | S | pendente | `send_chat_action` em `on_text`/`on_tap`, sem sleep artificial |
-| 174 | [smoke + docs](174-humanization-smoke-and-docs.md) | 172, 173 | S | pendente | `CLAUDE.md` v2.7.1, índice atualizado, nota no roteiro de smoke |
+| 170 | [`weekday_phrase`](170-formatting-weekday-phrase.md) | — | S | **feito** (`abac84b`) | `domain/formatting.py::weekday_phrase`, faixas hoje/ontem/dia da semana/dia da semana passada/delega pra `relative_age` |
+| 171 | [dedup + dia da semana nos fatos](171-render-facts-dedup-weekday.md) | 170 | S | **feito** (`7e32679`) | `_collapse_repeated_prices`, `records_facts`/`comparison_facts` usando `weekday_phrase` |
+| 172 | [prompt `persona` v3](172-persona-prompt-v3.md) | 170, 171 | M | **feito** (`c0a9b2f`, `b7ff2f6`) | veredito, lista negra, exemplo trabalhado, `PROMPT_VERSIONS["persona"] = "3"`, `max_tokens` medido em 500 |
+| 173 | ["digitando..."](173-typing-indicator.md) | — | S | **feito** (`b651ad7`) | `_show_typing` em `on_text`/`on_tap`, sem sleep artificial |
+| 174 | [smoke + docs](174-humanization-smoke-and-docs.md) | 172, 173 | S | **feito** | `CLAUDE.md` v2.7.1, índice atualizado, nota no roteiro de smoke |
 
 ### Dependências e caminho crítico
 
@@ -196,7 +197,7 @@ Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo
 
 | Risco | Ticket | Mitigação |
 |---|---|---|
-| `max_tokens` novo (mais baixo) cortar resposta no meio | 172 (chute documentado), 174 (smoke mede) | ajuste direto no código quando o número real aparecer |
-| Veredito aparecer fora de contexto (1 registro só, ou sumir com 2+) | 172, 174 | achado de prompt, versionar (`PROMPT_VERSIONS` sobe) se precisar ajustar |
-| Indicador de "digitando..." piscar rápido demais no caminho sem IA | 173 (nota para o agente), 174 (registrado, não corrigido às cegas) | dado novo pra decidir depois, não licença pra adicionar sleep sem medir |
-| `_collapse_repeated_prices` colapsar par errado | 171 (chave é `(loja, preço)` explícita, testada) | teste dedicado; nunca colapsa por produto+data |
+| `max_tokens` novo (mais baixo) cortar resposta no meio | 172/174 (medido: 260 e 340 truncaram uma comparação real de 6 grupos) | subiu pra 500, que completa a mesma comparação inteira |
+| Veredito aparecer fora de contexto (1 registro só, ou sumir com 2+) | 172, 174 (smoke confirmou: aparece com 2+, ausente com 1) | achado de prompt, versionar (`PROMPT_VERSIONS` sobe) se precisar ajustar |
+| Indicador de "digitando..." piscar rápido demais no caminho sem IA | 173 (nota para o agente), 174 (registrado, não corrigido às cegas) | dado novo pra decidir depois, não licença pra adicionar sleep sem medir; só o usuário confirma isso no Telegram de verdade |
+| `_collapse_repeated_prices` colapsar par errado | 171 (chave é `(loja, preço)` explícita, testada) | teste dedicado; nunca colapsa por produto+data. Confirmado no catálogo real: Cebola 3→2, exatamente o caso da screenshot |

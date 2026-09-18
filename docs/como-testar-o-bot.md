@@ -281,7 +281,7 @@ jq -s 'map(select(.call_kind=="bot_turn")) | {chamadas: length, custo_total: (ma
 
 ---
 
-> **Já rodado uma vez, fora do Telegram:** em 18/09/2026 a camada de IA (`narrate()`) foi exercitada direto contra o `deepseek-flash` e contra uma cópia deste banco, sem passar pelo bot de verdade — é o que mediu os números abaixo e ajustou `NARRATE_FULL_MAX_GROUPS` de 3 para 6. O que falta destes passos é só a parte que exige o Telegram de verdade: os botões, a edição de mensagem, o `julius-bot` rodando.
+> **Já rodado duas vezes, fora do Telegram:** em 18/09/2026 a camada de IA (`narrate()`) foi exercitada direto contra o `deepseek-flash` e contra uma cópia deste banco, sem passar pelo bot de verdade — é o que mediu os números abaixo e ajustou `NARRATE_FULL_MAX_GROUPS` de 3 para 6. Numa segunda rodada (v2.7.1, prompt `persona` v3), a mesma técnica confirmou o veredito ("compra em X"/"não compra em Y"), o dia da semana no lugar da data, a deduplicação de preço repetido (Cebola, no catálogo real, colapsou de 3 pra 2 registros — o caso exato que motivou a rodada) e corrigiu `max_tokens` de 260 pra 500 (uma comparação real de 6 grupos truncava abaixo disso). O que falta destes passos é só a parte que exige o Telegram de verdade: os botões, a edição de mensagem, o indicador "digitando..." (visual, não aparece em `ai_calls.jsonl`), o `julius-bot` rodando.
 
 ## Passo 16 — A voz do Julius numa busca pequena
 
