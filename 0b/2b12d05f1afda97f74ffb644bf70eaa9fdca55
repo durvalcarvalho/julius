@@ -1,0 +1,19 @@
+docs/design/comparison-coverage.md
+  s_766f3b974b40c9::t_acca24259f7a23 1-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0b2b12d05f1afda97f74ffb644bf70eaa9fdca55",
+  "prompts": {},
+  "sessions": {
+    "s_766f3b974b40c9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4173796a-19bd-4f8e-ab60-b914b5dfeed1",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
