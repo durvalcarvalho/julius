@@ -64,4 +64,4 @@ modificar tests/test_services_suggestions.py — prompt_version esperado (já us
 ## Notas para o agente
 
 - Não invente uma segunda versão do exemplo "pra cobrir mais casos" — um exemplo bem escolhido (o da cebola, que é o caso real que motivou a rodada) é o suficiente; mais exemplos custam tokens de entrada em toda chamada, pra um ganho que a v2 já mostrou ser incerto sem medir.
-- `max_tokens = 260` é chute — o valor real de saída no smoke (174) decide se sobra ou falta espaço; não trate 260 como medido.
+- `max_tokens = 260` era chute, e o smoke (174) mostrou que estava baixo demais: uma comparação de 6 grupos (o `mercados comparar` real do catálogo) truncava (`finish_reason: length`) mesmo em 340; em **500** completou, grounded, com veredito por grupo. Valor final: **500**, medido, não chute — ver ticket 174.

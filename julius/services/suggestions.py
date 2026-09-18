@@ -652,7 +652,7 @@ def narrate(
     try:
         allowed = _money_values(facts)
         user_prompt = f"contexto: {context}\nfatos:\n{facts}"
-        data = _ask(conn, config, client, "persona", user_prompt, max_tokens=260, month=month)
+        data = _ask(conn, config, client, "persona", user_prompt, max_tokens=500, month=month)
         reply = data.get("reply") if isinstance(data, dict) else None
         if not isinstance(reply, str) or not reply.strip():
             return None
