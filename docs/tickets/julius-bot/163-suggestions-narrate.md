@@ -1,5 +1,14 @@
 # 163: `services/suggestions.py::narrate` — o ponto único de narração
 
+<!-- status:done -->
+<!-- adjustments: SYSTEM_PROMPTS["persona"] reescrito pra v2 em 18/09/2026, a partir de exemplo
+real do usuário testando o bot pelo Telegram -- a v1 soava "funcional mas comedido". A v2 exige
+duas partes na ordem (informação clara com unidade, depois o comentário do Julius, podendo ser
+mais longo e com pergunta retórica) e explicitamente proíbe explicar a ausência de um dado. A
+guarda de dinheiro não mudou -- o que mudou foi records_facts/comparison_facts (164) passarem a
+entregar a diferença já calculada como fato, pra IA poder citá-la sem fazer conta. max_tokens de
+narrate() subiu de 220 pra 380. PROMPT_VERSIONS["persona"] é "2". Ver CLAUDE.md "Prompt persona v2". -->
+
 > Uma função, um prompt, uma guarda: pede à IA para dizer, na voz do Julius Rock, fatos que o chamador já calculou — e derruba a resposta se ela citar um valor em dinheiro que não veio desses fatos.
 
 ## Contexto

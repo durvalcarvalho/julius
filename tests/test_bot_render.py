@@ -67,7 +67,7 @@ def test_records_facts_one_line_per_record_no_html():
         [_record(highlight="lowest", unit_price=3.79, store_nickname="Costa Atacadao")], today=TODAY
     )
 
-    assert text == "Picanha bovina · R$ 3,79 (mais barato) · 12/09/2026 (há 5 dias) · Costa Atacadao"
+    assert text == "Picanha bovina · R$ 3,79 o quilo (mais barato) · 12/09/2026 (há 5 dias) · Costa Atacadao"
     assert "<" not in text and ">" not in text
 
 
@@ -75,9 +75,26 @@ def test_records_facts_marks_highest_and_carries_content_price():
     text = render.records_facts([_egg(1, 12.0, 0.60), _egg(2, 16.5, 0.55)], today=TODAY)
     lines = text.split("\n")
 
-    assert "R$ 12,00 · R$ 0,60/UN" in lines[0]
-    assert "R$ 16,50 · R$ 0,55/UN" in lines[1]
+    assert "R$ 12,00 a unidade · R$ 0,60/UN" in lines[0]
+    assert "R$ 16,50 a unidade · R$ 0,55/UN" in lines[1]
     assert "(mais barato)" not in text and "(mais caro)" not in text  # neither record carries `highlight` here
+
+
+def test_records_facts_states_the_difference_when_there_are_two_or_more():
+    records = [
+        _record(highlight="lowest", unit_price=3.79),
+        _record(highlight="highest", unit_price=5.99),
+    ]
+
+    text = render.records_facts(records, today=TODAY)
+
+    assert text.splitlines()[-1] == "diferença entre o mais barato e o mais caro: R$ 2,20"
+
+
+def test_records_facts_no_difference_line_without_a_highlighted_pair():
+    text = render.records_facts([_record(), _record()], today=TODAY)
+
+    assert "diferença" not in text
 
 
 def test_records_facts_empty_is_empty_string():
@@ -92,8 +109,9 @@ def test_comparison_facts_one_line_per_entry_with_markers():
     text = render.comparison_facts(comparison, today=TODAY)
     lines = text.split("\n")
 
-    assert lines[0] == "tomate · Assaí · R$ 11,89 (mais barato) · 12/09/2026 (há 5 dias)"
-    assert lines[1] == "tomate · Dona de Casa · R$ 14,99 (mais caro) · 12/09/2026 (há 5 dias)"
+    assert lines[0] == "tomate · Assaí · R$ 11,89 o quilo (mais barato) · 12/09/2026 (há 5 dias)"
+    assert lines[1] == "tomate · Dona de Casa · R$ 14,99 o quilo (mais caro) · 12/09/2026 (há 5 dias)"
+    assert lines[2] == "tomate: diferença entre o mais barato e o mais caro: R$ 3,10"
 
 
 def test_comparison_facts_empty_is_empty_string():
@@ -117,7 +135,7 @@ def test_stores_facts_counts():
 def test_search_fallback_line_one_record():
     text = render.search_fallback_line([_record(store_nickname="Costa Atacadao")], today=TODAY)
 
-    assert text == "Só uma compra registrada: Picanha bovina a R$ 89,90 em Costa Atacadao, há 5 dias."
+    assert text == "Só uma compra registrada: Picanha bovina a R$ 89,90 o quilo em Costa Atacadao, há 5 dias."
 
 
 def test_search_fallback_line_marks_cheapest_and_dearest():
@@ -128,8 +146,9 @@ def test_search_fallback_line_marks_cheapest_and_dearest():
 
     text = render.search_fallback_line(records, today=TODAY)
 
-    assert "R$ 3,79, em Costa Atacadao" in text
+    assert "R$ 3,79 o quilo, em Costa Atacadao" in text
     assert "R$ 5,99, em Assaí Guará" in text
+    assert "diferença de R$ 2,20" in text
 
 
 def test_search_fallback_line_without_highlight_falls_back_to_a_count():
@@ -161,8 +180,8 @@ def test_compare_fallback_line_one_line_per_group():
 
     text = render.compare_fallback_line(comparison)
 
-    assert "tomate: Assaí sai mais em conta, a R$ 11,89." in text
-    assert "cebola: Assaí sai mais em conta, a R$ 3,99." in text
+    assert "tomate: Assaí sai mais em conta, a R$ 11,89 o quilo." in text
+    assert "cebola: Assaí sai mais em conta, a R$ 3,99 o quilo." in text
 
 
 def test_compare_fallback_line_no_comparable_groups():

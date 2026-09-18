@@ -1,5 +1,14 @@
 # 164: `bot/render.py` — os fatos que a narração pode citar
 
+<!-- status:done -->
+<!-- adjustments: revisado em 18/09/2026 a partir de feedback real do usuário -- records_facts e
+comparison_facts ganharam (a) a unidade de venda por extenso em cada linha ("o quilo"/"a
+unidade"/"o litro", dict _UNIT_PHRASES) porque a IA não tinha como afirmar isso com confiança sem
+o dado explícito, e (b) uma linha final com a diferença entre o mais barato e o mais caro, já
+calculada aqui em Python -- é o que permite ao prompt v2 (ticket 163) citar essa diferença sem
+fazer conta nova. search_fallback_line/compare_fallback_line (165) ganharam a mesma unidade e
+diferença, por consistência e porque é uma subtração determinística, sem custo de IA. -->
+
 > Para cada saída de leitura, uma função irmã de `render_X` que devolve texto plano (sem HTML, sem `<pre>`) com só os valores já calculados — é o material que `narrate` (ticket 163) recebe e contra o qual a guarda de dinheiro compara.
 
 ## Contexto

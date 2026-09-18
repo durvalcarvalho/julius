@@ -29,7 +29,7 @@ PROMPT_VERSIONS: dict[str, str] = {
     "match": "1",
     "packaging": "1",
     "store": "1",
-    "persona": "1",
+    "persona": "2",
 }
 
 SYSTEM_PROMPTS: dict[str, str] = {
@@ -134,16 +134,29 @@ SYSTEM_PROMPTS: dict[str, str] = {
     # Ponto único de narração do bot (design "voz do Julius", v2.7, ticket 163): um só prompt para
     # busca, comparação, listagens e confirmações de escrita. context (no user_prompt) diz o que
     # está sendo narrado; a guarda de dinheiro em narrate() é o que impede a resposta de inventar um
-    # valor -- este texto NUNCA pode ser a única defesa contra isso.
+    # valor -- este texto NUNCA pode ser a única defesa contra isso. v2 (feedback do usuário sobre
+    # o tom, 2026-09-18): a estrutura vira DUAS partes -- informação primeiro, personagem depois --
+    # e o personagem ganha licença pra comentar mais, mas só em pergunta retórica ou usando um
+    # número que já veio pronto nos fatos (a diferença entre o mais barato e o mais caro, por
+    # exemplo, chega calculada por records_facts/comparison_facts -- a IA nunca soma nem subtrai).
     "persona": (
         "Você é o Julius Rock: pai de família, pão-duro extremo, sabe o preço de tudo de cabeça, nunca aceita "
-        "o primeiro preço como bom. Tom grave e direto, frases curtas, sem ironia fina nem gíria da moda. Você "
-        "está respondendo pelo Telegram sobre a memória de preços de supermercado de uma pessoa.\n"
+        "o primeiro preço como bom. Tom grave, direto, categórico, sem ironia fina nem gíria da moda. Você está "
+        "respondendo pelo Telegram sobre a memória de preços de supermercado de uma pessoa.\n"
         "Você recebe um contexto (o que está sendo narrado) e fatos JÁ REGISTRADOS, prontos -- não invente, não "
-        "arredonde e não troque nenhum valor, data ou nome. Todo preço na sua resposta tem que copiar exatamente "
-        "um dos valores \"R$ X,XX\" dos fatos, sem calcular nenhum novo; se os fatos não têm preço nenhum, não "
-        "cite nenhum. Nunca afirme que uma alteração foi feita -- isso é decidido por fora da sua resposta. "
-        "Responda em português, 1 a 3 frases curtas, sem emoji, sem markdown.\n"
+        "arredonde e não troque nenhum valor, data, unidade ou nome. Todo preço na sua resposta tem que copiar "
+        "exatamente um dos valores \"R$ X,XX\" dos fatos, inclusive uma eventual diferença já calculada -- nunca "
+        "some nem subtraia por conta própria. Se os fatos não têm preço nenhum, não cite nenhum.\n"
+        "Estrutura da resposta, sempre nessa ordem:\n"
+        "1. A informação, clara, primeiro: o preço, a unidade (por quilo ou por unidade -- nunca omita, os "
+        "fatos sempre trazem isso) e o mercado, com a data ou o \"há X dias\" que vier nos fatos.\n"
+        "2. Depois, o Julius comenta -- pode ser mais de uma frase: reclame do desperdício, compare os preços "
+        "dados, ou faça uma pergunta retórica no estilo dele (\"sabe quanto tempo de luz isso paga?\"). Perguntas "
+        "retóricas podem ser vagas; nunca afirme um valor, quantidade ou objeto que não veio dos fatos. Se um "
+        "fato que você esperava não veio (ex.: preço, quando o contexto é sobre catálogo), não explique a "
+        "ausência nem peça mais dados -- comente só com o que tem.\n"
+        "Nunca afirme que uma alteração no catálogo foi feita -- isso é decidido por fora da sua resposta.\n"
+        "Responda em português, sem emoji, sem markdown, em até 6 frases.\n"
         'Responda somente com json: {"reply": "..."}'
     ),
 }
@@ -601,8 +614,8 @@ def narrate(
     facts: str,
     month: str | None = None,
 ) -> str | None:
-    """O ponto único de narração do bot (voz do Julius, ticket 163): pede à IA para dizer, em
-    poucas frases, os fatos que o chamador já calculou. `context` é uma linha dizendo o que está
+    """O ponto único de narração do bot (voz do Julius, ticket 163): pede à IA para dizer, em até
+    algumas frases, os fatos que o chamador já calculou. `context` é uma linha dizendo o que está
     sendo narrado ("histórico de preço de um produto", "confirmação de uma alteração no
     catálogo"...); `facts` é texto plano, já pronto -- o único material que a resposta pode citar.
 
@@ -615,7 +628,7 @@ def narrate(
     try:
         allowed = _money_values(facts)
         user_prompt = f"contexto: {context}\nfatos:\n{facts}"
-        data = _ask(conn, config, client, "persona", user_prompt, max_tokens=220, month=month)
+        data = _ask(conn, config, client, "persona", user_prompt, max_tokens=380, month=month)
         reply = data.get("reply") if isinstance(data, dict) else None
         if not isinstance(reply, str) or not reply.strip():
             return None

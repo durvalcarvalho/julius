@@ -120,6 +120,7 @@ Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo
 - **Escrita entra na voz do Julius**, mas só como comentário ao redor do texto de hoje — nunca reescrevendo preview/resumo/undo.
 - **Ponto único de narração** (`narrate(conn, config, client, context, facts)`), reaproveitado por toda leitura e escrita — um prompt, uma guarda, um `call_kind` de log (`"persona"`).
 - **Guarda por dinheiro, não por identidade**: qualquer `R$ X,XX` na resposta que não esteja nos fatos derruba a resposta inteira. Guarda de nome/id de produto/mercado foi considerada e adiada por falta de caso medido — mesma disciplina do resto do projeto.
+- **Prompt `persona` v2** (18/09/2026, feedback real do usuário testando pelo Telegram): resposta em duas partes — informação clara (preço, unidade, mercado, data) primeiro, comentário do Julius depois, podendo citar a diferença entre o mais barato e o mais caro porque `records_facts`/`comparison_facts` agora entregam esse número já calculado. A IA continua nunca somando nem subtraindo por conta própria.
 - **Fallback com tom, mas só no Modo A** (busca/comparação pequenas): frase-molde determinística, sem IA. Modo B (listagens, escrita) degrada para "sem comentário", igual a hoje.
 - **Corte de tamanho**: `NARRATE_FULL_MAX_RECORDS = 6`, `NARRATE_FULL_MAX_GROUPS = 6` — o segundo era chute (3) e foi corrigido pelo smoke da camada de IA em 18/09/2026 contra o catálogo real; o primeiro já nasceu medido.
 

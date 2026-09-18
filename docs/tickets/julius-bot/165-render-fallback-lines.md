@@ -1,5 +1,10 @@
 # 165: `bot/render.py` — frase-molde do Julius sem IA (fallback do Modo A)
 
+<!-- status:done -->
+<!-- adjustments: ver ticket 164 -- as duas funções ganharam a unidade por extenso e a diferença
+já calculada, mesmo ajuste de 18/09/2026, pra ficarem consistentes com records_facts/comparison_facts
+e com o prompt v2 que a IA usa quando está disponível. -->
+
 > Quando a IA não responde (sem orçamento, sem configuração, guarda rejeitou, erro de rede), busca e comparação pequenas ainda precisam soar como o Julius — nunca voltar à tabela crua. Este ticket escreve essa frase, sem chamar IA nenhuma.
 
 ## Contexto

@@ -603,7 +603,7 @@ def test_narrate_returns_grounded_text(conn, cfg):
 
     assert reply == "Banana a R$ 3,79 na Costa Atacadao. Foi o melhor preço."
     assert _lines(cfg)[-1]["call_kind"] == "persona"
-    assert _lines(cfg)[-1]["prompt_version"] == "1"
+    assert _lines(cfg)[-1]["prompt_version"] == suggestions.PROMPT_VERSIONS["persona"]
 
 
 def test_narrate_rejects_a_price_not_in_the_facts(conn, cfg):

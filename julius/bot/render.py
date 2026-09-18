@@ -34,6 +34,11 @@ TRUNCATION_NOTE = "\n… +{count} linhas não mostradas — peça um limite meno
 # Same map as cli/receipts.py: the word the sentence needs, not the unit code.
 _CONTENT_WORDS = {"L": "litro", "KG": "quilo", "UN": "unidade"}
 
+# With the article, for a sale/content unit spoken inline ("R$ 3,79 o quilo") -- unit matters to
+# how a person reads a price (design v2.7 feedback: never omit it), and gender isn't uniform
+# across the three codes, so this can't be built from _CONTENT_WORDS with one fixed article.
+_UNIT_PHRASES = {"L": "o litro", "KG": "o quilo", "UN": "a unidade"}
+
 _MARKERS = {"lowest": "▼ ", "highest": "▲ "}
 _NO_MARKER = "  "  # two spaces, so unmarked lines stay aligned under the marked ones
 
@@ -96,50 +101,71 @@ def render_records(records: Sequence[PriceRecord], *, today: date | None = None)
 def search_fallback_line(records: Sequence[PriceRecord], *, today: date | None = None) -> str:
     """The Julius-toned answer for when the IA isn't there to say it -- written by hand, no model
     involved, so it's always available. Reuses `highlight` the same way `_record_line` does;
-    never recomputes a min/max of its own."""
+    never recomputes a min/max other than the one difference this function itself states, in
+    Python, not left to a model."""
     if not records:
         return "Nenhum resultado."
     if len(records) == 1:
         record = records[0]
+        unit_word = _UNIT_PHRASES.get(record.unit, "a unidade")
         return (
-            f"Só uma compra registrada: {record.canonical_name} a {money(record.unit_price)} "
+            f"Só uma compra registrada: {record.canonical_name} a {money(record.unit_price)} {unit_word} "
             f"em {record.store_nickname}, {relative_age(record.purchased_at, today=today)}."
         )
     cheapest = next((record for record in records if record.highlight == "lowest"), None)
     dearest = next((record for record in records if record.highlight == "highest"), None)
     if cheapest is None or dearest is None:
         return f"{len(records)} compras registradas de {records[0].canonical_name}. Fica de olho nos preços."
+    unit_word = _UNIT_PHRASES.get(cheapest.unit, "a unidade")
+    diff = money(dearest.unit_price - cheapest.unit_price)
     return (
-        f"Já paguei de {money(cheapest.unit_price)}, em {cheapest.store_nickname}, até "
-        f"{money(dearest.unit_price)}, em {dearest.store_nickname}, por {records[0].canonical_name}. "
-        "Presta atenção da próxima vez."
+        f"Já paguei de {money(cheapest.unit_price)} {unit_word}, em {cheapest.store_nickname}, até "
+        f"{money(dearest.unit_price)}, em {dearest.store_nickname}, por {records[0].canonical_name} "
+        f"— diferença de {diff}. Presta atenção da próxima vez."
     )
 
 
 def records_facts(records: Sequence[PriceRecord], *, today: date | None = None) -> str:
     """Plain-text facts for the persona (ticket 163's `narrate`) -- no HTML, nothing the model
-    was not handed. One line per record, same source data as `_record_line`."""
+    was not handed. One line per record, same source data as `_record_line`, plus the sale unit
+    (per kilo vs. per unit changes how a price reads, so it's never left out) and, with two or
+    more records, the cheapest-to-dearest difference already computed here -- the model is handed
+    that number as a fact, never asked to do the subtraction itself."""
     lines = []
     for record in records:
         tag = {"lowest": " (mais barato)", "highest": " (mais caro)"}.get(record.highlight or "", "")
+        unit_word = _UNIT_PHRASES.get(record.unit, "a unidade")
         per_content = (
             f" · {money(record.price_per_content)}/{record.content_unit}" if record.price_per_content is not None else ""
         )
         lines.append(
-            f"{record.canonical_name} · {money(record.unit_price)}{per_content}{tag} · "
+            f"{record.canonical_name} · {money(record.unit_price)} {unit_word}{per_content}{tag} · "
             f"{br_date(record.purchased_at)} ({relative_age(record.purchased_at, today=today)}) · "
             f"{record.store_nickname}"
         )
+    if len(records) >= 2:
+        cheapest = next((record for record in records if record.highlight == "lowest"), None)
+        dearest = next((record for record in records if record.highlight == "highest"), None)
+        if cheapest is not None and dearest is not None and cheapest.unit_price != dearest.unit_price:
+            lines.append(
+                f"diferença entre o mais barato e o mais caro: {money(dearest.unit_price - cheapest.unit_price)}"
+            )
     return "\n".join(lines)
 
 
 def comparison_facts(comparison: StoreComparison, *, today: date | None = None) -> str:
     """Same shape as `records_facts`, one line per store entry per group -- same source data as
-    `_comparison_block`, no HTML."""
+    `_comparison_block`, no HTML, plus the unit and the per-group cheapest-to-dearest difference,
+    already computed here."""
     labels = store_labels(comparison)
     lines = []
     for group in comparison.comparisons:
         cheapest, dearest = group.entries[0].price, group.entries[-1].price
+        unit_word = (
+            _UNIT_PHRASES.get(group.content_unit or "", "a unidade")
+            if group.basis == "price_per_content"
+            else _UNIT_PHRASES.get(group.unit, "a unidade")
+        )
         for entry in group.entries:
             tag = (
                 " (mais barato)"
@@ -147,9 +173,11 @@ def comparison_facts(comparison: StoreComparison, *, today: date | None = None) 
                 else " (mais caro)" if entry.price == dearest else ""
             )
             lines.append(
-                f"{group.kind} · {labels[entry.store_cnpj]} · {money(entry.price)}{tag} · "
+                f"{group.kind} · {labels[entry.store_cnpj]} · {money(entry.price)} {unit_word}{tag} · "
                 f"{br_date(entry.purchased_at)} ({relative_age(entry.purchased_at, today=today)})"
             )
+        if len(group.entries) >= 2 and cheapest != dearest:
+            lines.append(f"{group.kind}: diferença entre o mais barato e o mais caro: {money(dearest - cheapest)}")
     return "\n".join(lines)
 
 
@@ -228,10 +256,17 @@ def compare_fallback_line(comparison: StoreComparison, *, today: date | None = N
         if not comparison.kinds_total:
             return "Nenhum produto tem tipo ainda. Rode: julius produtos revisar"
         return "Nenhum tipo de produto foi comprado em dois mercados ainda — sem base para comparar."
-    lines = [
-        f"{group.kind}: {group.entries[0].store_nickname} sai mais em conta, a {money(group.entries[0].price)}."
-        for group in comparison.comparisons
-    ]
+    lines = []
+    for group in comparison.comparisons:
+        unit_word = (
+            _UNIT_PHRASES.get(group.content_unit or "", "a unidade")
+            if group.basis == "price_per_content"
+            else _UNIT_PHRASES.get(group.unit, "a unidade")
+        )
+        lines.append(
+            f"{group.kind}: {group.entries[0].store_nickname} sai mais em conta, a "
+            f"{money(group.entries[0].price)} {unit_word}."
+        )
     return " ".join(lines)
 
 
