@@ -20,6 +20,7 @@ from julius.domain.formatting import (
     plural_groups,
     relative_age,
     store_labels,
+    weekday_phrase,
 )
 from julius.domain.models import KindComparison, PriceRecord, Product, Store, StoreComparison
 from julius.domain.normalization import store_place
@@ -125,12 +126,31 @@ def search_fallback_line(records: Sequence[PriceRecord], *, today: date | None =
     )
 
 
+def _collapse_repeated_prices(records: Sequence[PriceRecord]) -> list[PriceRecord]:
+    """Same store, same price, different date -- the real screenshot that started the v2.7.1
+    humanization round had this exact repetition (Costa Atacadao twice, one price). Keeps the most
+    recent occurrence of each (store, price) pair, in first-seen order; never collapses across
+    different stores or prices, even for the same product."""
+    kept: dict[tuple[str, float], PriceRecord] = {}
+    order: list[tuple[str, float]] = []
+    for record in records:
+        key = (record.store_nickname, record.unit_price)
+        if key not in kept:
+            order.append(key)
+            kept[key] = record
+        elif record.purchased_at > kept[key].purchased_at:
+            kept[key] = record
+    return [kept[key] for key in order]
+
+
 def records_facts(records: Sequence[PriceRecord], *, today: date | None = None) -> str:
     """Plain-text facts for the persona (ticket 163's `narrate`) -- no HTML, nothing the model
-    was not handed. One line per record, same source data as `_record_line`, plus the sale unit
-    (per kilo vs. per unit changes how a price reads, so it's never left out) and, with two or
+    was not handed. One line per record (after collapsing repeated store+price pairs), same
+    source data as `_record_line`, plus the sale unit (per kilo vs. per unit changes how a price
+    reads, so it's never left out), the weekday instead of the calendar date, and, with two or
     more records, the cheapest-to-dearest difference already computed here -- the model is handed
     that number as a fact, never asked to do the subtraction itself."""
+    records = _collapse_repeated_prices(records)
     lines = []
     for record in records:
         tag = {"lowest": " (mais barato)", "highest": " (mais caro)"}.get(record.highlight or "", "")
@@ -140,7 +160,7 @@ def records_facts(records: Sequence[PriceRecord], *, today: date | None = None) 
         )
         lines.append(
             f"{record.canonical_name} · {money(record.unit_price)} {unit_word}{per_content}{tag} · "
-            f"{br_date(record.purchased_at)} ({relative_age(record.purchased_at, today=today)}) · "
+            f"{weekday_phrase(record.purchased_at, today=today)} · "
             f"{record.store_nickname}"
         )
     if len(records) >= 2:
@@ -174,7 +194,7 @@ def comparison_facts(comparison: StoreComparison, *, today: date | None = None) 
             )
             lines.append(
                 f"{group.kind} · {labels[entry.store_cnpj]} · {money(entry.price)} {unit_word}{tag} · "
-                f"{br_date(entry.purchased_at)} ({relative_age(entry.purchased_at, today=today)})"
+                f"{weekday_phrase(entry.purchased_at, today=today)}"
             )
         if len(group.entries) >= 2 and cheapest != dearest:
             lines.append(f"{group.kind}: diferença entre o mais barato e o mais caro: {money(dearest - cheapest)}")

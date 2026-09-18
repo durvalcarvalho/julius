@@ -67,7 +67,7 @@ def test_records_facts_one_line_per_record_no_html():
         [_record(highlight="lowest", unit_price=3.79, store_nickname="Costa Atacadao")], today=TODAY
     )
 
-    assert text == "Picanha bovina · R$ 3,79 o quilo (mais barato) · 12/09/2026 (há 5 dias) · Costa Atacadao"
+    assert text == "Picanha bovina · R$ 3,79 o quilo (mais barato) · sábado · Costa Atacadao"
     assert "<" not in text and ">" not in text
 
 
@@ -101,6 +101,50 @@ def test_records_facts_empty_is_empty_string():
     assert render.records_facts([]) == ""
 
 
+def test_records_facts_uses_weekday_phrase_not_the_calendar_date():
+    text = render.records_facts([_record()], today=TODAY)
+
+    assert "2026" not in text
+    assert "sábado" in text
+
+
+def test_records_facts_collapses_repeated_price_before_narration():
+    """The real screenshot that started this ticket: the same store, the same price, only the
+    date differing -- must collapse to one line, keeping the most recent date."""
+    records = [
+        _record(store_nickname="Costa Atacadao", unit_price=7.89, purchased_at="2026-09-12T10:00:00"),
+        _record(store_nickname="Costa Atacadao", unit_price=7.89, purchased_at="2026-09-16T10:00:00"),
+    ]
+
+    text = render.records_facts(records, today=TODAY)
+
+    assert text.count("Costa Atacadao") == 1
+    assert "ontem" in text  # kept the more recent of the two (2026-09-16, one day before TODAY)
+
+
+def test_collapse_repeated_prices_merges_same_store_and_price_keeping_latest_date():
+    older = _record(store_nickname="Costa Atacadao", unit_price=7.89, purchased_at="2026-09-12T10:00:00")
+    newer = _record(store_nickname="Costa Atacadao", unit_price=7.89, purchased_at="2026-09-16T10:00:00")
+
+    collapsed = render._collapse_repeated_prices([older, newer])
+
+    assert collapsed == [newer]
+
+
+def test_collapse_repeated_prices_keeps_different_stores_or_prices_separate():
+    a = _record(store_nickname="Costa Atacadao", unit_price=7.89)
+    b = _record(store_nickname="Dona de Casa", unit_price=7.89)
+    c = _record(store_nickname="Costa Atacadao", unit_price=9.99)
+
+    collapsed = render._collapse_repeated_prices([a, b, c])
+
+    assert collapsed == [a, b, c]
+
+
+def test_collapse_repeated_prices_empty_list():
+    assert render._collapse_repeated_prices([]) == []
+
+
 def test_comparison_facts_one_line_per_entry_with_markers():
     comparison = _comparison(
         _group("tomate", _entry("Assaí", "1", 11.89), _entry("Dona de Casa", "2", 14.99)),
@@ -109,13 +153,22 @@ def test_comparison_facts_one_line_per_entry_with_markers():
     text = render.comparison_facts(comparison, today=TODAY)
     lines = text.split("\n")
 
-    assert lines[0] == "tomate · Assaí · R$ 11,89 o quilo (mais barato) · 12/09/2026 (há 5 dias)"
-    assert lines[1] == "tomate · Dona de Casa · R$ 14,99 o quilo (mais caro) · 12/09/2026 (há 5 dias)"
+    assert lines[0] == "tomate · Assaí · R$ 11,89 o quilo (mais barato) · sábado"
+    assert lines[1] == "tomate · Dona de Casa · R$ 14,99 o quilo (mais caro) · sábado"
     assert lines[2] == "tomate: diferença entre o mais barato e o mais caro: R$ 3,10"
 
 
 def test_comparison_facts_empty_is_empty_string():
     assert render.comparison_facts(_comparison()) == ""
+
+
+def test_comparison_facts_uses_weekday_phrase_not_the_calendar_date():
+    comparison = _comparison(_group("tomate", _entry("Assaí", "1", 11.89)))
+
+    text = render.comparison_facts(comparison, today=TODAY)
+
+    assert "2026" not in text
+    assert "sábado" in text
 
 
 def test_products_facts_counts():
