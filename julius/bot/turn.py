@@ -16,7 +16,11 @@ from pydantic_ai.messages import ModelMessage
 from julius.bot.actions import Deps, PendingWrite, ProductListing, StoreListing, WriteFailed, execute
 from julius.bot.agent import BOT_PROMPT_VERSION, BotAgent
 from julius.bot.render import (
+    comparison_facts,
+    compare_fallback_line,
     escape,
+    products_facts,
+    records_facts,
     render_comparison,
     render_failure,
     render_pending,
@@ -24,6 +28,8 @@ from julius.bot.render import (
     render_records,
     render_result,
     render_stores,
+    search_fallback_line,
+    stores_facts,
 )
 from julius.config import Config
 from julius.domain.models import SearchOutcome, StoreComparison
@@ -33,6 +39,12 @@ from julius.services import suggestions
 HISTORY_TURNS = 3
 # 300, not 120: the majordomo measured a real tap arriving at 121 s and being dropped.
 PENDING_TTL_SECONDS = 300.0
+
+# Chute inicial, não medido -- corrigir contra o catálogo real no smoke (ticket 169). Acima destes
+# cortes, a leitura ganha só um comentário por cima da tabela de sempre (Modo B); dentro deles, a
+# narração troca a tabela inteira por uma frase (Modo A).
+NARRATE_FULL_MAX_RECORDS = 6
+NARRATE_FULL_MAX_GROUPS = 3
 
 CALL_KIND = "bot_turn"
 
@@ -105,19 +117,58 @@ def _charge(deps: Deps, text: str, *, attempt: int, kind: str | None, latency_ms
     )
 
 
-def _render_output(output: object, state: ChatState, deps: Deps) -> Reply:
+async def _narrate(deps: Deps, context: str, facts: str) -> str | None:
+    """The one seam between the turn and the persona (ticket 163's `narrate`). No client, or no
+    facts, means no call at all -- the exact same "answer without it" behaviour as IA not being
+    configured.
+
+    Called directly, not through `asyncio.to_thread`: `deps.conn` is a `sqlite3.Connection`, which
+    refuses to be touched from a thread other than the one that opened it (`check_same_thread`,
+    on by default) -- a worker thread would raise, `narrate`'s own `except Exception` would
+    swallow it, and every call would silently look like "the model said nothing". `async def` is
+    kept only so every call site can `await` it uniformly; it never actually yields, same as
+    `handle_tap` (ticket 168) calling `narrate` with no threading at all. This bot already
+    processes updates sequentially by design (see `docs/design/telegram-bot.md`), so blocking
+    briefly here costs nothing this project doesn't already accept elsewhere."""
+    if deps.client is None or not facts:
+        return None
+    return suggestions.narrate(deps.conn, deps.config, deps.client, context, facts)
+
+
+async def _render_output(output: object, state: ChatState, deps: Deps) -> Reply:
     if isinstance(output, PendingWrite):
         state.pending = output
         return Reply(render_pending(output), pending=output)
     if isinstance(output, SearchOutcome):
         _log_query(deps.config, output)
-        return Reply(render_records(output.records))
+        records = output.records
+        base = render_records(records)
+        # No client is exactly "IA not configured": the reply must be byte-for-byte what it was
+        # before this ticket, never the Julius-toned fallback line (that line is for when a
+        # configured client tried and failed, not for "there is no client to try").
+        if not records or deps.client is None:
+            return Reply(base)
+        remark = await _narrate(deps, "histórico de preço de um produto", records_facts(records))
+        if len(records) <= NARRATE_FULL_MAX_RECORDS:
+            return Reply(escape(remark) if remark else search_fallback_line(records))
+        return Reply(f"{escape(remark)}\n\n{base}" if remark else base)
     if isinstance(output, StoreComparison):
-        return Reply(render_comparison(output))
+        base = render_comparison(output)
+        groups = output.comparisons
+        if not groups or deps.client is None:
+            return Reply(base)
+        remark = await _narrate(deps, "comparação de preço entre mercados", comparison_facts(output))
+        if len(groups) <= NARRATE_FULL_MAX_GROUPS:
+            return Reply(escape(remark) if remark else compare_fallback_line(output))
+        return Reply(f"{escape(remark)}\n\n{base}" if remark else base)
     if isinstance(output, ProductListing):
-        return Reply(render_products(output.products))
+        base = render_products(output.products)
+        remark = await _narrate(deps, "catálogo de produtos", products_facts(output.products))
+        return Reply(f"{escape(remark)}\n\n{base}" if remark else base)
     if isinstance(output, StoreListing):
-        return Reply(render_stores(output.stores))
+        base = render_stores(output.stores)
+        remark = await _narrate(deps, "catálogo de mercados", stores_facts(output.stores))
+        return Reply(f"{escape(remark)}\n\n{base}" if remark else base)
     # The only path where the model's own words reach the user.
     return Reply(escape(str(output)))
 
@@ -174,7 +225,7 @@ async def handle_text(agent: BotAgent, state: ChatState, deps: Deps, text: str) 
     state.runs.append(result.new_messages())
     del state.runs[:-HISTORY_TURNS]
 
-    reply = _render_output(result.output, state, deps)
+    reply = await _render_output(result.output, state, deps)
     return Reply(f"{prefix}{reply.text}", pending=reply.pending) if prefix else reply
 
 

@@ -197,6 +197,170 @@ def test_a_listing_reply_carries_no_pending(deps):
     assert "Dona de Casa" in reply.text or "DONA DE CASA" in reply.text
 
 
+# --- Modo A/B narration for the 4 reads (ticket 167) ------------------------------
+
+from _fakes import ScriptedLlmClient  # noqa: E402
+from julius.bot import render as render_module  # noqa: E402
+from julius.bot.actions import ProductListing, StoreListing  # noqa: E402
+from julius.bot.turn import _render_output  # noqa: E402
+from julius.domain.models import (  # noqa: E402
+    KindComparison,
+    PriceRecord,
+    Product,
+    SearchOutcome,
+    Store,
+    StoreComparison,
+    StorePrice,
+)
+from julius.infra.llm_client import LlmResponse  # noqa: E402
+
+
+def _price_record(**overrides) -> PriceRecord:
+    base = {
+        "product_id": 1,
+        "canonical_name": "Banana prata",
+        "store_nickname": "Costa Atacadao",
+        "unit": "KG",
+        "unit_price": 3.79,
+        "purchased_at": "2026-09-16T10:00:00",
+    }
+    return PriceRecord(**{**base, **overrides})
+
+
+def _kind_group(kind: str, *entries: StorePrice) -> KindComparison:
+    return KindComparison(kind=kind, unit="KG", basis="unit_price", content_unit=None, entries=entries)
+
+
+def _store_entry(nickname: str, cnpj: str, price: float) -> StorePrice:
+    return StorePrice(store_nickname=nickname, price=price, purchased_at="2026-09-12", product_name="Tomate", store_cnpj=cnpj)
+
+
+def _store_comparison(*groups: KindComparison) -> StoreComparison:
+    return StoreComparison(comparisons=groups, first_purchase="2026-09-05", last_purchase="2026-09-12", kinds_total=len(groups), kinds_single_store=0)
+
+
+def _persona_reply(text: str) -> LlmResponse:
+    return LlmResponse(json.dumps({"reply": text}), 400, 40)
+
+
+def _with_client(deps, client):
+    from dataclasses import replace
+
+    return replace(deps, client=client)
+
+
+def test_search_reply_uses_the_persona_when_small_and_a_client_is_configured(deps):
+    client = ScriptedLlmClient([_persona_reply("Banana a R$ 3,79 na Costa Atacadao. Bom preço.")])
+    output = SearchOutcome(records=(_price_record(),), term="banana", tag=None)
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == "Banana a R$ 3,79 na Costa Atacadao. Bom preço."
+    assert "<pre>" not in reply.text
+    assert client.calls, "the persona client should have been asked"
+
+
+def test_search_reply_falls_back_to_a_julius_line_when_the_model_fails(deps):
+    """The grounding guard in narrate() is what turn.py relies on here -- a price absent from the
+    facts must never reach the user, persona or not."""
+    client = ScriptedLlmClient([_persona_reply("Essa banana já custou R$ 999,99, um roubo.")])
+    output = SearchOutcome(records=(_price_record(),), term="banana", tag=None)
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == render_module.search_fallback_line(output.records)
+    assert "999,99" not in reply.text
+    assert "<pre>" not in reply.text
+
+
+def test_search_reply_above_the_cutoff_uses_comment_plus_table(deps):
+    records = tuple(_price_record(product_id=i, purchased_at=f"2026-09-{i:02d}T10:00:00") for i in range(1, 8))
+    client = ScriptedLlmClient([_persona_reply("Bastante coisa registrada de banana.")])
+    output = SearchOutcome(records=records, term="banana", tag=None)
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text.startswith("Bastante coisa registrada de banana.")
+    assert "<pre>" in reply.text
+
+
+def test_search_reply_without_a_client_is_unchanged(deps):
+    output = SearchOutcome(records=(_price_record(),), term="banana", tag=None)
+
+    reply = asyncio.run(_render_output(output, ChatState(), deps))
+
+    assert reply.text == render_module.render_records(output.records)
+
+
+def test_search_reply_with_no_results_never_calls_the_persona(deps):
+    client = ScriptedLlmClient([_persona_reply("não deveria rodar")])
+    output = SearchOutcome(records=(), term="produtoquenaoexiste", tag=None)
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == "Nenhum resultado."
+    assert client.calls == []
+
+
+def test_compare_reply_uses_the_persona_when_small(deps):
+    client = ScriptedLlmClient([_persona_reply("O Assaí ganha na maioria dos grupos.")])
+    output = _store_comparison(_kind_group("tomate", _store_entry("Assaí", "1", 11.89), _store_entry("Dona de Casa", "2", 14.99)))
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == "O Assaí ganha na maioria dos grupos."
+    assert "<pre>" not in reply.text
+
+
+def test_compare_reply_above_the_cutoff_uses_comment_plus_table(deps):
+    groups = tuple(_kind_group(f"tipo{i}", _store_entry("Assaí", "1", 1.0 + i), _store_entry("Dona de Casa", "2", 2.0 + i)) for i in range(4))
+    client = ScriptedLlmClient([_persona_reply("Bastante grupo pra comparar.")])
+    output = _store_comparison(*groups)
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text.startswith("Bastante grupo pra comparar.")
+    assert "<pre>" in reply.text
+
+
+def test_compare_reply_with_no_groups_never_calls_the_persona(deps):
+    client = ScriptedLlmClient([_persona_reply("não deveria rodar")])
+    output = _store_comparison()
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == render_module.render_comparison(output)
+    assert client.calls == []
+
+
+def test_product_listing_gets_a_comment_but_keeps_the_table(deps):
+    client = ScriptedLlmClient([_persona_reply("Catálogo respeitável, isso sim.")])
+    products = (Product(id=1, canonical_name="Ovos"),)
+
+    reply = asyncio.run(_render_output(ProductListing(products=products), ChatState(), _with_client(deps, client)))
+
+    assert reply.text.startswith("Catálogo respeitável, isso sim.")
+    assert "1 · Ovos" in reply.text
+
+
+def test_store_listing_gets_a_comment_but_keeps_the_table(deps):
+    client = ScriptedLlmClient([_persona_reply("Mercados suficientes pra pesquisar preço.")])
+    stores = (Store(cnpj="11832478000285", legal_name="DONA DE CASA S/A", nickname="Dona de Casa"),)
+
+    reply = asyncio.run(_render_output(StoreListing(stores=stores), ChatState(), _with_client(deps, client)))
+
+    assert reply.text.startswith("Mercados suficientes pra pesquisar preço.")
+    assert "Dona de Casa" in reply.text
+
+
+def test_listing_without_a_client_is_unchanged(deps):
+    products = (Product(id=1, canonical_name="Ovos"),)
+
+    reply = asyncio.run(_render_output(ProductListing(products=products), ChatState(), deps))
+
+    assert reply.text == render_module.render_products(products)
+
+
 # --- the tap (ticket 160) ---------------------------------------------------------
 
 from dataclasses import replace as _replace  # noqa: E402

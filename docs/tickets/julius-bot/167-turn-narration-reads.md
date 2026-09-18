@@ -1,5 +1,14 @@
 # 167: `bot/turn.py` — Modo A/B para as 4 leituras
 
+<!-- status:done -->
+<!-- adjustments: o ticket pedia asyncio.to_thread(suggestions.narrate, deps.conn, ...) para não
+bloquear o loop; implementado e testado, isso lança sqlite3.ProgrammingError ("SQLite objects
+created in a thread can only be used in that same thread" -- check_same_thread é True por padrão),
+e o except Exception de narrate() engolia o erro em silêncio -- toda chamada parecia "a IA não
+disse nada". Corrigido chamando suggestions.narrate(...) direto, sem thread, igual ao 168 já fazia
+em handle_tap. _narrate continua async def só para o await ficar uniforme nos 4 call sites; nunca
+cede o loop de fato. Nenhuma outra peça do ticket mudou. -->
+
 > Onde tudo se junta: para cada leitura, decide se o resultado é pequeno o bastante para a IA substituir a tabela inteira (Modo A) ou grande demais e só ganha um comentário por cima (Modo B) — e o que fazer quando a IA não responde.
 
 ## Contexto
@@ -10,7 +19,7 @@ Fecha o design v2.7 para as leituras. Depende de **163** (`narrate`), **164** (`
 
 ### Dentro
 - Constantes `NARRATE_FULL_MAX_RECORDS = 6` e `NARRATE_FULL_MAX_GROUPS = 3` (chute inicial, documentado como não-medido — ver Notas).
-- Helper privado `async def _narrate(deps: Deps, context: str, facts: str) -> str | None`: se `deps.client is None` ou `facts` vazio, devolve `None` sem tocar em thread nenhuma; senão, `await asyncio.to_thread(suggestions.narrate, deps.conn, deps.config, deps.client, context, facts)`.
+- Helper privado `async def _narrate(deps: Deps, context: str, facts: str) -> str | None`: se `deps.client is None` ou `facts` vazio, devolve `None`; senão chama `suggestions.narrate(deps.conn, deps.config, deps.client, context, facts)` **diretamente, sem `asyncio.to_thread`** (ver adjustments no topo: a conexão SQLite não sobrevive a trocar de thread).
 - `_render_output` (já `async def` desde o protótipo descartado — se não estiver, torna-se) ganha, para cada uma das 4 leituras, a composição:
   - **`SearchOutcome`** com `len(records) <= NARRATE_FULL_MAX_RECORDS`: tenta `_narrate(deps, "histórico de preço de um produto", records_facts(records))`; se vier texto, `Reply(escape(texto))`; senão `Reply(search_fallback_line(records))`.
   - **`SearchOutcome`** maior, ou **`StoreComparison`** com mais de `NARRATE_FULL_MAX_GROUPS` grupos: comentário (Modo B) — tenta `_narrate` com fatos resumidos; se vier texto, `Reply(escape(texto) + "\n\n" + base)`; senão só `Reply(base)` (o `render_records`/`render_comparison` de sempre — **nenhuma mudança de comportamento aqui**, é o caminho de hoje).
@@ -26,9 +35,9 @@ Fecha o design v2.7 para as leituras. Depende de **163** (`narrate`), **164** (`
 ## Requisitos
 
 ### Funcionais
-- Quando `deps.client is None` (IA não configurada, ou teste que não passa client): comportamento **idêntico** ao de antes deste ticket — mesma tabela, mesmo texto, nenhuma chamada de thread. É a garantia de não regressão dos testes de `test_bot_turn.py` já existentes.
+- Quando `deps.client is None` (IA não configurada, ou teste que não passa client): comportamento **idêntico** ao de antes deste ticket — mesma tabela, mesmo texto. É a garantia de não regressão dos testes de `test_bot_turn.py` já existentes.
 - `output.records`/`comparison.comparisons` vazios nunca chamam `_narrate` (sem custo em cima de "Nenhum resultado.").
-- O `asyncio.to_thread` é a única forma de chamar `suggestions.narrate` a partir do turno — nunca uma chamada síncrona direta dentro de uma corrotina.
+- `_narrate` chama `suggestions.narrate` na mesma thread do turno — nunca via `asyncio.to_thread` (a conexão SQLite não pode atravessar thread).
 
 ### Validação e erros
 - `_narrate` nunca propaga exceção (a chamada em si já não lança, por `narrate` do ticket 163; o helper não precisa de `try/except` próprio).
@@ -57,9 +66,9 @@ modificar tests/test_bot_turn.py — testes de composição Modo A/B com e sem c
 8. Toda a suíte anterior de `test_bot_turn.py` (budget, histórico, pendência, prosa solta) continua verde sem edição.
 
 ## Critérios de aceite
-- [ ] `.venv/bin/pytest -q` verde.
-- [ ] `grep -n "asyncio.to_thread" julius/bot/turn.py` mostra exatamente uma ocorrência (dentro de `_narrate`).
-- [ ] Nenhum teste existente de `test_bot_turn.py` precisou de edição além de imports novos.
+- [x] `.venv/bin/pytest -q` verde.
+- [x] `grep -n "asyncio" julius/bot/turn.py` **vazio** (ver adjustments — não usa mais threading).
+- [x] Nenhum teste existente de `test_bot_turn.py` precisou de edição além de imports novos.
 
 ## Notas para o agente
 

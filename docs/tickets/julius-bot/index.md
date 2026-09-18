@@ -126,11 +126,11 @@ Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo
 
 | # | Ticket | Depende de | Esforço | Estado | Entrega |
 |---|---|---|---|---|---|
-| 163 | [`suggestions.narrate`](163-suggestions-narrate.md) | — | S | pendente | `PROMPT_VERSIONS["persona"]`, `SYSTEM_PROMPTS["persona"]`, `narrate()`, guarda de dinheiro |
-| 164 | [`render.py` — fatos](164-render-facts.md) | — | S | pendente | `records_facts`, `comparison_facts`, `products_facts`, `stores_facts` |
-| 165 | [`render.py` — frases-molde](165-render-fallback-lines.md) | — | S | pendente | `search_fallback_line`, `compare_fallback_line` |
-| 166 | [`Deps.client` + fiação](166-deps-client-wiring.md) | — | S | pendente | `Deps.client`, `HttpLlmClient` em `build_application`/`on_text` |
-| 167 | [`turn.py` — leituras](167-turn-narration-reads.md) | 163, 164, 165, 166 | M | pendente | Modo A/B nas 4 leituras, `_narrate`, cortes de tamanho |
+| 163 | [`suggestions.narrate`](163-suggestions-narrate.md) | — | S | **feito** (`16ac10b`) | `PROMPT_VERSIONS["persona"]`, `SYSTEM_PROMPTS["persona"]`, `narrate()`, guarda de dinheiro |
+| 164 | [`render.py` — fatos](164-render-facts.md) | — | S | **feito** (`007402e`) | `records_facts`, `comparison_facts`, `products_facts`, `stores_facts` |
+| 165 | [`render.py` — frases-molde](165-render-fallback-lines.md) | — | S | **feito** (`e002d2a`) | `search_fallback_line`, `compare_fallback_line` |
+| 166 | [`Deps.client` + fiação](166-deps-client-wiring.md) | — | S | **feito** (`650c261`) | `Deps.client`, `HttpLlmClient` em `build_application`/`on_text` |
+| 167 | [`turn.py` — leituras](167-turn-narration-reads.md) | 163, 164, 165, 166 | M | **feito** | Modo A/B nas 4 leituras, `_narrate`, cortes de tamanho — achado: `asyncio.to_thread` quebra com `sqlite3` (ver ticket) |
 | 168 | [`turn.py` — escrita](168-turn-narration-writes.md) | 163, 166 | M | pendente | comentário em `PendingWrite`/`WriteResult`/`WriteFailed`, `client` em `on_tap` |
 | 169 | [docs + smoke](169-docs-and-smoke.md) | 167, 168 | S | pendente | `CLAUDE.md` v2.7, roteiro de smoke, destino de `persona-julius-rock.md` |
 
