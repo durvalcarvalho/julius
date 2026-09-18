@@ -1,5 +1,8 @@
 # 153: Dependências do bot, a linha `bot` na DAG e as guardas de teste
 
+<!-- status:done implemented:2026-09-17 commit:4a759ac -->
+<!-- adjustments: guarda de modelo em tests/test_bot_guards.py, uma das duas opções do próprio ticket -->
+
 > Antes de existir código do bot, o projeto passa a saber que ele existe: o que ele pode importar, o que ninguém pode importar dele, e que nenhum teste fala com um modelo de verdade.
 
 ## Contexto

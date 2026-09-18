@@ -1,7 +1,7 @@
 # Julius v2.6 — bot no Telegram: tickets de implementação
 
 > Gerado a partir de: `docs/design/telegram-bot.md` (design), `docs/requirements/messaging-bot-integration.md` (requisitos), `claudedocs/research_messaging_bot_integration_20260917.md` e `claudedocs/research_bot_stack_libraries_20260917.md` (pesquisas), `../majordomo` (referência externa, estudada com desconfiança).
-> Gerado em: 2026-09-17 · Estado do código: commit `0b2b12d` + os docs desta frente ainda não versionados; suíte verde.
+> Gerado em: 2026-09-17 · Estado do código **na geração**: commit `0b2b12d`, docs desta frente ainda não versionados, suíte verde (754 testes). O estado atual é a coluna "Estado" da trilha — este cabeçalho não a repete.
 > **Premissa deste índice**: o §4.3 do design (*output functions* em vez de *Deferred Tools*) foi marcado para veto do usuário e **ainda não foi vetado**. Os tickets seguem o design como está. Se o veto vier, mudam 156–160 (a pendência passaria a ser `DeferredToolRequests`, o tap a `agent.run(deferred_tool_results=…)`, e a resposta a ser lida do `ToolReturnPart`); 150–155, 158 e 161 ficam.
 
 ## Visão geral
@@ -46,7 +46,7 @@ Trilha única (o projeto não tem frontend). A numeração continua a global do 
 | 150 | [`domain/formatting.py`](150-domain-formatting.md) | — | S | a fazer | `money`/`br_date`/`relative_age`/`content_text`/`store_labels`/`coverage_text`/`plural_groups` em `domain`; `cli` reexporta |
 | 151 | [`Config` do bot](151-config-bot-settings.md) | — | S | a fazer | `bot_token`, `bot_allowed_chat_id`, `bot_configured`; `JULIUS_BOT_*`; isolamento no `conftest` |
 | 152 | [`suggestions.record_usage`](152-suggestions-record-usage.md) | — | S | a fazer | cobrança + log públicos; `_ask` usa; `prompt_version` explícito |
-| 153 | [Dependências, DAG, guardas](153-bot-packaging-dag-guards.md) | — | S | a fazer | extras `bot`/`dev`; linha `bot` em `ALLOWED_IMPORTS`; `import julius.cli` sem deps do bot; `ALLOW_MODEL_REQUESTS=False` |
+| 153 | [Dependências, DAG, guardas](153-bot-packaging-dag-guards.md) | — | S | **feito** (`4a759ac`) | extras `bot`/`dev`; linha `bot` em `ALLOWED_IMPORTS`; `import julius.cli` sem deps do bot; `ALLOW_MODEL_REQUESTS=False` |
 | 154 | [`bot/render.py`](154-bot-render.md) | 150, 153 | M | a fazer | `escape`, `render_records`/`comparison`/`products`/`stores`, `fit` (4096) |
 | 155 | [`bot/actions.py` — leitura](155-bot-actions-read.md) | 153 | M | a fazer | `Deps`, `ProductListing`/`StoreListing`, `resolve_product`/`resolve_store`, 4 ações; `search.matching_product_ids` |
 | 156 | [`bot/actions.py` — nome e tag](156-bot-actions-write-names-tags.md) | 154, 155 | M | a fazer | `PendingWrite`/`WriteResult`/`WriteFailed`, `execute`, 4 escritas; `render_pending`/`result`/`failure` |
