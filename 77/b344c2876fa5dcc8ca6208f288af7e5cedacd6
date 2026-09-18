@@ -1,0 +1,27 @@
+tests/test_cli_common.py
+  s_2696c997dae14b::t_b596508752cb0d 1,3-4,9-15,19,26
+julius/domain/formatting.py
+  s_2696c997dae14b::t_890aad5b9b8b64 1-84
+tests/test_domain_formatting.py
+  s_2696c997dae14b::t_8cba4b28749478 1-140
+julius/cli/stores.py
+  s_2696c997dae14b::t_b596508752cb0d 12-13,69,72,80,84,86
+julius/cli/_common.py
+  s_2696c997dae14b::t_b596508752cb0d 12-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "77b344c2876fa5dcc8ca6208f288af7e5cedacd6",
+  "prompts": {},
+  "sessions": {
+    "s_2696c997dae14b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47bd6331-591b-4f18-a95a-1c9c00a35931",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
