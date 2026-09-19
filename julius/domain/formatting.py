@@ -73,8 +73,12 @@ def content_text(quantity: float, unit: str) -> str:
     return f"{quantity:g}".replace(".", ",") + f" {unit}"
 
 
+def plural(count: int, singular: str, plural_word: str | None = None) -> str:
+    return singular if count == 1 else (plural_word or f"{singular}s")
+
+
 def plural_groups(count: int) -> str:
-    return "grupo" if count == 1 else "grupos"
+    return plural(count, "grupo")
 
 
 def coverage_text(comparison: StoreComparison) -> str:

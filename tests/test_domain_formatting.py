@@ -7,6 +7,7 @@ from julius.domain.formatting import (
     content_text,
     coverage_text,
     money,
+    plural,
     plural_groups,
     relative_age,
     store_labels,
@@ -146,6 +147,17 @@ def test_plural_groups():
     assert plural_groups(1) == "grupo"
     assert plural_groups(0) == "grupos"
     assert plural_groups(3) == "grupos"
+
+
+def test_plural_appends_s_by_default():
+    assert plural(1, "mercado") == "mercado"
+    assert plural(0, "mercado") == "mercados"
+    assert plural(2, "mercado") == "mercados"
+
+
+def test_plural_uses_the_irregular_word_when_given():
+    assert plural(1, "fusão", "fusões") == "fusão"
+    assert plural(2, "fusão", "fusões") == "fusões"
 
 
 def test_store_labels_append_cnpj_only_when_nickname_repeats():

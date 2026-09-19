@@ -103,6 +103,17 @@ def compose_nickname(legal_name: str, trade_name: str | None, place: str | None)
     return head if place is None else f"{head}{NICKNAME_SEPARATOR}{place}"
 
 
+def suggest_nickname(legal_name: str, address: str | None) -> str:
+    """A nickname a human can accept as-is when no trade name is known (registry and AI both
+    apply first, for free and for a fee respectively -- this is the last, zero-cost fallback):
+    the legal name in Title Case plus the neighbourhood. Deliberately not `compose_nickname`,
+    whose `trade_name=None` path returns the legal name verbatim -- `is_unnamed` treats that
+    exact string as still unnamed, so pasting this suggestion must produce a different one."""
+    place = store_place(address)
+    head = legal_name.title()
+    return head if place is None else f"{head}{NICKNAME_SEPARATOR}{place}"
+
+
 def is_unnamed(nickname: str, legal_name: str, address: str | None) -> bool:
     """Whether the user still has not given this store a name of their own.
 

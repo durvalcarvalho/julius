@@ -88,7 +88,7 @@ def test_revisar_applies_readable_names_and_single_known_tags_without_prompt(mon
     result = _run("produtos", "revisar")
 
     assert result.exit_code == 0, result.output
-    assert "Aplicado: 1 nome(s), 1 categoria(s)." in result.output
+    assert "Aplicado: 1 nome, 1 categoria." in result.output
     output = _run("produtos", "listar").output
     assert "Linguiça de frango Aurora" in output
     assert "carnes" in output
@@ -264,7 +264,7 @@ def test_revisar_summary_counts_by_field(monkeypatch):
 
     result = _run("produtos", "revisar")
 
-    assert "Aplicado: 1 nome(s), 1 categoria(s), 1 conteúdo(s), 1 tipo(s)." in result.output
+    assert "Aplicado: 1 nome, 1 categoria, 1 conteúdo, 1 tipo." in result.output
     assert "julius produtos definir-conteudo 8 30 UN" not in result.output
 
 
@@ -279,8 +279,8 @@ def test_revisar_summary_omits_zero_counts(monkeypatch):
 
     result = _run("produtos", "revisar")
 
-    assert "Aplicado: 1 nome(s), 1 categoria(s)." in result.output
-    assert "conteúdo(s)" not in result.output and "tipo(s)" not in result.output
+    assert "Aplicado: 1 nome, 1 categoria." in result.output
+    assert "1 conteúdo" not in result.output and "1 tipo" not in result.output
 
 
 def test_revisar_survives_unwritable_log(monkeypatch, tmp_path):
@@ -317,7 +317,7 @@ def test_revisar_non_interactive_applies_known_categories_and_content(monkeypatc
     result = _run("produtos", "revisar")
 
     assert result.exit_code == 0, result.output
-    assert "Pendentes: 1 produto(s) sem conteúdo." in result.output  # the tea, sold by UN, got none
+    assert "Pendentes: 1 produto sem conteúdo." in result.output  # the tea, sold by UN, got none
     output = _run("produtos", "listar").output
     assert "carnes" in output and "hortifruti" in output and "mercearia" in output
     assert "30 UN" in output
@@ -718,7 +718,7 @@ def test_content_question_enter_skips_and_stays_pending(monkeypatch):
     hint = _packaging([{"id": 8, "form": "pack", "candidates": [{"quantity": 10, "unit": "UN"}]}])
     _, result = _tea_review(monkeypatch, hint, input="\n")
 
-    assert "Pendentes: 1 produto(s) sem conteúdo." in result.output
+    assert "Pendentes: 1 produto sem conteúdo." in result.output
     assert "10 UN" not in _run("produtos", "listar").output
 
 
@@ -728,7 +728,7 @@ def test_content_question_invalid_input_is_treated_as_skip(monkeypatch, answer):
     _, result = _tea_review(monkeypatch, hint, input=answer)
 
     assert result.exit_code == 0, result.output
-    assert "Pendentes: 1 produto(s) sem conteúdo." in result.output
+    assert "Pendentes: 1 produto sem conteúdo." in result.output
 
 
 def test_content_question_suppresses_candidates_for_weight_form(monkeypatch):
@@ -772,7 +772,7 @@ def test_content_question_not_asked_without_tty(monkeypatch):
 
     assert "— conteúdo" not in result.output
     assert _packaging_calls(client) == []
-    assert "Pendentes: 1 produto(s) sem conteúdo." in result.output
+    assert "Pendentes: 1 produto sem conteúdo." in result.output
 
 
 def test_sim_asks_nothing_and_leaves_pending(monkeypatch):
@@ -782,7 +782,7 @@ def test_sim_asks_nothing_and_leaves_pending(monkeypatch):
     assert result.exit_code == 0, result.output
     assert "— conteúdo" not in result.output
     assert _packaging_calls(client) == []
-    assert "Pendentes: 1 produto(s) sem conteúdo." in result.output
+    assert "Pendentes: 1 produto sem conteúdo." in result.output
 
 
 def test_content_answer_is_logged_with_undo(monkeypatch, tmp_path):
@@ -822,7 +822,7 @@ def test_undo_command_for_merge_field():
 def test_every_applied_action_field_has_a_label_and_an_undo_command():
     """Forgetting one would print an empty label or a wrong command instead of failing."""
     names = get_args(get_type_hints(AppliedAction)["field"])
-    labelled = {field for field, _ in _review._FIELD_LABELS}
+    labelled = {field for field, _, _ in _review._FIELD_LABELS}
     for name in names:
         assert name in labelled, name
         assert _review._undo_command(AppliedAction(1, name, "antes", "depois")).startswith("julius produtos")

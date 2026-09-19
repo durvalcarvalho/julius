@@ -238,7 +238,8 @@ def test_v2_fallback_then_permanent_fix(monkeypatch):
 
 def test_v2_stores_show_address_and_branch_hint():
     result = _import("qrcode-3.html", "qrcode-4.html")
-    assert "Filiais da mesma rede" in result.output
+    assert "de filiais da mesma rede sem apelido" in result.output
+    assert "mercados renomear" in result.output
     assert "GUARA II" in result.output
     assert "CANDANGOLANDIA" in result.output
 

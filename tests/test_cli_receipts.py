@@ -220,7 +220,7 @@ def test_consultar_without_ai_configured_is_unchanged():
 def test_importar_first_time_suggests_store_nicknames():
     result = _import("qrcode.html")
     assert result.exit_code == 0
-    assert "1 mercado(s)" in result.output and "mercados renomear" in result.output
+    assert "1 mercado ainda com a razão social como nome" in result.output and "mercados renomear" in result.output
     runner.invoke(app, ["mercados", "renomear", "27289076001379", "FL 3 Costa"])
     assert _hint_lines(_import("qrcode.html").output) == []
 
@@ -230,7 +230,7 @@ def test_importar_new_products_with_size_suggest_content():
     assert result.exit_code == 0
     # PACKAGE_SIZE_IN_DESCRIPTION loses the 2-hint cap to PRODUCTS_PENDING_REVIEW here (ticket 110);
     # `julius produtos revisar` is what actually surfaces package size for these 39 pending products.
-    assert "39 produto(s) novo(s) sem categoria" in result.output
+    assert "39 produtos novos sem categoria" in result.output
     assert "produtos revisar" in result.output
 
 
@@ -239,7 +239,7 @@ def test_importar_many_files_prints_hints_once():
     assert result.exit_code == 0
     assert result.output.count("itens novos") == 3
     assert len(_hint_lines(result.output)) == 2
-    assert "3 mercado(s)" in result.output
+    assert "3 mercados" in result.output
 
 
 def test_importar_reviews_new_products_when_ai_is_configured(monkeypatch):
@@ -261,7 +261,7 @@ def test_importar_reviews_new_products_when_ai_is_configured(monkeypatch):
 def test_importar_without_ai_prints_pending_review_hint():
     result = _import("qrcode-2.html")
     assert result.exit_code == 0
-    assert "Dica: 1 produto(s) novo(s) sem categoria" in result.output
+    assert "Dica: 1 produto novo sem categoria" in result.output
     assert "julius produtos revisar" in result.output
 
 
@@ -320,7 +320,7 @@ def test_importar_ai_failure_keeps_import_and_exit_0(monkeypatch):
     assert result.exit_code == 0, result.output
     assert "1 itens novos" in result.output
     assert "IA não respondeu" in result.output
-    assert "produto(s) novo(s) sem categoria" in result.output
+    assert "produto novo sem categoria" in result.output
 
 
 def test_importar_bad_file_still_exits_1_after_review(monkeypatch, tmp_path):
@@ -341,7 +341,7 @@ def test_importar_bad_file_still_exits_1_after_review(monkeypatch, tmp_path):
 def test_importar_package_size_hint_only_without_review(monkeypatch, tmp_path):
     monkeypatch.setenv("JULIUS_DB", str(tmp_path / "a.db"))
     without_ai = _import("qrcode-5.html")
-    assert "39 produto(s) novo(s) sem categoria" in without_ai.output
+    assert "39 produtos novos sem categoria" in without_ai.output
 
     monkeypatch.setenv("JULIUS_DB", str(tmp_path / "b.db"))
     _ai_env(monkeypatch)

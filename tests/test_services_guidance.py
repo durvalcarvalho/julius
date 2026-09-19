@@ -71,7 +71,9 @@ def test_after_search_unknown_tag_lists_existing_tags(conn):
 
 def test_after_import_flags_stores_without_nickname_then_stops_after_rename(conn):
     result = _import(conn, "qrcode.html")
-    assert Hint("FIRST_IMPORT_NAME_STORES", ("1",)) in guidance.after_import(conn, result)
+    hint = next(h for h in guidance.after_import(conn, result) if h.kind == "FIRST_IMPORT_NAME_STORES")
+    # detail is "cnpj\tsuggested nickname" (cli/_hints.py turns it into a ready `renomear` command).
+    assert hint.details == ("27289076001379\tFl 3 Costa Multicanal S A — AGUAS CLARAS",)
     stores.rename_store(conn, "27289076001379", "FL 3 Costa")
     assert "FIRST_IMPORT_NAME_STORES" not in _kinds(guidance.after_import(conn, result))
 

@@ -3,10 +3,12 @@ import pytest
 from julius.domain.normalization import (
     UnknownUnitError,
     digits_only,
+    is_unnamed,
     normalize_content,
     normalize_sale_unit,
     normalize_text,
     parse_decimal_br,
+    suggest_nickname,
 )
 
 
@@ -107,3 +109,21 @@ def test_normalize_text_uppercases_strips_accents_and_collapses_spaces():
 def test_normalize_text_empty_stays_empty():
     assert normalize_text("") == ""
     assert normalize_text("   ") == ""
+
+
+def test_suggest_nickname_title_cases_the_legal_name_and_adds_the_place():
+    address = "QUADRA QE 30, 02/39, LJS 02/39, GUARA II, BRASILIA, DF"
+    assert suggest_nickname("DONA DE CASA S/A", address) == "Dona De Casa S/A — GUARA II"
+
+
+def test_suggest_nickname_without_a_parseable_address_is_just_the_title_case():
+    assert suggest_nickname("DONA DE CASA S/A", None) == "Dona De Casa S/A"
+    assert suggest_nickname("DONA DE CASA S/A", "endereço sem vírgulas") == "Dona De Casa S/A"
+
+
+def test_suggest_nickname_is_never_mistaken_for_still_unnamed():
+    # The whole point: pasting the suggestion verbatim must make `is_unnamed` say "done".
+    address = "QUADRA QE 30, 02/39, LJS 02/39, GUARA II, BRASILIA, DF"
+    legal_name = "DONA DE CASA S/A"
+    suggested = suggest_nickname(legal_name, address)
+    assert not is_unnamed(suggested, legal_name, address)

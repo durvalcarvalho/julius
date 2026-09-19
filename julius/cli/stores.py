@@ -9,9 +9,9 @@ from rich.table import Table
 
 from julius import config
 from julius.cli._common import HIGHLIGHT_STYLE, br_date, console, date_cell, fail, money, open_db
-from julius.domain.formatting import coverage_text, plural_groups, store_labels
+from julius.domain.formatting import coverage_text, plural, plural_groups, store_labels
 from julius.domain.models import KindComparison, StoreNaming
-from julius.domain.normalization import digits_only
+from julius.domain.normalization import digits_only, suggest_nickname
 from julius.infra import ai_log
 from julius.infra.llm_client import HttpLlmClient
 from julius.services import catalog, comparison as comparison_service
@@ -153,15 +153,25 @@ def review_stores() -> None:
         namings = catalog.name_stores(conn, settings, client)
     finally:
         conn.close()
+    named_cnpjs = {naming.cnpj for naming in namings}
+    still_pending = [store for store in pending if store.cnpj not in named_cnpjs]
     if not namings:
-        console.print(
-            f"{len(pending)} mercado(s) sem apelido, e nenhuma fonte soube o nome. "
-            'Dê o apelido à mão: julius mercados renomear CNPJ "Apelido"'
-        )
+        console.print(f"{len(pending)} {plural(len(pending), 'mercado')} sem apelido, e nenhuma fonte soube o nome:")
+        for store in still_pending:
+            console.print(f'  julius mercados renomear {store.cnpj} "{suggest_nickname(store.legal_name, store.address)}"')
         return
     log_namings(settings, namings)
     print_namings(namings)
-    missing = len(pending) - len(namings)
-    if missing:
-        console.print(f"{missing} mercado(s) continuam com a razão social — nenhuma fonte soube.", style="dim")
+    if still_pending:
+        verb = plural(len(still_pending), "continua", "continuam")
+        console.print(
+            f"{len(still_pending)} {plural(len(still_pending), 'mercado')} {verb} com a razão social — "
+            "nenhuma fonte soube:",
+            style="dim",
+        )
+        for store in still_pending:
+            console.print(
+                f'  julius mercados renomear {store.cnpj} "{suggest_nickname(store.legal_name, store.address)}"',
+                style="dim",
+            )
     console.print("Errou algum? Desfaça com: julius produtos revisar --ultimas-acoes", style="dim")

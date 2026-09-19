@@ -9,12 +9,13 @@ from typing import ParamSpec
 
 from julius.config import Config
 from julius.domain.models import Hint, ImportResult, PriceRecord, Store
-from julius.domain.normalization import UnknownUnitError, is_unnamed
+from julius.domain.normalization import UnknownUnitError, is_unnamed, suggest_nickname
 from julius.parsers import ReceiptParseError
 from julius.repositories import products, stores
 from julius.services import search
 
 MAX_HINTS = 2
+_DETAIL_SEPARATOR = "\t"  # cnpj / suggested nickname, packed so the CLI (not this module) can word the command
 PACKAGE_SIZE = re.compile(r"C/\d+|\d+(,\d+)?\s?(ML|L|G|KG)\b", re.IGNORECASE)
 _MAX_NAMED_PRODUCTS = 3
 _MAX_LISTED_TAGS = 5
@@ -69,9 +70,9 @@ def after_import(conn: sqlite3.Connection, result: ImportResult, *, reviewed: bo
     same_chain = _same_chain_hint(conn)
     if same_chain:
         hints.append(same_chain)
-    unnamed = sum(1 for store in stores.list_stores(conn) if is_unnamed(store.nickname, store.legal_name, store.address))
+    unnamed = [store for store in stores.list_stores(conn) if is_unnamed(store.nickname, store.legal_name, store.address)]
     if unnamed:
-        hints.append(Hint("FIRST_IMPORT_NAME_STORES", (str(unnamed),)))
+        hints.append(Hint("FIRST_IMPORT_NAME_STORES", tuple(_naming_detail(store) for store in unnamed)))
     if not reviewed:
         sized = [
             product
@@ -86,16 +87,22 @@ def after_import(conn: sqlite3.Connection, result: ImportResult, *, reviewed: bo
     return hints
 
 
+def _naming_detail(store: Store) -> str:
+    """cnpj + suggested nickname, packed for `cli/_hints.py` to word as a ready `renomear` command --
+    this module diagnoses, the CLI owns command syntax (same split as `_review.py::_undo_command`)."""
+    return f"{store.cnpj}{_DETAIL_SEPARATOR}{suggest_nickname(store.legal_name, store.address)}"
+
+
 def _same_chain_hint(conn: sqlite3.Connection) -> Hint | None:
     groups: dict[str, list[Store]] = {}
     for store in stores.list_stores(conn):
         groups.setdefault(store.cnpj[:8], []).append(store)
     for radical in sorted(groups):
         group = groups[radical]
-        if len(group) >= 2 and any(is_unnamed(store.nickname, store.legal_name, store.address) for store in group):
-            ordered = sorted(group, key=lambda store: store.cnpj)[:_MAX_NAMED_PRODUCTS]
-            details = tuple(f"{store.cnpj} — {store.address or store.legal_name}" for store in ordered)
-            return Hint("SAME_CHAIN_BRANCHES", details)
+        pending = [store for store in group if is_unnamed(store.nickname, store.legal_name, store.address)]
+        if len(group) >= 2 and pending:
+            ordered = sorted(pending, key=lambda store: store.cnpj)
+            return Hint("SAME_CHAIN_BRANCHES", tuple(_naming_detail(store) for store in ordered))
     return None
 
 

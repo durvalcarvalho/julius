@@ -165,7 +165,7 @@ def test_produtos_revisar_ultimas_acoes_lists_the_nickname_change(registry):
 def test_importar_names_the_store_it_just_created(registry):
     registry[VENEZA_CNPJ] = "SUPERMERCADO VENEZA"
     result = _import("qrcode-2.html")
-    assert "ganharam apelido" in result.output
+    assert "1 mercado ganhou apelido" in result.output
     assert "SUPERMERCADO VENEZA — GUARA II" in result.output
 
 

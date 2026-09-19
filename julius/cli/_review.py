@@ -12,6 +12,7 @@ from rich.text import Text
 
 from julius.cli._common import console, content_text
 from julius.config import Config
+from julius.domain.formatting import plural
 from julius.domain.models import (
     AppliedAction,
     ContentSuggestion,
@@ -27,11 +28,11 @@ from julius.infra.llm_client import LlmClient
 from julius.services import catalog, curation, suggestions
 
 _FIELD_LABELS = (
-    ("name", "nome(s)"),
-    ("tag", "categoria(s)"),
-    ("content", "conteúdo(s)"),
-    ("kind", "tipo(s)"),
-    ("merge", "fusão(ões)"),
+    ("name", "nome", "nomes"),
+    ("tag", "categoria", "categorias"),
+    ("content", "conteúdo", "conteúdos"),
+    ("kind", "tipo", "tipos"),
+    ("merge", "fusão", "fusões"),
 )
 
 # The AI's own words never reach the screen: `form` is data, this is the vocabulary the user reads.
@@ -174,8 +175,15 @@ def _ask_pending_content(
         catalog_products = [
             Product(id=p.product_id, canonical_name=p.readable_name or p.current_name) for p in pending
         ]
-        with console.status(f"Consultando IA sobre a embalagem de {len(pending)} produto(s)…"):
+        label = plural(len(pending), "produto")
+        with console.status(f"Consultando IA sobre a embalagem de {len(pending)} {label}…"):
             hints = suggestions.suggest_packaging(conn, settings, client, catalog_products)
+    # Marks the hand-off from "aplicando sozinho" (everything printed above) to "esperando você":
+    # without it, the first question read as one more status line, not something to answer.
+    console.print(
+        f"{len(pending)} {plural(len(pending), 'produto')} sem conteúdo — responda ou Enter pra pular:",
+        style="bold",
+    )
     still_missing: list[ProductProposal] = []
     for proposal in pending:
         chosen = _ask_content(proposal, hints.get(proposal.product_id))
@@ -226,7 +234,7 @@ def review_products(
     assume_yes: bool,
     interactive: bool,
 ) -> bool:
-    with console.status(f"Consultando IA para {len(product_ids)} produto(s)…"):
+    with console.status(f"Consultando IA para {len(product_ids)} {plural(len(product_ids), 'produto')}…"):
         proposals = curation.propose(conn, settings, client, product_ids)
     if not proposals:
         if not suggestions.is_available(conn, settings):
@@ -246,7 +254,11 @@ def review_products(
         applied += curation.apply(conn, proposal, tag=proposal.tag, content=True, kind=True)
     _log_actions(settings, applied)
     counts = Counter(action.field for action in applied)
-    summary = ", ".join(f"{counts[field]} {label}" for field, label in _FIELD_LABELS if counts[field])
+    summary = ", ".join(
+        f"{counts[field]} {plural(counts[field], singular, plural_word)}"
+        for field, singular, plural_word in _FIELD_LABELS
+        if counts[field]
+    )
     if summary:
         console.print(f"Aplicado: {summary}.")
         console.print("Desfazer ou auditar: julius produtos revisar --ultimas-acoes")
@@ -259,6 +271,6 @@ def review_products(
     _merge_duplicates(conn, settings, curation.judge_duplicates(conn, settings, client, candidates))
 
     if pending:
-        console.print(f"Pendentes: {len(pending)} produto(s) sem conteúdo.")
+        console.print(f"Pendentes: {len(pending)} {plural(len(pending), 'produto')} sem conteúdo.")
 
     return True

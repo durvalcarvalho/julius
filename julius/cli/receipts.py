@@ -22,6 +22,7 @@ from julius.cli._common import (
 )
 from julius.cli._hints import print_hints
 from julius.domain.comparison_basis import comparison_basis
+from julius.domain.formatting import plural
 from julius.domain.models import ImportResult, PriceExtreme, PriceRecord, SearchOutcome
 from julius.infra import ai_log, receipt_files
 from julius.infra.llm_client import HttpLlmClient
@@ -333,5 +334,6 @@ def _name_stores(conn, settings) -> None:
     if not namings:
         return
     stores_cli.log_namings(settings, namings)
-    console.print(f"{len(namings)} mercado(s) ganharam apelido:")
+    verb = plural(len(namings), "ganhou", "ganharam")
+    console.print(f"{len(namings)} {plural(len(namings), 'mercado')} {verb} apelido:")
     stores_cli.print_namings(namings)
