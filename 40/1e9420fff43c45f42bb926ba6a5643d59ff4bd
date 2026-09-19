@@ -1,0 +1,47 @@
+julius/services/suggestions.py
+  s_416d2121830a4e::t_1b7f142bb15d1c 32
+  s_416d2121830a4e::t_3b9e47cb2c423d 183,185-192
+  s_416d2121830a4e::t_0bf7730c4c14e1 184
+  s_416d2121830a4e::t_732ae81da2ae39 711
+  s_416d2121830a4e::t_b684251ea50461 148-157
+  s_416d2121830a4e::t_d8befdc4236259 182,197,205-224
+  s_416d2121830a4e::t_c67c9b147900a2 225-240
+julius/bot/app.py
+  s_416d2121830a4e::t_e68dc2ecb09e3d 108-116,121-132
+  s_416d2121830a4e::t_768f3125f12300 7
+tests/test_bot_app.py
+  s_416d2121830a4e::t_251d2f5e855889 207-274,280-281
+  s_416d2121830a4e::t_85cc2304adc508 275-279
+CLAUDE.md
+  s_416d2121830a4e::t_5a7579210753d2 81-90
+julius/bot/turn.py
+  s_416d2121830a4e::t_a60b60472edcbd 44-60
+  s_416d2121830a4e::t_b438d8c108d9b6 166-167,169-173,179-180,182-186
+docs/design/bot-message-chunking.md
+  s_416d2121830a4e::t_209467ff7c90bc 1-77,79,81,113-122
+  s_416d2121830a4e::t_bef09e64f2176a 78,80,82-112
+tests/test_bot_turn.py
+  s_416d2121830a4e::t_dba6ccd2c4319f 352,359-391
+  s_416d2121830a4e::t_93caeb6dbd5148 276-279,286-321
+docs/requirements/bot-message-chunking.md
+  s_416d2121830a4e::t_81e86328dc7979 1-61
+tests/test_real_ai.py
+  s_416d2121830a4e::t_26522a7c4c9945 32,34-35
+  s_416d2121830a4e::t_e6adab6f786079 244-268
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "401e9420fff43c45f42bb926ba6a5643d59ff4bd",
+  "prompts": {},
+  "sessions": {
+    "s_416d2121830a4e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "393f0592-7f89-4b2a-a8c6-37d433bb348b",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
