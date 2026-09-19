@@ -41,12 +41,23 @@ HISTORY_TURNS = 3
 PENDING_TTL_SECONDS = 300.0
 
 # Medido contra o banco real em 18/09/2026 (105 produtos, 132 preços, 5 mercados): 6 cobre 69 das
-# 72 buscas possíveis (96%), e o único `mercados comparar` real do catálogo tem exatamente 6 grupos
-# -- narrado inteiro pela IA sem a guarda rejeitar nada. Acima destes cortes, a leitura ganha só um
-# comentário por cima da tabela de sempre (Modo B); dentro deles, a narração troca a tabela inteira
-# por uma frase (Modo A). Reavaliar se o catálogo crescer muito além disso.
-NARRATE_FULL_MAX_RECORDS = 6
-NARRATE_FULL_MAX_GROUPS = 6
+# 72 buscas possíveis (96%), e o único `mercados comparar` real do catálogo tem exatamente 6 grupos.
+# Desde o design `bot-message-chunking.md` (v2.8), a narração é sempre tentada -- não é mais um
+# corte Modo A/Modo B. O que este número decide agora é só o fallback SEM remark (IA não
+# configurada, orçamento estourado, ou a chamada falhou): `search_fallback_line` supõe implicitamente
+# um produto só (cita `records[0].canonical_name`), então só é seguro reaproveitá-lo dentro do corte
+# onde isso foi medido; acima dele o fallback volta a ser a tabela crua, nunca a frase.
+FALLBACK_LINE_MAX_RECORDS = 6
+FALLBACK_LINE_MAX_GROUPS = 6
+
+# Teto de sanidade: acima disto a chamada de IA nem é tentada, direto pra tabela crua -- protege
+# contra um `consultar` de catálogo grande virar um prompt de centenas de linhas por acidente (o
+# `max_tokens=260` já truncou uma vez com só 6 grupos, ticket 172). Não é número medido contra o
+# catálogo real (nenhum caso real chega perto ainda) -- placeholder generoso, a recalibrar quando
+# o catálogo crescer o suficiente para importar. Ver "O que fica para medir" em
+# docs/design/bot-message-chunking.md.
+NARRATE_MAX_RECORDS = 40
+NARRATE_MAX_GROUPS = 20
 
 CALL_KIND = "bot_turn"
 
@@ -152,19 +163,27 @@ async def _render_output(output: object, state: ChatState, deps: Deps) -> Reply:
         # configured client tried and failed, not for "there is no client to try").
         if not records or deps.client is None:
             return Reply(base)
+        if len(records) > NARRATE_MAX_RECORDS:
+            return Reply(base)
         remark = await _narrate(deps, "histórico de preço de um produto", records_facts(records))
-        if len(records) <= NARRATE_FULL_MAX_RECORDS:
-            return Reply(escape(remark) if remark else search_fallback_line(records))
-        return Reply(f"{escape(remark)}\n\n{base}" if remark else base)
+        if remark:
+            return Reply(escape(remark))
+        if len(records) <= FALLBACK_LINE_MAX_RECORDS:
+            return Reply(search_fallback_line(records))
+        return Reply(base)
     if isinstance(output, StoreComparison):
         base = render_comparison(output)
         groups = output.comparisons
         if not groups or deps.client is None:
             return Reply(base)
+        if len(groups) > NARRATE_MAX_GROUPS:
+            return Reply(base)
         remark = await _narrate(deps, "comparação de preço entre mercados", comparison_facts(output))
-        if len(groups) <= NARRATE_FULL_MAX_GROUPS:
-            return Reply(escape(remark) if remark else compare_fallback_line(output))
-        return Reply(f"{escape(remark)}\n\n{base}" if remark else base)
+        if remark:
+            return Reply(escape(remark))
+        if len(groups) <= FALLBACK_LINE_MAX_GROUPS:
+            return Reply(compare_fallback_line(output))
+        return Reply(base)
     if isinstance(output, ProductListing):
         base = render_products(output.products)
         remark = await _narrate(deps, "catálogo de produtos", products_facts(output.products))

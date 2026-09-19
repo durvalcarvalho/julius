@@ -273,15 +273,52 @@ def test_search_reply_falls_back_to_a_julius_line_when_the_model_fails(deps):
     assert "<pre>" not in reply.text
 
 
-def test_search_reply_above_the_cutoff_uses_comment_plus_table(deps):
+def test_search_reply_above_the_old_cutoff_still_uses_only_the_persona(deps):
+    """Desde o design bot-message-chunking.md (v2.8), a narração nunca mais é colada com a tabela
+    crua -- ela substitui a resposta inteira, qualquer que seja a contagem dentro do teto de
+    sanidade (NARRATE_MAX_RECORDS)."""
     records = tuple(_price_record(product_id=i, purchased_at=f"2026-09-{i:02d}T10:00:00") for i in range(1, 8))
     client = ScriptedLlmClient([_persona_reply("Bastante coisa registrada de banana.")])
     output = SearchOutcome(records=records, term="banana", tag=None)
 
     reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
 
-    assert reply.text.startswith("Bastante coisa registrada de banana.")
-    assert "<pre>" in reply.text
+    assert reply.text == "Bastante coisa registrada de banana."
+    assert "<pre>" not in reply.text
+
+
+def test_search_reply_beyond_the_sanity_ceiling_skips_the_persona(deps):
+    """Acima de NARRATE_MAX_RECORDS a chamada de IA nem é tentada -- direto pra tabela crua."""
+    from julius.bot.turn import NARRATE_MAX_RECORDS
+
+    records = tuple(
+        _price_record(product_id=i, purchased_at=f"2026-01-{(i % 28) + 1:02d}T10:00:00")
+        for i in range(1, NARRATE_MAX_RECORDS + 2)
+    )
+    client = ScriptedLlmClient([_persona_reply("não deveria rodar")])
+    output = SearchOutcome(records=records, term="banana", tag=None)
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == render_module.render_records(records)
+    assert client.calls == []
+
+
+def test_search_reply_above_the_fallback_cutoff_with_no_remark_uses_the_table(deps):
+    """search_fallback_line supõe um produto só (cita records[0].canonical_name) -- acima do corte
+    medido pra essa suposição, uma falha da persona cai na tabela, nunca na frase."""
+    from julius.bot.turn import FALLBACK_LINE_MAX_RECORDS
+
+    records = tuple(
+        _price_record(product_id=i, purchased_at=f"2026-09-{i:02d}T10:00:00")
+        for i in range(1, FALLBACK_LINE_MAX_RECORDS + 2)
+    )
+    client = ScriptedLlmClient([LlmResponse("", 0, 0, error="timeout")])
+    output = SearchOutcome(records=records, term="banana", tag=None)
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == render_module.render_records(records)
 
 
 def test_search_reply_without_a_client_is_unchanged(deps):
@@ -312,15 +349,46 @@ def test_compare_reply_uses_the_persona_when_small(deps):
     assert "<pre>" not in reply.text
 
 
-def test_compare_reply_above_the_cutoff_uses_comment_plus_table(deps):
+def test_compare_reply_above_the_old_cutoff_still_uses_only_the_persona(deps):
     groups = tuple(_kind_group(f"tipo{i}", _store_entry("Assaí", "1", 1.0 + i), _store_entry("Dona de Casa", "2", 2.0 + i)) for i in range(7))
     client = ScriptedLlmClient([_persona_reply("Bastante grupo pra comparar.")])
     output = _store_comparison(*groups)
 
     reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
 
-    assert reply.text.startswith("Bastante grupo pra comparar.")
-    assert "<pre>" in reply.text
+    assert reply.text == "Bastante grupo pra comparar."
+    assert "<pre>" not in reply.text
+
+
+def test_compare_reply_beyond_the_sanity_ceiling_skips_the_persona(deps):
+    from julius.bot.turn import NARRATE_MAX_GROUPS
+
+    groups = tuple(
+        _kind_group(f"tipo{i}", _store_entry("Assaí", "1", 1.0 + i), _store_entry("Dona de Casa", "2", 2.0 + i))
+        for i in range(NARRATE_MAX_GROUPS + 1)
+    )
+    client = ScriptedLlmClient([_persona_reply("não deveria rodar")])
+    output = _store_comparison(*groups)
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == render_module.render_comparison(output)
+    assert client.calls == []
+
+
+def test_compare_reply_above_the_fallback_cutoff_with_no_remark_uses_the_table(deps):
+    from julius.bot.turn import FALLBACK_LINE_MAX_GROUPS
+
+    groups = tuple(
+        _kind_group(f"tipo{i}", _store_entry("Assaí", "1", 1.0 + i), _store_entry("Dona de Casa", "2", 2.0 + i))
+        for i in range(FALLBACK_LINE_MAX_GROUPS + 1)
+    )
+    client = ScriptedLlmClient([LlmResponse("", 0, 0, error="timeout")])
+    output = _store_comparison(*groups)
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == render_module.render_comparison(output)
 
 
 def test_compare_reply_with_no_groups_never_calls_the_persona(deps):

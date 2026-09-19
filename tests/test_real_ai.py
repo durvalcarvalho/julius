@@ -29,8 +29,10 @@ from julius.bot.actions import Deps, PendingWrite, ProductListing, StoreListing
 from julius.bot.agent import build_agent
 from julius.bot.turn import ChatState, handle_tap, handle_text
 from julius.domain.models import SearchOutcome, StoreComparison
+from julius.bot import render
 from julius.infra import db
-from julius.services import catalog, suggestions
+from julius.infra.llm_client import HttpLlmClient
+from julius.services import catalog, search as search_service, suggestions
 
 pytestmark = pytest.mark.real_ai
 
@@ -237,6 +239,31 @@ def test_the_model_never_invents_a_product_id(deps):
 
     assert _snapshot(deps) == before
     assert reply.pending is None, "propôs uma escrita para um id inexistente"
+
+
+# --- persona v4: agrupamento com muitos produtos (design bot-message-chunking.md, v2.8) --------
+
+
+def test_narration_of_many_dissimilar_products_stays_short(deps):
+    """Achado real desta rodada de design: o prompt v3, sem instrução de agrupamento, tentava
+    narrar TODOS os produtos de uma busca ampla e truncava (`finish_reason: length`, max_tokens
+    500, 25 registros de hortifruti reais). Isto testa a compressão do prompt `persona` isolada do
+    roteamento -- não é o agente que está sob teste, é se a narração continua curta quando os fatos
+    trazem muitos produtos sem resultado em comum."""
+    outcome = search_service.search_free_text(deps.conn, [], tag="hortifruti", limit=20)
+    if len(outcome.records) < 10:
+        pytest.skip("catálogo real não tem hortifruti suficiente pra este teste")
+    facts = render.records_facts(outcome.records)
+
+    client = HttpLlmClient.from_config(deps.config)
+    reply = suggestions.narrate(deps.conn, deps.config, client, "histórico de preço de um produto", facts)
+    _SPENT.append(_last_call(deps)["cost_usd"])
+
+    print(f"\n  {len(outcome.records)} registros -> {reply!r}")
+    assert reply, "a persona não deveria falhar/truncar com muitos produtos -- era o bug original"
+    blocks = reply.split("\n\n")
+    assert len(blocks) <= 4, f"resposta com produtos demais deveria caber em poucos blocos: {blocks}"
+    assert all(len(block) <= 400 for block in blocks), f"um bloco virou textão de novo: {blocks}"
 
 
 def test_the_run_reports_what_it_cost():

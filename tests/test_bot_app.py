@@ -204,6 +204,81 @@ def test_show_typing_failure_is_swallowed():
     asyncio.run(bot_app._show_typing(_update(42), context))  # must not raise
 
 
+# --- várias mensagens por resposta (design bot-message-chunking.md) --------------
+
+
+def _message_update():
+    message = SimpleNamespace(reply_text=AsyncMock())
+    return SimpleNamespace(effective_message=message), message
+
+
+def test_chunks_splits_on_blank_lines():
+    assert bot_app._chunks("primeiro\n\nsegundo\n\nterceiro") == ["primeiro", "segundo", "terceiro"]
+
+
+def test_chunks_keeps_single_line_breaks_inside_one_bubble():
+    assert bot_app._chunks("linha 1\nlinha 2") == ["linha 1\nlinha 2"]
+
+
+def test_chunks_of_text_with_no_blank_line_is_a_single_chunk():
+    assert bot_app._chunks("Nenhum resultado.") == ["Nenhum resultado."]
+
+
+def test_chunks_tolerates_three_or_more_blank_lines():
+    assert bot_app._chunks("a\n\n\nb") == ["a", "b"]
+
+
+def test_send_delivers_one_message_per_block():
+    update, message = _message_update()
+
+    asyncio.run(bot_app._send(update, "primeiro bloco\n\nsegundo bloco\n\nterceiro bloco"))
+
+    assert message.reply_text.await_count == 3
+    texts = [call.args[0] for call in message.reply_text.await_args_list]
+    assert texts == ["primeiro bloco", "segundo bloco", "terceiro bloco"]
+
+
+def test_send_of_a_single_block_is_unchanged():
+    update, message = _message_update()
+
+    asyncio.run(bot_app._send(update, "Nenhum resultado."))
+
+    message.reply_text.assert_awaited_once()
+    assert message.reply_text.await_args.args[0] == "Nenhum resultado."
+
+
+def test_send_puts_the_keyboard_only_on_the_last_message():
+    update, message = _message_update()
+    keyboard = bot_app._keyboard("abc")
+
+    asyncio.run(bot_app._send(update, "bloco 1\n\nbloco 2", keyboard))
+
+    markups = [call.kwargs["reply_markup"] for call in message.reply_text.await_args_list]
+    assert markups == [None, keyboard]
+
+
+def test_send_with_no_effective_message_does_nothing():
+    update = SimpleNamespace(effective_message=None)
+
+    asyncio.run(bot_app._send(update, "oi"))  # must not raise
+
+
+def test_send_recovers_per_chunk_when_telegram_refuses_the_html():
+    """Uma bolha com HTML exótico não pode derrubar as outras -- cada uma recua sozinha."""
+    from telegram.error import BadRequest
+
+    message = SimpleNamespace(reply_text=AsyncMock(side_effect=[BadRequest("can't parse entities"), None, None]))
+    update = SimpleNamespace(effective_message=message)
+
+    asyncio.run(bot_app._send(update, "bloco <ruim\n\nbloco ok"))
+
+    assert message.reply_text.await_count == 3, "1 tentativa com HTML + 1 recuo pro 1º bloco, + 1 chamada normal pro 2º"
+    first_attempt, recovered, second_block = message.reply_text.await_args_list
+    assert first_attempt.kwargs.get("parse_mode") is not None
+    assert "parse_mode" not in recovered.kwargs
+    assert second_block.kwargs.get("parse_mode") is not None
+
+
 def test_no_module_level_sleep_is_used_for_the_typing_delay():
     """Deliberate: the AI call's own latency already sits in the window the research calls ideal;
     stacking a fixed sleep on top of it risks crossing the ~3s mark where perceived

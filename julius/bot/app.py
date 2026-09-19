@@ -4,6 +4,7 @@ opens a connection for the turn, and delivers the reply -- nothing else."""
 from __future__ import annotations
 
 import logging
+import re
 import sys
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -104,18 +105,31 @@ def _keyboard(nonce: str) -> InlineKeyboardMarkup:
     )
 
 
+def _chunks(text: str) -> list[str]:
+    """Um pensamento por bolha: a persona (e todo `f"{remark}\\n\\n{base}"` que este módulo já
+    recebe) separa ideias por linha em branco desde a v2.7 -- só faltava o Telegram tratar isso
+    como mensagens novas, em vez de parágrafo dentro da mesma bolha (design `bot-message-
+    chunking.md`). `text` sem nenhuma linha em branco (o caso comum: "Nenhum resultado.", uma
+    linha de fallback) vira uma lista de um item só, comportamento idêntico ao de antes."""
+    return [part.strip() for part in re.split(r"\n{2,}", text) if part.strip()]
+
+
 async def _send(update: Update, text: str, keyboard: InlineKeyboardMarkup | None = None) -> None:
     message = update.effective_message
     if message is None:
         return
-    try:
-        await message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
-    except BadRequest as error:
-        if "parse" not in str(error).lower():
-            raise
-        # An exotic product name must not silence the bot; the plain text is still the answer.
-        log.warning("Telegram recusou o HTML (%s); reenviando sem formatação", error)
-        await message.reply_text(text, reply_markup=keyboard)
+    parts = _chunks(text) or [text]
+    for index, part in enumerate(parts):
+        # O teclado de confirmação só vai na última bolha -- é ela que carrega a pergunta.
+        markup = keyboard if index == len(parts) - 1 else None
+        try:
+            await message.reply_text(part, parse_mode=ParseMode.HTML, reply_markup=markup)
+        except BadRequest as error:
+            if "parse" not in str(error).lower():
+                raise
+            # Um nome de produto exótico não pode silenciar o bot; o texto puro ainda é a resposta.
+            log.warning("Telegram recusou o HTML (%s); reenviando sem formatação", error)
+            await message.reply_text(part, reply_markup=markup)
 
 
 def _settings_and_agent(context: ContextTypes.DEFAULT_TYPE) -> tuple[Config, BotAgent]:
