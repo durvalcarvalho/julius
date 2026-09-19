@@ -3,7 +3,8 @@ from datetime import date
 import pytest
 
 from julius.bot import render
-from julius.domain.models import KindComparison, PriceRecord, Product, Store, StoreComparison, StorePrice
+from julius.bot.actions import ShoppingComparison
+from julius.domain.models import KindComparison, PriceRecord, Product, ShoppingVerdict, Store, StoreComparison, StorePrice
 
 TODAY = date(2026, 9, 17)
 
@@ -235,6 +236,75 @@ def test_compare_fallback_line_one_line_per_group():
 
     assert "tomate: Assaí sai mais em conta, a R$ 11,89 o quilo." in text
     assert "cebola: Assaí sai mais em conta, a R$ 3,99 o quilo." in text
+
+
+def _shopping(comparison, verdict=None, unmatched=()) -> ShoppingComparison:
+    return ShoppingComparison(comparison=comparison, verdict=verdict, unmatched_terms=unmatched)
+
+
+def test_shopping_comparison_facts_includes_verdict_line():
+    comparison = _comparison(_group("tomate", _entry("Assaí", "1", 11.89), _entry("Dona de Casa", "2", 14.99)))
+    verdict = ShoppingVerdict(1, ("Assaí",), ("tomate",), None, ())
+
+    text = render.shopping_comparison_facts(_shopping(comparison, verdict), today=TODAY)
+
+    assert "veredito: 1 de 1 itens mais baratos em Assaí" in text
+
+
+def test_shopping_comparison_facts_includes_runner_up():
+    comparison = _comparison(_group("tomate", _entry("Assaí", "1", 11.89)))
+    verdict = ShoppingVerdict(2, ("Assaí",), ("tomate",), "Dona de Casa", ("cebola",))
+
+    text = render.shopping_comparison_facts(_shopping(comparison, verdict), today=TODAY)
+
+    assert "o resto (cebola) sai mais em conta em Dona de Casa" in text
+
+
+def test_shopping_comparison_facts_includes_unmatched():
+    comparison = _comparison(_group("tomate", _entry("Assaí", "1", 11.89)))
+    verdict = ShoppingVerdict(1, ("Assaí",), ("tomate",), None, ())
+
+    text = render.shopping_comparison_facts(_shopping(comparison, verdict, ("xyzabc",)), today=TODAY)
+
+    assert "sem preço comparável registrado ainda para: xyzabc" in text
+
+
+def test_shopping_comparison_facts_no_verdict_no_unmatched():
+    comparison = _comparison(_group("tomate", _entry("Assaí", "1", 11.89), _entry("Dona de Casa", "2", 14.99)))
+
+    text = render.shopping_comparison_facts(_shopping(comparison), today=TODAY)
+
+    assert text == render.comparison_facts(comparison, today=TODAY)
+
+
+def test_shopping_verdict_line_with_winner_and_runner_up():
+    verdict = ShoppingVerdict(2, ("Assaí",), ("tomate",), "Dona de Casa", ("cebola",))
+
+    text = render.shopping_verdict_line(_shopping(_comparison(), verdict))
+
+    assert text == (
+        "1 de 2 produtos mais baratos em Assaí, vale ir lá. O resto sai mais em conta em Dona de Casa."
+    )
+
+
+def test_shopping_verdict_line_tie_names_both_stores():
+    verdict = ShoppingVerdict(2, ("Assaí", "Dona de Casa"), ("tomate", "cebola"), None, ())
+
+    text = render.shopping_verdict_line(_shopping(_comparison(), verdict))
+
+    assert "Assaí e Dona de Casa" in text
+
+
+def test_shopping_verdict_line_nothing_comparable():
+    text = render.shopping_verdict_line(_shopping(_comparison()))
+
+    assert text == "Não achei preço comparável entre mercados pra esses itens ainda."
+
+
+def test_shopping_verdict_line_with_unmatched_only():
+    text = render.shopping_verdict_line(_shopping(_comparison(), unmatched=("xyzabc",)))
+
+    assert text == "Não achei preço comparável entre mercados pra: xyzabc."
 
 
 def test_compare_fallback_line_no_comparable_groups():

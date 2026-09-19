@@ -26,7 +26,7 @@ from julius.domain.models import KindComparison, PriceRecord, Product, Store, St
 from julius.domain.normalization import store_place
 
 if TYPE_CHECKING:  # runtime-free: actions imports pydantic_ai, and rendering text must not.
-    from julius.bot.actions import PendingWrite, WriteResult
+    from julius.bot.actions import PendingWrite, ShoppingComparison, WriteResult
 
 MAX_MESSAGE_CHARS = 4096
 
@@ -199,6 +199,48 @@ def comparison_facts(comparison: StoreComparison, *, today: date | None = None) 
         if len(group.entries) >= 2 and cheapest != dearest:
             lines.append(f"{group.kind}: diferença entre o mais barato e o mais caro: {money(dearest - cheapest)}")
     return "\n".join(lines)
+
+
+def _verdict_lines(shopping: ShoppingComparison) -> list[str]:
+    """Shared by shopping_comparison_facts and shopping_verdict_line: the winner/runner-up/
+    unmatched lines, computed once from fields the caller already has -- never re-derived."""
+    lines: list[str] = []
+    verdict = shopping.verdict
+    if verdict is not None:
+        winners = " e ".join(verdict.winner_stores)
+        lines.append(f"veredito: {len(verdict.won_kinds)} de {verdict.total_items} itens mais baratos em {winners}")
+        if verdict.runner_up_store is not None:
+            rest = ", ".join(verdict.runner_up_kinds)
+            lines.append(f"o resto ({rest}) sai mais em conta em {verdict.runner_up_store}")
+    if shopping.unmatched_terms:
+        lines.append(f"sem preço comparável registrado ainda para: {', '.join(shopping.unmatched_terms)}")
+    return lines
+
+
+def shopping_comparison_facts(shopping: ShoppingComparison, *, today: date | None = None) -> str:
+    """Plain-text facts for the persona: the same per-kind lines as comparison_facts, plus the
+    verdict (winner, runner-up) and unmatched terms -- all computed already, the model only ever
+    cites these numbers, never sums or compares them itself."""
+    lines = [comparison_facts(shopping.comparison, today=today)] if shopping.comparison.comparisons else []
+    lines += _verdict_lines(shopping)
+    return "\n".join(line for line in lines if line)
+
+
+def shopping_verdict_line(shopping: ShoppingComparison, *, today: date | None = None) -> str:
+    """Same spirit as compare_fallback_line: no model, always available."""
+    del today  # signature symmetry with the other render_X/fallback pairs; unused here
+    verdict = shopping.verdict
+    if verdict is None:
+        if shopping.unmatched_terms:
+            return f"Não achei preço comparável entre mercados pra: {', '.join(shopping.unmatched_terms)}."
+        return "Não achei preço comparável entre mercados pra esses itens ainda."
+    winners = " e ".join(verdict.winner_stores)
+    sentence = f"{len(verdict.won_kinds)} de {verdict.total_items} produtos mais baratos em {winners}, vale ir lá."
+    if verdict.runner_up_store is not None:
+        sentence += f" O resto sai mais em conta em {verdict.runner_up_store}."
+    if shopping.unmatched_terms:
+        sentence += f" Não achei preço comparável pra: {', '.join(shopping.unmatched_terms)}."
+    return sentence
 
 
 def products_facts(products: Sequence[Product]) -> str:
