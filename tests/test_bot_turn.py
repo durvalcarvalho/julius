@@ -401,6 +401,74 @@ def test_compare_reply_with_no_groups_never_calls_the_persona(deps):
     assert client.calls == []
 
 
+from julius.bot.actions import ShoppingComparison  # noqa: E402
+from julius.domain.models import ShoppingVerdict  # noqa: E402
+
+
+def _shopping(comparison, verdict=None, unmatched=()) -> ShoppingComparison:
+    return ShoppingComparison(comparison=comparison, verdict=verdict, unmatched_terms=unmatched)
+
+
+def test_render_shopping_comparison_no_client_uses_fallback_line(deps):
+    comparison = _store_comparison(_kind_group("tomate", _store_entry("Assaí", "1", 11.89), _store_entry("Dona de Casa", "2", 14.99)))
+    verdict = ShoppingVerdict(1, ("Assaí",), ("tomate",), None, ())
+    output = _shopping(comparison, verdict)
+
+    reply = asyncio.run(_render_output(output, ChatState(), deps))
+
+    assert reply.text == render_module.shopping_verdict_line(output)
+
+
+def test_render_shopping_comparison_narrates_when_client_available(deps):
+    comparison = _store_comparison(_kind_group("tomate", _store_entry("Assaí", "1", 11.89), _store_entry("Dona de Casa", "2", 14.99)))
+    verdict = ShoppingVerdict(1, ("Assaí",), ("tomate",), None, ())
+    output = _shopping(comparison, verdict)
+    client = ScriptedLlmClient([_persona_reply("Vai no Assaí pro tomate.")])
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == "Vai no Assaí pro tomate."
+    assert client.calls
+
+
+def test_render_shopping_comparison_narration_fails_falls_back(deps):
+    comparison = _store_comparison(_kind_group("tomate", _store_entry("Assaí", "1", 11.89), _store_entry("Dona de Casa", "2", 14.99)))
+    verdict = ShoppingVerdict(1, ("Assaí",), ("tomate",), None, ())
+    output = _shopping(comparison, verdict)
+    client = ScriptedLlmClient([LlmResponse("", 0, 0, error="timeout")])
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == render_module.shopping_verdict_line(output)
+
+
+def test_render_shopping_comparison_above_sanity_cap_skips_ai(deps):
+    from julius.bot.turn import NARRATE_MAX_GROUPS
+
+    groups = tuple(
+        _kind_group(f"tipo{i}", _store_entry("Assaí", "1", 1.0 + i), _store_entry("Dona de Casa", "2", 2.0 + i))
+        for i in range(NARRATE_MAX_GROUPS + 1)
+    )
+    comparison = _store_comparison(*groups)
+    output = _shopping(comparison, ShoppingVerdict(len(groups), ("Assaí",), tuple(g.kind for g in groups), None, ()))
+    client = ScriptedLlmClient([_persona_reply("não deveria rodar")])
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == render_module.shopping_verdict_line(output)
+    assert client.calls == []
+
+
+def test_render_shopping_comparison_empty_and_no_unmatched_skips_ai(deps):
+    output = _shopping(_store_comparison())
+    client = ScriptedLlmClient([_persona_reply("não deveria rodar")])
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == render_module.shopping_verdict_line(output)
+    assert client.calls == []
+
+
 def test_product_listing_gets_a_comment_but_keeps_the_table(deps):
     client = ScriptedLlmClient([_persona_reply("Catálogo respeitável, isso sim.")])
     products = (Product(id=1, canonical_name="Ovos"),)

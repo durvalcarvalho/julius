@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 from pydantic_ai.messages import ModelMessage
 
-from julius.bot.actions import Deps, PendingWrite, ProductListing, StoreListing, WriteFailed, execute
+from julius.bot.actions import Deps, PendingWrite, ProductListing, ShoppingComparison, StoreListing, WriteFailed, execute
 from julius.bot.agent import BOT_PROMPT_VERSION, BotAgent
 from julius.bot.render import (
     comparison_facts,
@@ -29,6 +29,8 @@ from julius.bot.render import (
     render_result,
     render_stores,
     search_fallback_line,
+    shopping_comparison_facts,
+    shopping_verdict_line,
     stores_facts,
 )
 from julius.config import Config
@@ -183,6 +185,17 @@ async def _render_output(output: object, state: ChatState, deps: Deps) -> Reply:
             return Reply(escape(remark))
         if len(groups) <= FALLBACK_LINE_MAX_GROUPS:
             return Reply(compare_fallback_line(output))
+        return Reply(base)
+    if isinstance(output, ShoppingComparison):
+        base = shopping_verdict_line(output)
+        groups = output.comparison.comparisons
+        if (not groups and not output.unmatched_terms) or deps.client is None:
+            return Reply(base)
+        if len(groups) > NARRATE_MAX_GROUPS:
+            return Reply(base)
+        remark = await _narrate(deps, "veredito de lista de compras", shopping_comparison_facts(output))
+        if remark:
+            return Reply(escape(remark))
         return Reply(base)
     if isinstance(output, ProductListing):
         base = render_products(output.products)
