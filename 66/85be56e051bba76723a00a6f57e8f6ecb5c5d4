@@ -1,0 +1,39 @@
+docs/tickets/julius-bot/175-comparison-shopping-scope.md
+  s_996ed5ca00b90f::t_a0e839f6732d06 1-84
+docs/tickets/julius-bot/176-bot-actions-compare-stores-items.md
+  s_996ed5ca00b90f::t_16ddc76f55996e 1-87
+docs/design/shopping-list-conversation-context.md
+  s_996ed5ca00b90f::t_fdd3af62816bf2 1-108
+claudedocs/research_conversation_design_telegram_deepseek_20260919.md
+  s_996ed5ca00b90f::t_68d4ca2821ea78 1-66
+docs/tickets/julius-bot/177-render-shopping-verdict.md
+  s_996ed5ca00b90f::t_dc22e0c158b472 1-72
+docs/requirements/shopping-list-conversation-context.md
+  s_996ed5ca00b90f::t_fb9caadb524ab2 1-62
+docs/tickets/julius-bot/180-shopping-list-smoke-and-docs.md
+  s_996ed5ca00b90f::t_36a000148e8e4c 1-62
+docs/tickets/julius-bot/179-turn-shopping-comparison.md
+  s_996ed5ca00b90f::t_e39c9e9fabc18c 1-71
+claudedocs/research_conversation_context_management_20260919.md
+  s_996ed5ca00b90f::t_ece9b8d531d57d 1-43
+docs/tickets/julius-bot/index.md
+  s_996ed5ca00b90f::t_6d0870545e7d24 204-260
+docs/tickets/julius-bot/178-agent-prompt-shopping-list.md
+  s_996ed5ca00b90f::t_b31b12d3b730de 1-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6685be56e051bba76723a00a6f57e8f6ecb5c5d4",
+  "prompts": {},
+  "sessions": {
+    "s_996ed5ca00b90f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "63eaf9b9-b8b5-4521-b3a4-315e97bbc6d3",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
