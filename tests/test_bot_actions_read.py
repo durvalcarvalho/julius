@@ -4,11 +4,11 @@ from pydantic_ai.messages import ModelResponse, RetryPromptPart, TextPart, ToolC
 from pydantic_ai.models.function import FunctionModel
 
 from conftest import copied_fixtures
-from julius.bot.actions import READ_ACTIONS, Deps, ProductListing, StoreListing, resolve_product, resolve_store
+from julius.bot.actions import READ_ACTIONS, Deps, ProductListing, ShoppingComparison, StoreListing, resolve_product, resolve_store
 from julius.config import Config
-from julius.domain.models import SearchOutcome, StoreComparison
+from julius.domain.models import SearchOutcome
 from julius.parsers.df import DFReceiptParser
-from julius.services import catalog, importing, search
+from julius.services import catalog, comparison as comparison_service, importing, search
 
 GAVE_UP = "desisti"
 
@@ -174,11 +174,68 @@ def test_search_prices_with_a_limit_below_one_retries(stocked, cfg):
     assert any("limit precisa ser pelo menos 1" in content for content in _retries(result))
 
 
-def test_compare_stores_returns_comparison(stocked, cfg):
-    result, state = _run(READ_ACTIONS[1], {}, stocked, cfg)
+def _tomato_ids(stocked) -> tuple[int, int]:
+    ids = [product.id for product in catalog.list_products(stocked) if "TOMATE" in product.canonical_name.upper()]
+    assert len(ids) >= 2, "the fixture is documented to carry two different tomatoes"
+    return ids[0], ids[1]
 
-    assert isinstance(result.output, StoreComparison)
+
+def test_compare_stores_action_requires_items(stocked, cfg):
+    result, state = _run(READ_ACTIONS[1], {"items": ()}, stocked, cfg)
+
+    assert any("Informe pelo menos um item" in content for content in _retries(result))
+    assert state["calls"] == 2
+
+
+def test_compare_stores_action_blank_items_are_ignored(stocked, cfg):
+    a, b = _tomato_ids(stocked)
+    catalog.set_product_kind(stocked, a, "tomate")
+    catalog.set_product_kind(stocked, b, "tomate")
+
+    result, _ = _run(READ_ACTIONS[1], {"items": ("  ", "tomate")}, stocked, cfg)
+
+    assert isinstance(result.output, ShoppingComparison)
+    assert result.output.comparison.comparisons
+
+    blank_only, state = _run(READ_ACTIONS[1], {"items": ("  ",)}, stocked, cfg)
+    assert any("Informe pelo menos um item" in content for content in _retries(blank_only))
+
+
+def test_compare_stores_action_matches_and_compares(stocked, cfg):
+    a, b = _tomato_ids(stocked)
+    catalog.set_product_kind(stocked, a, "tomate")
+    catalog.set_product_kind(stocked, b, "tomate")
+
+    result, state = _run(READ_ACTIONS[1], {"items": ("tomate",)}, stocked, cfg)
+
+    assert isinstance(result.output, ShoppingComparison)
+    assert [c.kind for c in result.output.comparison.comparisons] == ["tomate"]
+    assert result.output.verdict is not None
+    assert result.output.unmatched_terms == ()
     assert state["calls"] == 1
+
+
+def test_compare_stores_action_reports_unmatched(stocked, cfg):
+    a, b = _tomato_ids(stocked)
+    catalog.set_product_kind(stocked, a, "tomate")
+    catalog.set_product_kind(stocked, b, "tomate")
+
+    result, _ = _run(READ_ACTIONS[1], {"items": ("tomate", "xyzabc")}, stocked, cfg)
+
+    assert [c.kind for c in result.output.comparison.comparisons] == ["tomate"]
+    assert result.output.unmatched_terms == ("xyzabc",)
+
+
+def test_compare_stores_action_all_unmatched_returns_empty_comparison(stocked, cfg, monkeypatch):
+    calls = []
+    monkeypatch.setattr(comparison_service, "compare_stores", lambda *a, **k: calls.append((a, k)))
+
+    result, _ = _run(READ_ACTIONS[1], {"items": ("xyzabc",)}, stocked, cfg)
+
+    assert result.output.comparison.comparisons == ()
+    assert result.output.verdict is None
+    assert result.output.unmatched_terms == ("xyzabc",)
+    assert calls == [], "compare_stores must not be called when nothing matched"
 
 
 def test_list_products_filters_by_containing(stocked, cfg):

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pydantic_ai import ModelRetry, RunContext
 
 from julius.config import Config
-from julius.domain.models import Product, SearchOutcome, Store, StoreComparison
+from julius.domain.models import Product, SearchOutcome, ShoppingVerdict, Store, StoreComparison
 from julius.domain.formatting import content_text
 from julius.domain.normalization import digits_only, normalize_content, normalize_text
 from julius.infra.llm_client import LlmClient
@@ -45,6 +45,17 @@ class ProductListing:
 @dataclass(frozen=True)
 class StoreListing:
     stores: tuple[Store, ...]
+
+
+@dataclass(frozen=True)
+class ShoppingComparison:
+    """The scoped, item-by-item answer to "which market is cheaper" -- unlike bare
+    StoreComparison (every kind ever bought), this always carries what the person actually asked
+    to compare, plus what could not be matched, so nothing goes silently missing."""
+
+    comparison: StoreComparison
+    verdict: ShoppingVerdict | None
+    unmatched_terms: tuple[str, ...]
 
 
 def _candidate_list(pairs: list[tuple[int, str]]) -> str:
@@ -133,9 +144,32 @@ async def search_prices(ctx: RunContext[Deps], words: str, tag: str | None = Non
         raise ModelRetry(str(error)) from None
 
 
-async def compare_stores(ctx: RunContext[Deps]) -> StoreComparison:
-    """Compara o preço dos mesmos tipos de produto entre os mercados, para dizer qual sai mais barato."""
-    return comparison_service.compare_stores(ctx.deps.conn)
+async def compare_stores(ctx: RunContext[Deps], items: tuple[str, ...]) -> ShoppingComparison:
+    """Compara o preço dos mesmos tipos de produto entre os mercados, para dizer qual mercado sai
+    mais barato para uma lista de compras.
+
+    NUNCA chame com uma lista vazia: se a pessoa não disse o que quer comprar (nem nesta mensagem
+    nem nas anteriores da conversa), pergunte em texto o que ela quer comprar em vez de chamar esta
+    ação.
+
+    Args:
+        items: os itens que a pessoa quer comprar, como ela falou (ex.: ("tomate", "leite")).
+            Junte itens mencionados nas últimas mensagens da conversa, não só na mais recente.
+    """
+    terms = [item.strip() for item in items if item.strip()]
+    if not terms:
+        raise ModelRetry("Informe pelo menos um item para comparar.")
+    matched: list[str] = []
+    unmatched: list[str] = []
+    for term in terms:
+        kind = search_service.match_kind(ctx.deps.conn, term)
+        if kind is None:
+            unmatched.append(term)
+        elif kind not in matched:
+            matched.append(kind)
+    comparison = comparison_service.compare_stores(ctx.deps.conn, kinds=matched) if matched else StoreComparison((), "", "")
+    verdict = comparison_service.shopping_verdict(comparison) if comparison.comparisons else None
+    return ShoppingComparison(comparison=comparison, verdict=verdict, unmatched_terms=tuple(unmatched))
 
 
 async def list_products(ctx: RunContext[Deps], containing: str | None = None) -> ProductListing:

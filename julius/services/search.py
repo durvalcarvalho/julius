@@ -85,6 +85,26 @@ def detect_tag(conn: sqlite3.Connection, words: Sequence[str]) -> tuple[str | No
     return " ".join(remaining) or None, best_tag
 
 
+KIND_MATCH_CUTOFF = 75
+"""Minimum fuzz.ratio (0-100) for a shopping-list term ("leite") to count as a known `kind`
+("leite uht"). Same mechanism as TAG_MATCH_CUTOFF (detect_tag, above), a different vocabulary --
+not reused as-is. Provisional value, same starting point as TAG_MATCH_CUTOFF: ticket 176 chose it
+without measuring against the real catalogue; ticket 180 measures it for real and fixes this
+docstring with actual numbers, same discipline as every other cutoff in this file."""
+
+
+def match_kind(conn: sqlite3.Connection, term: str) -> str | None:
+    """One term, one kind -- unlike detect_tag (a list of words competing for one tag), each item
+    of a shopping list is matched independently. No kind registered yet -> None, without paying
+    for a rapidfuzz call that could not possibly match anything."""
+    kinds = products.all_kinds(conn)
+    if not kinds:
+        return None
+    normalized_kinds = [normalize_text(k) for k in kinds]
+    match = process.extractOne(normalize_text(term), normalized_kinds, scorer=fuzz.ratio, score_cutoff=KIND_MATCH_CUTOFF)
+    return kinds[match[2]] if match is not None else None
+
+
 def search_free_text(
     conn: sqlite3.Connection, words: Sequence[str], tag: str | None = None, limit: int = 20
 ) -> SearchOutcome:

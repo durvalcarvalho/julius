@@ -5,13 +5,14 @@ import pytest
 from julius.domain.models import Receipt, ReceiptItem
 from julius.parsers.df import DFReceiptParser
 from julius.repositories.prices import insert_price
-from julius.repositories.products import add_tag, product_names, resolve_product_id, set_content
+from julius.repositories.products import add_tag, product_names, resolve_product_id, set_content, set_kind
 from julius.repositories.stores import ensure_store
 from julius.services.catalog import merge_products
 from julius.services.search import (
     catalog_for_matching,
     closest_names,
     detect_tag,
+    match_kind,
     records_for_products,
     search_free_text,
     search_prices,
@@ -232,6 +233,19 @@ def test_detect_tag_empty_words(conn):
 
 def test_detect_tag_ignores_words_below_cutoff(conn):
     assert detect_tag(conn, ["queijo"]) == ("queijo", None)
+
+
+def test_match_kind_exact_and_typo(conn):
+    product = _product(conn, "TOMATE ITALIANO kg", "1")
+    set_kind(conn, product, "tomate")
+
+    assert match_kind(conn, "tomate") == "tomate"
+    assert match_kind(conn, "tomatee") == "tomate"
+    assert match_kind(conn, "xyzabc") is None
+
+
+def test_match_kind_no_kinds_registered_is_none(conn):
+    assert match_kind(conn, "tomate") is None
 
 
 def test_search_free_text_explicit_tag_skips_detection(conn):
