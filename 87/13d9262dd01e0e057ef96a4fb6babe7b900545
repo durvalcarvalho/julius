@@ -1,0 +1,73 @@
+julius/domain/normalization.py
+  s_4e033a5e38d276::t_6cf17165a61bab 106-116
+julius/cli/stores.py
+  s_4e033a5e38d276::t_9a5bda29d6c025 156-157,159-161,165,167,169-176
+  s_4e033a5e38d276::t_29a27a58fc8752 166,168
+  s_4e033a5e38d276::t_815b5c7ef01816 12,14
+tests/test_e2e.py
+  s_4e033a5e38d276::t_52d1426df4f0ca 241-242
+julius/cli/_review.py
+  s_4e033a5e38d276::t_7bbee0ae3f9308 274
+  s_4e033a5e38d276::t_3367abc888e25a 31-35
+  s_4e033a5e38d276::t_5d43c26b76d44b 237
+  s_4e033a5e38d276::t_1b461a3b2a0da8 257-261
+  s_4e033a5e38d276::t_8ee279b2fa54af 178-179,181-186
+  s_4e033a5e38d276::t_d104d59d81bcba 15
+tests/test_domain_formatting.py
+  s_4e033a5e38d276::t_f0b9f1d2363e64 10
+  s_4e033a5e38d276::t_6bac3cd90e5e61 152-162
+julius/services/guidance.py
+  s_4e033a5e38d276::t_abdbc672b49733 73,75
+  s_4e033a5e38d276::t_2144258ffdf249 18
+  s_4e033a5e38d276::t_fedd21bcb30307 90-95,102-105
+  s_4e033a5e38d276::t_82fa1f170e9258 12
+julius/cli/_hints.py
+  s_4e033a5e38d276::t_9e7d196ad607c3 6,9-14,44,53-65,70-79,83-88
+tests/test_normalization.py
+  s_4e033a5e38d276::t_350a92f6dcdf03 112-129
+  s_4e033a5e38d276::t_134f1f6debe493 6,11
+julius/cli/receipts.py
+  s_4e033a5e38d276::t_5ccfe749ea52d5 25
+  s_4e033a5e38d276::t_48ac8e47a51626 337-338
+tests/test_cli_receipts.py
+  s_4e033a5e38d276::t_dd519a56443e73 233
+  s_4e033a5e38d276::t_d8ce2ac00b6e81 264
+  s_4e033a5e38d276::t_29aab88b9cd782 223
+  s_4e033a5e38d276::t_d25b5f93ec3390 344
+  s_4e033a5e38d276::t_9d08495f5bfcc0 242
+  s_4e033a5e38d276::t_bec59afae91570 323
+julius/domain/formatting.py
+  s_4e033a5e38d276::t_9c41ebe5e16063 76-79,81
+tests/test_cli_review.py
+  s_4e033a5e38d276::t_3c6258a5e980ea 282-283
+  s_4e033a5e38d276::t_663d2cf1b020db 320,721,731,775,785
+  s_4e033a5e38d276::t_41c1fec363cdad 91
+  s_4e033a5e38d276::t_be1a8ba20bea80 267
+  s_4e033a5e38d276::t_fe7c685baebe42 825
+tests/test_cli_store_naming.py
+  s_4e033a5e38d276::t_cbe85142717d95 168
+tests/test_cli_hints.py
+  s_4e033a5e38d276::t_f24bf0ee3f4398 8-13
+  s_4e033a5e38d276::t_184c87e504f0d9 29-48
+  s_4e033a5e38d276::t_e5a13b36314e6e 49-50
+tests/test_services_guidance.py
+  s_4e033a5e38d276::t_e552d0004635bc 74-76
+CLAUDE.md
+  s_4e033a5e38d276::t_40051d90a26e93 91-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8713d9262dd01e0e057ef96a4fb6babe7b900545",
+  "prompts": {},
+  "sessions": {
+    "s_4e033a5e38d276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbc5c98b-1afa-4e4f-bf41-d703cf77849e",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
