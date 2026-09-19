@@ -1,0 +1,31 @@
+julius/services/search.py
+  s_996ed5ca00b90f::t_abd76809515804 88-107
+julius/bot/actions.py
+  s_996ed5ca00b90f::t_b99252b9d23e24 19
+  s_996ed5ca00b90f::t_93131c3f920b74 147-172
+  s_996ed5ca00b90f::t_3a4ed213759ee5 50-60
+tests/test_bot_actions_read.py
+  s_996ed5ca00b90f::t_8bfcae3e1c0ae2 177-178,180,182-214,218-238
+  s_996ed5ca00b90f::t_6ff71606cce3ef 179
+  s_996ed5ca00b90f::t_2055919b3d027f 7,9,11
+  s_996ed5ca00b90f::t_582434b472a360 239-240
+tests/test_services_search.py
+  s_996ed5ca00b90f::t_479bb4400b7a49 238-250
+  s_996ed5ca00b90f::t_9707330fbd7dfe 8,15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "150fa8f332a24a5b386645cdb22a85af15cac2e0",
+  "prompts": {},
+  "sessions": {
+    "s_996ed5ca00b90f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "63eaf9b9-b8b5-4521-b3a4-315e97bbc6d3",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
