@@ -201,3 +201,60 @@ Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo
 | Veredito aparecer fora de contexto (1 registro só, ou sumir com 2+) | 172, 174 (smoke confirmou: aparece com 2+, ausente com 1) | achado de prompt, versionar (`PROMPT_VERSIONS` sobe) se precisar ajustar |
 | Indicador de "digitando..." piscar rápido demais no caminho sem IA | 173 (nota para o agente), 174 (registrado, não corrigido às cegas) | dado novo pra decidir depois, não licença pra adicionar sleep sem medir; só o usuário confirma isso no Telegram de verdade |
 | `_collapse_repeated_prices` colapsar par errado | 171 (chave é `(loja, preço)` explícita, testada) | teste dedicado; nunca colapsa por produto+data. Confirmado no catálogo real: Cebola 3→2, exatamente o caso da screenshot |
+
+---
+
+## Trilha v2.10 — veredito por lista de compras, e o mínimo de memória de conversa
+
+> Gerado a partir de: `docs/design/shopping-list-conversation-context.md` (design), `docs/requirements/shopping-list-conversation-context.md` (requisitos), `claudedocs/research_conversation_context_management_20260919.md` e `claudedocs/research_conversation_design_telegram_deepseek_20260919.md` (pesquisas). Reage a um screenshot real de 2026-09-19 17:43: "qual mercado eu devo ir?" respondida com um textão enumerando os 16 grupos do catálogo inteiro, e a um segundo screenshot de 2026-09-18 ("sim" sem contexto da pergunta anterior).
+> Gerado em: 2026-09-19 · Estado do código **na geração**: v2.9 fechada (commit `8713d92`), v2.8/v2.9 implementadas sem tickets próprios (commits `401e942`/`8713d92`); último ticket numerado é o 174.
+
+### Visão geral
+
+`compare_stores` para de comparar **todo** tipo de produto já comprado (16 grupos hoje) e passa a exigir os itens que a pessoa quer comprar — sem itens, o bot pergunta em vez de despejar tudo. O resultado vira um veredito agregado calculado em código ("N de M itens mais baratos no mercado X" + uma linha pro segundo colocado), nunca uma tabela item a item nem conta feita pela IA. As duas lacunas de conversa (responder "sim" à luz da pergunta anterior; acumular itens em várias mensagens) **não** ganham mecanismo novo nesta trilha — só reforço de prompt, porque as duas pesquisas concluíram que o histórico de 3 turnos que já existe provavelmente já resolve; a peça mais pesada (estado de pergunta pendente, memória além da janela) fica especificada no design mas condicionada a medição real no ticket de fechamento.
+
+Trilha única, seguindo a numeração global (174 foi o último ticket numerado; 175–180 continuam a sequência apesar de v2.8/v2.9 terem sido implementadas sem tickets).
+
+### Decisões aplicadas (vêm do design; não rediscutir dentro de ticket)
+
+- **`compare_stores` ganha `kinds`/`items` opcional, nunca compara o catálogo inteiro a partir do bot.** A CLI (`julius mercados comparar`) continua chamando sem filtro, comportamento idêntico.
+- **Veredito é conta em código** (`shopping_verdict`), reaproveitando a mesma técnica de contagem de vitórias que `render_comparison` já usa pra tabela crua — a IA só veste a fala, nunca soma.
+- **Empate no topo nomeia as duas lojas**, nunca escolhe uma arbitrariamente; empate no segundo colocado fica com simplificação deliberada (não desempatado à parte).
+- **RF4 (responder "sim") e RF5 (acumular itens): reforço de prompt primeiro, sem tabela nova nem campo novo em `ChatState`.** `HISTORY_TURNS` continua 3. Only se o smoke (180) mostrar necessidade real é que a Decisão 4 do design (`awaiting_topic`) é reaberta — não faz parte desta trilha.
+- **RF6 (lembrar além da janela) fica fora desta trilha inteira** — nenhuma evidência medida de necessidade; a DeepSeek mudou o cálculo de custo (1M de contexto, cache de disco) desde a última medição do projeto, mas isso é insumo pra uma trilha futura, não decisão tomada aqui.
+- **Nenhuma dependência nova, nenhuma migração de banco.**
+
+### Trilha
+
+| # | Ticket | Depende de | Esforço | Estado | Entrega |
+|---|---|---|---|---|---|
+| 175 | [`comparison.py` — escopo + veredito](175-comparison-shopping-scope.md) | — | M | pendente | `compare_stores(conn, kinds=None)`, `shopping_verdict`, `ShoppingVerdict` |
+| 176 | [`actions.py` — `compare_stores(items)`](176-bot-actions-compare-stores-items.md) | 175 | M | pendente | `match_kind`, `ShoppingComparison`, ação exige itens |
+| 177 | [`render.py` — fatos e frase-molde](177-render-shopping-verdict.md) | 175, 176 | S | pendente | `shopping_comparison_facts`, `shopping_verdict_line` |
+| 178 | [`agent.py` — prompt](178-agent-prompt-shopping-list.md) | 176 | S | pendente | 3 frases novas (RF1/RF4/RF5), `BotOutput` |
+| 179 | [`turn.py` — integração](179-turn-shopping-comparison.md) | 175, 176, 177, 178 | S | pendente | branch `ShoppingComparison` em `_render_output` |
+| 180 | [smoke real + docs](180-shopping-list-smoke-and-docs.md) | 179 | M | pendente | `KIND_MATCH_CUTOFF` medido, teste real, `CLAUDE.md`, roteiro manual |
+
+### Dependências e caminho crítico
+
+```
+175 ──┬── 176 ──┬── 178 ──┐
+      └── 177 ──┴─────────┴── 179 ── 180
+```
+
+175 é a base de tudo. 176 e 177 podem correr em paralelo assim que 175 fechar (177 só precisa dos tipos, não da lógica de casamento de 176). 178 depende só de 176 (a docstring da ação). 179 junta 175–178. Caminho crítico: **175 → 176 → 178 → 179 → 180** (5 tickets; 177 se encaixa antes do 179 em paralelo com 178).
+
+### Riscos e onde os tickets os tratam
+
+| Risco | Ticket | Mitigação |
+|---|---|---|
+| `KIND_MATCH_CUTOFF` chutado no 176 sair errado pro catálogo real (item não casa, ou casa errado) | 180 (medição real, mesma disciplina de `MATCH_SCORE_CUTOFF`/`TAG_MATCH_CUTOFF`) | valor provisório documentado como chute desde o 176; 180 fixa o número medido |
+| Reforço de prompt (RF4/RF5) não bastar na prática | 180 (smoke manual + teste real) | design já prevê a Decisão 4 (`awaiting_topic`) como próxima alavanca; 180 documenta o caso de falha em vez de implementar às cegas |
+| Empate entre lojas gerar frase estranha ("mais barato em X e em X") | 175 (teste `test_shopping_verdict_tie_at_top_names_both`), 177 (teste de frase com duas lojas) | contagem por `store_cnpj`, nomes resolvidos por `store_labels` — mesma proteção contra filiais com apelido igual que `render_comparison` já tem |
+| Custo de IA subir sem perceber | nenhum ticket específico — efeito esperado é **queda** de custo (menos grupos por chamada que o cenário do incidente medido) | `ai_calls.jsonl` já loga tudo; 180 confirma com números reais |
+
+### Questões abertas (assumidas assim ao gerar; mudar é um `UPDATE` no ticket, não redesign)
+
+1. **Empate no segundo colocado não é desempatado** (175): fica com a primeira loja por `sorted()`. Se isso soar arbitrário no uso real, é ajuste local em `shopping_verdict`, não redesign.
+2. **`KIND_MATCH_CUTOFF` provisório entre 176 e 180**: qualquer valor razoável serve pra fechar os tickets intermediários; só 180 mede de verdade.
+3. **Decisão 4 do design (`awaiting_topic`) e Decisão 5 (memória além de 3 turnos) ficam fora desta trilha inteira** — se o smoke do 180 mostrar necessidade real, abre-se uma trilha nova (não um ticket a mais aqui), porque envolveria decisão de arquitetura que este índice não cobre.
