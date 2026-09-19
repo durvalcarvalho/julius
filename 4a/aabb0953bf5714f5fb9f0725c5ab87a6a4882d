@@ -1,0 +1,37 @@
+julius/services/comparison.py
+  s_996ed5ca00b90f::t_ab61257ec7014b 14-15,19,22-34
+  s_996ed5ca00b90f::t_d7bba8b8306d39 79-117
+  s_8d976334665e0c::t_ee884b6228c7a9 118-119
+tests/test_services_comparison.py
+  s_996ed5ca00b90f::t_ab929b57e39eeb 370-479,481-496
+  s_996ed5ca00b90f::t_988356a3caf456 480
+  s_996ed5ca00b90f::t_e6dab3cb05c861 5
+  s_8d976334665e0c::t_ed73a02bfa2f93 497-498
+julius/domain/models.py
+  s_996ed5ca00b90f::t_b28bedc05694d8 195-206
+  s_8d976334665e0c::t_e175a4ded0f73d 194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4aaabb0953bf5714f5fb9f0725c5ab87a6a4882d",
+  "prompts": {},
+  "sessions": {
+    "s_8d976334665e0c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0ad3849d-c92b-4c25-befd-022abed64a64",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    },
+    "s_996ed5ca00b90f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "63eaf9b9-b8b5-4521-b3a4-315e97bbc6d3",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
