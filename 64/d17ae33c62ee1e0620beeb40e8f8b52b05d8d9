@@ -1,0 +1,20 @@
+julius/bot/agent.py
+  s_996ed5ca00b90f::t_87d6f1119bcfc9 17,24
+  s_996ed5ca00b90f::t_9300434f405856 36-40,44-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "64d17ae33c62ee1e0620beeb40e8f8b52b05d8d9",
+  "prompts": {},
+  "sessions": {
+    "s_996ed5ca00b90f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "63eaf9b9-b8b5-4521-b3a4-315e97bbc6d3",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
