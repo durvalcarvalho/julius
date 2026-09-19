@@ -192,6 +192,19 @@ class StoreComparison:
 
 
 @dataclass(frozen=True)
+class ShoppingVerdict:
+    """Derived from a StoreComparison already scoped to a shopping list: who wins, and where the
+    leftover items are cheaper. Computed once in services/comparison.py so the persona prompt and
+    the no-AI fallback line both cite the same numbers -- neither ever does the arithmetic."""
+
+    total_items: int
+    winner_stores: tuple[str, ...]  # more than one only on an exact tie at the top
+    won_kinds: tuple[str, ...]  # kinds won by any store in winner_stores
+    runner_up_store: str | None  # cheapest among the leftover items; None if nothing is left over
+    runner_up_kinds: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class PriceExtreme:
     product_name: str
     store_nickname: str

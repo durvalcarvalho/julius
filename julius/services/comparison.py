@@ -11,15 +11,27 @@ import sqlite3
 from collections.abc import Sequence
 
 from julius.domain.comparison_basis import basis_value, comparison_basis
-from julius.domain.models import KindComparison, PriceExtreme, PriceRecord, StoreComparison, StorePrice
+from julius.domain.formatting import store_labels
+from julius.domain.models import KindComparison, PriceExtreme, PriceRecord, ShoppingVerdict, StoreComparison, StorePrice
 from julius.repositories import prices, products
 
 
-def compare_stores(conn: sqlite3.Connection) -> StoreComparison:
+def compare_stores(conn: sqlite3.Connection, kinds: Sequence[str] | None = None) -> StoreComparison:
     """One KindComparison per (kind, unit) observed in at least 2 stores. A store's price for a
     group is the cheapest it charged, with that observation's date: the price-shopping question
-    is "what would I pay there", so the cheapest available is the fair representative."""
-    typed = [product.id for product in products.list_products(conn) if product.kind is not None]
+    is "what would I pay there", so the cheapest available is the fair representative.
+
+    `kinds`, when given a non-empty sequence, restricts the comparison to those kinds -- this is
+    what lets the bot compare only a shopping list instead of every kind ever bought (measured
+    incident: 16 kinds narrated at once truncated the persona's reply twice, `ai_calls.jsonl`
+    2026-09-19T17:42:52). `None` or empty is exactly today's behaviour, unchanged: `julius
+    mercados comparar` (the CLI) never passes `kinds`."""
+    wanted = set(kinds) if kinds else None
+    typed = [
+        product.id
+        for product in products.list_products(conn)
+        if product.kind is not None and (wanted is None or product.kind in wanted)
+    ]
     if not typed:
         return StoreComparison((), "", "")
     # ponytail: scans every price row of typed products (132 today). SQL aggregation only if the
@@ -62,6 +74,47 @@ def compare_stores(conn: sqlite3.Connection) -> StoreComparison:
     if not comparisons:
         return StoreComparison((), "", "", *coverage)
     return StoreComparison(tuple(comparisons), min(used_dates), max(used_dates), *coverage)
+
+
+def shopping_verdict(comparison: StoreComparison) -> ShoppingVerdict | None:
+    """Counts wins per store (each group's entries[0], already cheapest-first) and turns that
+    into a single recommendation -- the same tally `bot/render.py::render_comparison` already
+    does for the raw table, but ending in a winner and a runner-up instead of a row per store.
+
+    Tallied by store_cnpj, never store_nickname: two branches of one chain can share a nickname
+    (see test_compare_stores_keeps_two_branches_that_share_a_nickname) and store_labels() is what
+    turns a shared nickname back into two distinct labels."""
+    if not comparison.comparisons:
+        return None
+    labels = store_labels(comparison)
+    wins: dict[str, int] = {}
+    for group in comparison.comparisons:
+        winner_cnpj = group.entries[0].store_cnpj
+        wins[winner_cnpj] = wins.get(winner_cnpj, 0) + 1
+    top = max(wins.values())
+    winner_cnpjs = {cnpj for cnpj, count in wins.items() if count == top}
+    won_kinds = tuple(group.kind for group in comparison.comparisons if group.entries[0].store_cnpj in winner_cnpjs)
+    leftover = [group for group in comparison.comparisons if group.entries[0].store_cnpj not in winner_cnpjs]
+    runner_up_store: str | None = None
+    runner_up_kinds: tuple[str, ...] = ()
+    if leftover:
+        runner_up_wins: dict[str, int] = {}
+        for group in leftover:
+            cnpj = group.entries[0].store_cnpj
+            runner_up_wins[cnpj] = runner_up_wins.get(cnpj, 0) + 1
+        # ponytail: a tie for second place is not broken separately -- it keeps whichever CNPJ
+        # sorts first. The primary recommendation (winner_stores) already handles ties honestly;
+        # this is secondary information, and no real case has shown this simplification to matter.
+        best_runner_up = max(sorted(runner_up_wins), key=lambda cnpj: runner_up_wins[cnpj])
+        runner_up_store = labels[best_runner_up]
+        runner_up_kinds = tuple(group.kind for group in leftover if group.entries[0].store_cnpj == best_runner_up)
+    return ShoppingVerdict(
+        total_items=len(comparison.comparisons),
+        winner_stores=tuple(labels[cnpj] for cnpj in sorted(winner_cnpjs, key=lambda cnpj: labels[cnpj])),
+        won_kinds=won_kinds,
+        runner_up_store=runner_up_store,
+        runner_up_kinds=runner_up_kinds,
+    )
 
 
 def new_extremes(conn: sqlite3.Connection, access_keys: Sequence[str]) -> list[PriceExtreme]:

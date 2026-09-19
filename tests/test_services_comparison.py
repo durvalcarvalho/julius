@@ -2,7 +2,7 @@ from julius.domain.models import Receipt, ReceiptItem
 from julius.repositories.prices import insert_price
 from julius.repositories.products import resolve_product_id, set_content, set_kind
 from julius.repositories.stores import ensure_store
-from julius.services.comparison import compare_stores, new_extremes
+from julius.services.comparison import compare_stores, new_extremes, shopping_verdict
 
 STORE_A = "00000000000001"
 STORE_B = "00000000000002"
@@ -365,6 +365,135 @@ def test_new_extremes_names_the_product_that_was_beaten(conn):
 
     assert extreme.product_name == "VINHO MIORANZA FRISANTE 750ML"
     assert extreme.previous_product_name == "VH NORTON 750 BC SV"
+
+
+def test_compare_stores_kinds_filters_groups(conn):
+    tomato_a = _product(conn, "TOMATE kg", "1", STORE_A)
+    tomato_b = _product(conn, "TOMATE ITALIANO kg", "2", STORE_B)
+    onion_a = _product(conn, "CEBOLA kg", "3", STORE_A)
+    onion_b = _product(conn, "CEBOLA BRANCA kg", "4", STORE_B)
+    for product_id, kind in ((tomato_a, "tomate"), (tomato_b, "tomate"), (onion_a, "cebola"), (onion_b, "cebola")):
+        set_kind(conn, product_id, kind)
+    _price(conn, tomato_a, STORE_A, "KG", 10.0, "2026-09-16T10:00:00", "k1")
+    _price(conn, tomato_b, STORE_B, "KG", 12.0, "2026-09-07T10:00:00", "k2")
+    _price(conn, onion_a, STORE_A, "KG", 5.0, "2026-09-16T10:00:00", "k3")
+    _price(conn, onion_b, STORE_B, "KG", 6.0, "2026-09-07T10:00:00", "k4")
+
+    filtered = compare_stores(conn, kinds=["tomate"])
+    unfiltered = compare_stores(conn)
+
+    assert [comparison.kind for comparison in filtered.comparisons] == ["tomate"]
+    assert [comparison.kind for comparison in unfiltered.comparisons] == ["cebola", "tomate"]
+
+
+def test_compare_stores_kinds_none_and_omitted_are_same_as_today(conn):
+    a = _product(conn, "TOMATE ITALIANO kg", "1", STORE_A)
+    b = _product(conn, "TOMATE ITALIANO UNIAO kg", "2", STORE_B)
+    set_kind(conn, a, "tomate")
+    set_kind(conn, b, "tomate")
+    _price(conn, a, STORE_A, "KG", 11.89, "2026-09-16T10:00:00", "k1")
+    _price(conn, b, STORE_B, "KG", 14.99, "2026-09-07T10:00:00", "k2")
+
+    assert compare_stores(conn, kinds=None) == compare_stores(conn)
+    assert compare_stores(conn, kinds=()) == compare_stores(conn)
+
+
+def test_shopping_verdict_empty_comparison_is_none():
+    from julius.domain.models import StoreComparison
+
+    assert shopping_verdict(StoreComparison((), "", "")) is None
+
+
+def test_shopping_verdict_single_winner(conn):
+    tomato_a = _product(conn, "TOMATE kg", "1", STORE_A)
+    tomato_b = _product(conn, "TOMATE ITALIANO kg", "2", STORE_B)
+    onion_a = _product(conn, "CEBOLA kg", "3", STORE_A)
+    onion_b = _product(conn, "CEBOLA BRANCA kg", "4", STORE_B)
+    grape_a = _product(conn, "UVA BRANCA", "5", STORE_A)
+    grape_b = _product(conn, "UVA VERDE", "6", STORE_B)
+    for product_id, kind in (
+        (tomato_a, "tomate"),
+        (tomato_b, "tomate"),
+        (onion_a, "cebola"),
+        (onion_b, "cebola"),
+        (grape_a, "uva"),
+        (grape_b, "uva"),
+    ):
+        set_kind(conn, product_id, kind)
+    _price(conn, tomato_a, STORE_A, "KG", 10.0, "2026-09-16T10:00:00", "k1")
+    _price(conn, tomato_b, STORE_B, "KG", 12.0, "2026-09-07T10:00:00", "k2")
+    _price(conn, onion_a, STORE_A, "KG", 5.0, "2026-09-16T10:00:00", "k3")
+    _price(conn, onion_b, STORE_B, "KG", 6.0, "2026-09-07T10:00:00", "k4")
+    _price(conn, grape_a, STORE_A, "KG", 20.0, "2026-09-16T10:00:00", "k5")
+    _price(conn, grape_b, STORE_B, "KG", 15.0, "2026-09-07T10:00:00", "k6")
+
+    verdict = shopping_verdict(compare_stores(conn))
+
+    assert verdict.total_items == 3
+    assert verdict.winner_stores == ("Loja 1",)
+    assert set(verdict.won_kinds) == {"cebola", "tomate"}
+    assert verdict.runner_up_store == "Loja 2"
+    assert verdict.runner_up_kinds == ("uva",)
+
+
+def test_shopping_verdict_tie_at_top_names_both(conn):
+    tomato_a = _product(conn, "TOMATE kg", "1", STORE_A)
+    tomato_b = _product(conn, "TOMATE ITALIANO kg", "2", STORE_B)
+    onion_a = _product(conn, "CEBOLA kg", "3", STORE_A)
+    onion_b = _product(conn, "CEBOLA BRANCA kg", "4", STORE_B)
+    for product_id, kind in ((tomato_a, "tomate"), (tomato_b, "tomate"), (onion_a, "cebola"), (onion_b, "cebola")):
+        set_kind(conn, product_id, kind)
+    _price(conn, tomato_a, STORE_A, "KG", 10.0, "2026-09-16T10:00:00", "k1")
+    _price(conn, tomato_b, STORE_B, "KG", 12.0, "2026-09-07T10:00:00", "k2")
+    _price(conn, onion_b, STORE_B, "KG", 5.0, "2026-09-16T10:00:00", "k3")
+    _price(conn, onion_a, STORE_A, "KG", 6.0, "2026-09-07T10:00:00", "k4")
+
+    verdict = shopping_verdict(compare_stores(conn))
+
+    assert verdict.winner_stores == ("Loja 1", "Loja 2")
+    assert verdict.runner_up_store is None
+    assert verdict.runner_up_kinds == ()
+
+
+def test_shopping_verdict_winner_sweeps_everything(conn):
+    tomato_a = _product(conn, "TOMATE kg", "1", STORE_A)
+    tomato_b = _product(conn, "TOMATE ITALIANO kg", "2", STORE_B)
+    onion_a = _product(conn, "CEBOLA kg", "3", STORE_A)
+    onion_b = _product(conn, "CEBOLA BRANCA kg", "4", STORE_B)
+    for product_id, kind in ((tomato_a, "tomate"), (tomato_b, "tomate"), (onion_a, "cebola"), (onion_b, "cebola")):
+        set_kind(conn, product_id, kind)
+    _price(conn, tomato_a, STORE_A, "KG", 10.0, "2026-09-16T10:00:00", "k1")
+    _price(conn, tomato_b, STORE_B, "KG", 12.0, "2026-09-07T10:00:00", "k2")
+    _price(conn, onion_a, STORE_A, "KG", 5.0, "2026-09-16T10:00:00", "k3")
+    _price(conn, onion_b, STORE_B, "KG", 6.0, "2026-09-07T10:00:00", "k4")
+
+    verdict = shopping_verdict(compare_stores(conn))
+
+    assert verdict.runner_up_store is None
+    assert verdict.runner_up_kinds == ()
+
+
+def test_shopping_verdict_uses_cnpj_not_nickname_for_tally(conn):
+    branch_a, branch_b = "11832478000285", "11832478000366"
+    ensure_store(conn, branch_a, "Dona de Casa")
+    ensure_store(conn, branch_b, "Dona de Casa")
+    ensure_store(conn, STORE_B, "Loja 2")
+    tomato_a = resolve_product_id(conn, branch_a, "1", "TOMATE kg")
+    tomato_b = resolve_product_id(conn, STORE_B, "2", "TOMATE ITALIANO kg")
+    onion_a = resolve_product_id(conn, branch_b, "3", "CEBOLA kg")
+    onion_b = resolve_product_id(conn, STORE_B, "4", "CEBOLA BRANCA kg")
+    for product_id, kind in ((tomato_a, "tomate"), (tomato_b, "tomate"), (onion_a, "cebola"), (onion_b, "cebola")):
+        set_kind(conn, product_id, kind)
+    _price(conn, tomato_a, branch_a, "KG", 5.0, "2026-09-16T10:00:00", "k1")
+    _price(conn, tomato_b, STORE_B, "KG", 12.0, "2026-09-07T10:00:00", "k2")
+    _price(conn, onion_a, branch_b, "KG", 5.0, "2026-09-16T10:00:00", "k3")
+    _price(conn, onion_b, STORE_B, "KG", 12.0, "2026-09-07T10:00:00", "k4")
+
+    verdict = shopping_verdict(compare_stores(conn))
+
+    # Both "Dona de Casa" branches win one group each -- tallied separately by CNPJ, they tie with
+    # STORE_B (0 wins) losing outright, not summed into a single 2-win "Dona de Casa".
+    assert verdict.winner_stores == (f"Dona de Casa · {branch_a}", f"Dona de Casa · {branch_b}")
 
 
 def test_new_extremes_repeats_the_name_when_a_product_beats_itself(conn):
