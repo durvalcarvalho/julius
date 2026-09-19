@@ -1,0 +1,46 @@
+docs/tickets/julius-bot/176-bot-actions-compare-stores-items.md
+  s_996ed5ca00b90f::t_80c72bf146017d 3-4
+tests/test_services_search.py
+  s_996ed5ca00b90f::t_297f36f2a86539 251-260
+docs/tickets/julius-bot/178-agent-prompt-shopping-list.md
+  s_996ed5ca00b90f::t_a843530f8bb9c3 3-4
+docs/tickets/julius-bot/179-turn-shopping-comparison.md
+  s_996ed5ca00b90f::t_37cb7169a437c3 3-4
+docs/tickets/julius-bot/177-render-shopping-verdict.md
+  s_996ed5ca00b90f::t_5d0d1e61cf15c5 3-4
+julius/services/search.py
+  s_996ed5ca00b90f::t_9f93a3a29c7349 89-108,114-118,122-129
+docs/tickets/julius-bot/index.md
+  s_996ed5ca00b90f::t_c363147ef4af28 211
+  s_996ed5ca00b90f::t_ad04e29f20d6b6 232-237
+docs/tickets/julius-bot/175-comparison-shopping-scope.md
+  s_996ed5ca00b90f::t_220b1180a0465e 3-4
+docs/tickets/julius-bot/180-shopping-list-smoke-and-docs.md
+  s_996ed5ca00b90f::t_b4d4ecbac69b0b 3-10
+CLAUDE.md
+  s_996ed5ca00b90f::t_28af7606fe1e77 97-106
+docs/como-testar-o-bot.md
+  s_996ed5ca00b90f::t_171f0876eb9a34 159,161-163
+  s_996ed5ca00b90f::t_5c0fa14c443035 363
+  s_996ed5ca00b90f::t_532c8850caa9ed 330-353
+tests/test_real_ai.py
+  s_996ed5ca00b90f::t_3227f7391af51d 28,31
+  s_996ed5ca00b90f::t_e29b7295c1b67b 272-302
+  s_996ed5ca00b90f::t_3b3a7bd9e47c01 49-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e7912c6a9026ebe9838fc40225a5e305a6ccdb80",
+  "prompts": {},
+  "sessions": {
+    "s_996ed5ca00b90f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "63eaf9b9-b8b5-4521-b3a4-315e97bbc6d3",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
