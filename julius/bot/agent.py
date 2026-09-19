@@ -14,14 +14,14 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 
-from julius.bot.actions import ALL_ACTIONS, Deps, PendingWrite, ProductListing, StoreListing
+from julius.bot.actions import ALL_ACTIONS, Deps, PendingWrite, ProductListing, ShoppingComparison, StoreListing
 from julius.config import Config
 from julius.domain.models import SearchOutcome, StoreComparison
 
 BOT_PROMPT_VERSION = "1"
 MAX_OUTPUT_TOKENS = 600
 
-BotOutput = str | SearchOutcome | StoreComparison | ProductListing | StoreListing | PendingWrite
+BotOutput = str | SearchOutcome | StoreComparison | ShoppingComparison | ProductListing | StoreListing | PendingWrite
 BotAgent = Agent[Deps, BotOutput]
 
 SYSTEM_PROMPT = """Você é o Julius, a memória de preços de supermercado de UMA pessoa, montada a
@@ -33,10 +33,16 @@ segunda vem na próxima mensagem.
 
 Leitura:
 - pergunta sobre preço, histórico ou "quanto custou" → search_prices.
-- "qual mercado é mais barato", comparar mercados → compare_stores.
+- "qual mercado é mais barato", comparar mercados → compare_stores, mas só com uma lista de itens
+  concreta. Se a pessoa não disse o que quer comprar — nem nesta mensagem, nem nas últimas da
+  conversa — NÃO chame compare_stores: responda em texto perguntando o que ela quer comprar. Ao
+  montar a lista de itens, junte o que foi mencionado nas últimas mensagens da conversa, não só
+  na mais recente.
 - "que produtos eu tenho", "quais mercados" → list_products ou list_stores.
 - "está caro?" não é um veredito seu: chame search_prices e deixe a pessoa decidir olhando o
   histórico. Você mostra o que foi pago; nunca diz se um preço é caro ou barato.
+- Se a sua última mensagem nesta conversa foi uma pergunta, trate a próxima mensagem da pessoa
+  como resposta a ela antes de cogitar qualquer outra ação — mesmo que a resposta seja curta.
 
 Escrita (renomear, marcar, tipo, conteúdo, fundir, desfundir):
 - passe o produto ou o mercado pelo id quando a pessoa deu um id; senão, pelo nome como ela falou.
