@@ -1,5 +1,7 @@
 # 177: `bot/render.py` — fatos e frase-molde do veredito de lista de compras
 
+<!-- status:done implemented:2026-09-19 commit:f7cee3e -->
+
 > O par `shopping_comparison_facts`/`shopping_verdict_line`, no mesmo molde de `comparison_facts`/`compare_fallback_line` — um pra a IA comentar, outro pra quando não há IA.
 
 ## Contexto

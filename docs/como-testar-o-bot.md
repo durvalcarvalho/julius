@@ -156,11 +156,11 @@ Preços por KG
 
 ## Passo 8 — Comparar mercados
 
-Mande: **`qual mercado tá mais barato`**
+Mande: **`qual mercado tá mais barato pra tomate e cebola`** (troque pelos produtos que você já comprou em pelo menos 2 mercados).
 
-- **Esperado:** uma tabela por tipo de produto, a contagem "mais barato em N de M grupos", e o rodapé `base: …`.
-- **Se vier "Nenhum produto tem tipo ainda"**: normal se o catálogo ainda não foi curado — rode `julius produtos revisar` na CLI antes.
-- **O que isso prova:** o modelo distingue "preço de um produto" de "comparar mercados" — duas ações diferentes.
+- **Esperado:** uma frase de veredito ("N de M mais baratos em X, vá lá" ou parecido), nunca a tabela do catálogo inteiro.
+- **Se vier "Não achei preço comparável"**: normal se esses dois itens ainda não foram comprados em 2 mercados diferentes — tente outro par, ou rode `julius mercados comparar` na CLI pra ver quais grupos existem.
+- **O que isso prova:** o modelo distingue "preço de um produto" de "comparar mercados para uma lista" — duas ações diferentes, e a comparação já sai restrita aos itens pedidos (v2.10, ver Passo 21).
 
 ---
 
@@ -327,6 +327,30 @@ Sem métrica pra isso — é leitura sua. Anote em `CLAUDE.md` (parágrafo v2.7)
 
 ---
 
+## Passo 21 — Pergunta vaga de mercado (v2.10)
+
+Mande: **`qual mercado eu devo ir?`** (sem citar nenhum produto, nem antes nem depois).
+
+- **Esperado:** o bot pergunta o que você quer comprar (algo como "depende, o que você quer comprar? tem uma lista?") — nunca uma tabela nem um veredito.
+- **Se vier a comparação de qualquer jeito:** é regressão do prompt (RF1, `docs/design/shopping-list-conversation-context.md`) — anote a mensagem exata e o que veio.
+- **O que isso prova:** o caso real que abriu esta rodada (screenshot de 16 grupos, textão) não se repete mais.
+
+## Passo 22 — Responder curto a uma pergunta do bot
+
+Logo depois do Passo 21 (o bot deve ter perguntado algo), responda só **`sim`** ou **`tomate`**.
+
+- **Esperado:** o bot religa sua resposta à pergunta que ele mesmo fez — se você respondeu "tomate", ele deve seguir para comparar tomate; "sim" sozinho pode continuar ambíguo (é uma resposta genuinamente vaga), mas o bot não deve tratar como um comando solto sem sentido nenhum.
+- **Se ele disser algo como "não entendi, sim o quê?" para uma resposta que fazia sentido** (ex.: você respondeu com o nome de um produto): anote a mensagem exata — é o caso RF4 que o design deixou como reforço de prompt, sem estado novo; se falhar, é candidato a reabrir a Decisão 4 do design.
+
+## Passo 23 — Montar a lista aos poucos
+
+Numa conversa nova, mande três mensagens separadas: **`preciso comprar tomate`**, depois **`e cebola`**, depois **`qual mercado é mais barato`**.
+
+- **Esperado:** a terceira mensagem já compara tomate e cebola juntos, sem você repetir os nomes.
+- **Se ele perguntar de novo o que você quer comprar**, ou comparar só um dos dois: anote as três mensagens exatas — é o caso RF5, mesma disciplina do passo anterior (reforço de prompt, sem tabela nova).
+
+---
+
 ## Onde anotar o resultado
 
 Abra `docs/design/telegram-bot.md`, seção **§9.1**, e escreva o que aconteceu — principalmente:
@@ -336,6 +360,7 @@ Abra `docs/design/telegram-bot.md`, seção **§9.1**, e escreva o que aconteceu
 3. O nome do modelo que funcionou (passo 14).
 4. Custo de ~12 mensagens (passo 15).
 5. **v2.7**: a persona soou como o Julius, os cortes de tamanho couberam no seu catálogo, e o fallback sem IA nunca voltou a ser a tabela crua (passos 16–20).
+6. **v2.10**: a pergunta vaga de mercado pediu a lista em vez de comparar tudo, e as respostas curtas/em várias mensagens (passos 21–23) fizeram sentido. Se algum dos três falhar, é o gatilho que decide se a Decisão 4 do design (`docs/design/shopping-list-conversation-context.md`) precisa ser reaberta.
 
 Se o prompt precisar de ajuste, ele está em `julius/bot/agent.py` (`SYSTEM_PROMPT`), versionado em `BOT_PROMPT_VERSION` — **suba a versão ao mexer no texto**, é a disciplina que o projeto já aplica aos prompts da curadoria.
 

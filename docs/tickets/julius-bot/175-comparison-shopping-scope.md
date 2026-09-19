@@ -1,5 +1,7 @@
 # 175: `services/comparison.py` — escopo por itens e veredito agregado
 
+<!-- status:done implemented:2026-09-19 commit:4aaabb0 -->
+
 > `compare_stores` aprende a comparar só o que foi pedido, e uma função nova conta vitórias por loja em vez de deixar a IA somar.
 
 ## Contexto

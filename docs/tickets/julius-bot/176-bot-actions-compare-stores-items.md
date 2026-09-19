@@ -1,5 +1,7 @@
 # 176: `bot/actions.py` — `compare_stores` exige itens, casados com `kind` via `match_kind`
 
+<!-- status:done implemented:2026-09-19 commit:150fa8f -->
+
 > A ação para de aceitar zero argumentos: agora recebe a lista de itens que a pessoa quer comprar, casa cada um com um `kind` conhecido, e nunca esconde em silêncio um item que não achou.
 
 ## Contexto

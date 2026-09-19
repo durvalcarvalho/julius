@@ -86,23 +86,47 @@ def detect_tag(conn: sqlite3.Connection, words: Sequence[str]) -> tuple[str | No
 
 
 KIND_MATCH_CUTOFF = 75
-"""Minimum fuzz.ratio (0-100) for a shopping-list term ("leite") to count as a known `kind`
-("leite uht"). Same mechanism as TAG_MATCH_CUTOFF (detect_tag, above), a different vocabulary --
-not reused as-is. Provisional value, same starting point as TAG_MATCH_CUTOFF: ticket 176 chose it
-without measuring against the real catalogue; ticket 180 measures it for real and fixes this
-docstring with actual numbers, same discipline as every other cutoff in this file."""
+"""Minimum _name_score (0-100) for a shopping-list term ("leite") to count as a known `kind`
+("leite uht"). Measured on the 98 real kinds of the production catalogue (2026-09-19): whole-
+string fuzz.ratio (ticket 176's first attempt) was reproduced and rejected the same way WRatio
+was for product names (see MATCH_SCORE_CUTOFF) -- it penalizes a short generic term against a
+longer compound kind so badly that real terms lost to unrelated kinds outright: "leite" scored
+71 against "leite uht" (below any safe cutoff) while "agua" scored 67 against "manga" and only 50
+against "água mineral", so a lowered cutoff would have matched the wrong kind, not just missed
+the right one. Switching to _name_score (word-level, with the same prefix bonus product-name
+matching already uses) fixes this: every generic single-word term tested ("leite", "pão"/"pao",
+"água"/"agua", "carne", "arroz", "queijo", "creme", "suco", "maçã"/"maca") scores 92-100 against
+its real kind, while the worst false positive among unrelated real terms is 66.7 ("feijao" vs
+"requeijão", "cebola" vs "sacola reutilizável", "tomate" vs "manteiga") -- 75 sits in the open
+gap between them, same margin TAG_MATCH_CUTOFF already relies on for the same scorer family.
+Known ambiguity, not fixed by any cutoff: a generic term can tie 100 against more than one real
+kind ("queijo" ties queijo brie/mussarela/parmesão; "leite" ties leite uht/condensado and creme
+de leite; "maca" ties maçã and macarrão) -- match_kind returns whichever sorts first
+alphabetically (all_kinds() is already sorted), which is not always the most obviously "generic"
+one. Accepted the same way "queijo" -> "QUERO" (NEAR_MISS_CUTOFF) was: a real limitation of
+matching a word against a vocabulary that was never designed to be unambiguous, not a bug to
+chase without a concrete wrong answer observed in use."""
 
 
 def match_kind(conn: sqlite3.Connection, term: str) -> str | None:
     """One term, one kind -- unlike detect_tag (a list of words competing for one tag), each item
     of a shopping list is matched independently. No kind registered yet -> None, without paying
-    for a rapidfuzz call that could not possibly match anything."""
+    for a rapidfuzz call that could not possibly match anything.
+
+    Uses _name_score (word-level, prefix-aware), not whole-string fuzz.ratio: a `kind` vocabulary
+    mixes single words ("tomate") with compounds ("leite uht"), the same short-term-vs-long-name
+    shape that already broke product-name matching before v2.3.1 -- see KIND_MATCH_CUTOFF."""
     kinds = products.all_kinds(conn)
     if not kinds:
         return None
-    normalized_kinds = [normalize_text(k) for k in kinds]
-    match = process.extractOne(normalize_text(term), normalized_kinds, scorer=fuzz.ratio, score_cutoff=KIND_MATCH_CUTOFF)
-    return kinds[match[2]] if match is not None else None
+    term_words = normalize_text(term).split()
+    best_kind: str | None = None
+    best_score = -1.0
+    for kind in kinds:
+        score = _name_score(term_words, normalize_text(kind).split())
+        if score > best_score:
+            best_kind, best_score = kind, score
+    return best_kind if best_score >= KIND_MATCH_CUTOFF else None
 
 
 def search_free_text(

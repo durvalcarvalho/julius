@@ -25,10 +25,10 @@ import shutil
 import pytest
 
 from julius import config as config_module
-from julius.bot.actions import Deps, PendingWrite, ProductListing, StoreListing
+from julius.bot.actions import Deps, PendingWrite, ProductListing, ShoppingComparison, StoreListing
 from julius.bot.agent import build_agent
 from julius.bot.turn import ChatState, handle_tap, handle_text
-from julius.domain.models import SearchOutcome, StoreComparison
+from julius.domain.models import SearchOutcome
 from julius.bot import render
 from julius.infra import db
 from julius.infra.llm_client import HttpLlmClient
@@ -46,7 +46,10 @@ MIN_ROUTING_HITS = 0.7
 # silêncio -- mesma razão de os testes do agente derivarem `final_result_<nome>`.
 ROUTING_CASES = (
     ("quanto paguei de picanha?", SearchOutcome.__name__),
-    ("qual mercado tá mais barato?", StoreComparison.__name__),
+    # Sem lista, o bot tem de perguntar em vez de comparar o catálogo inteiro (ticket 178, RF1) --
+    # "qual mercado tá mais barato" sozinho não é mais uma chamada de compare_stores.
+    ("qual mercado tá mais barato?", "text"),
+    ("qual mercado é mais barato pra tomate e cebola?", ShoppingComparison.__name__),
     ("que produtos eu tenho no catálogo?", ProductListing.__name__),
     ("quais mercados eu já usei?", StoreListing.__name__),
     ("bom dia, tudo bem?", "text"),
@@ -264,6 +267,37 @@ def test_narration_of_many_dissimilar_products_stays_short(deps):
     blocks = reply.split("\n\n")
     assert len(blocks) <= 4, f"resposta com produtos demais deveria caber em poucos blocos: {blocks}"
     assert all(len(block) <= 400 for block in blocks), f"um bloco virou textão de novo: {blocks}"
+
+
+# --- lista de compras: escopo + veredito (ticket 180, docs/design/shopping-list-conversation-context.md) --
+
+
+def test_shopping_list_verdict_is_grounded(deps):
+    """A narração do veredito nunca pode citar um R$ que não veio dos fatos -- a mesma guarda de
+    `narrate()` (ticket 163), aqui exercitada sobre `shopping_comparison_facts` de verdade em vez
+    de `comparison_facts`. Se o catálogo real não tiver dois kinds comparáveis, o teste pula: não
+    há como testar grounding sem fato nenhum para citar."""
+    from julius.services import comparison as comparison_service
+
+    kinds = search_service.match_kind(deps.conn, "tomate"), search_service.match_kind(deps.conn, "cebola")
+    kinds = [k for k in kinds if k]
+    if not kinds:
+        pytest.skip("catálogo real não tem tomate/cebola com tipo definido")
+    scoped = comparison_service.compare_stores(deps.conn, kinds=kinds)
+    if not scoped.comparisons:
+        pytest.skip("tomate/cebola não são comparáveis entre mercados no catálogo real agora")
+    verdict = comparison_service.shopping_verdict(scoped)
+    from julius.bot.actions import ShoppingComparison as _ShoppingComparison
+
+    shopping = _ShoppingComparison(comparison=scoped, verdict=verdict, unmatched_terms=())
+    facts = render.shopping_comparison_facts(shopping)
+
+    client = HttpLlmClient.from_config(deps.config)
+    reply = suggestions.narrate(deps.conn, deps.config, client, "veredito de lista de compras", facts)
+    _SPENT.append(_last_call(deps)["cost_usd"])
+
+    print(f"\n  fatos:\n{facts}\n  -> {reply!r}")
+    assert reply, "a persona não deveria falhar/ser rejeitada pela guarda para um veredito de 2 itens"
 
 
 def test_the_run_reports_what_it_cost():

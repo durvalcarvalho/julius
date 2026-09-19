@@ -248,6 +248,16 @@ def test_match_kind_no_kinds_registered_is_none(conn):
     assert match_kind(conn, "tomate") is None
 
 
+def test_match_kind_generic_word_finds_a_compound_kind(conn):
+    """Measured against the real catalogue (ticket 180): whole-string fuzz.ratio scored "leite"
+    only 71 against "leite uht" (below any safe cutoff) -- the word-level scorer is what makes a
+    plain, generic shopping-list word find a compound kind at all."""
+    product = _product(conn, "LEITE UHT INTEGRAL 1L", "1")
+    set_kind(conn, product, "leite uht")
+
+    assert match_kind(conn, "leite") == "leite uht"
+
+
 def test_search_free_text_explicit_tag_skips_detection(conn):
     _import(conn, "qrcode.html")
     picanha = _id_of(conn, "PICANHA")

@@ -1,5 +1,13 @@
 # 180: smoke real + docs — medir o corte de `kind`, testar RF1/RF4/RF5 de verdade
 
+<!-- adjustments: a medição não só ajustou o número de KIND_MATCH_CUTOFF -- ela achou que o
+mecanismo (fuzz.ratio na string inteira, como o ticket 176 tinha implementado) repetia o defeito
+do WRatio pré-v2.3.1 (termo curto perde contra kind composto: "leite" pontuava 71 contra "leite
+uht", "agua" pontuava mais em "manga" que em "água mineral"). Corrigido trocando pra _name_score
+(o scorer palavra-a-palavra que a busca de produto já usa), não só o corte. Ver CLAUDE.md "v2.10"
+e o docstring de KIND_MATCH_CUTOFF (julius/services/search.py) para os números completos. -->
+
+
 > Fecha a trilha: mede o corte que o ticket 176 chutou, roda a suíte real de IA, e pede ao usuário os três testes que só o Telegram de verdade confirma.
 
 ## Contexto

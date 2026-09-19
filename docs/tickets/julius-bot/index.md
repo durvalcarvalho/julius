@@ -208,6 +208,7 @@ Trilha única, seguindo a numeração global (162 foi o último). Nenhum arquivo
 
 > Gerado a partir de: `docs/design/shopping-list-conversation-context.md` (design), `docs/requirements/shopping-list-conversation-context.md` (requisitos), `claudedocs/research_conversation_context_management_20260919.md` e `claudedocs/research_conversation_design_telegram_deepseek_20260919.md` (pesquisas). Reage a um screenshot real de 2026-09-19 17:43: "qual mercado eu devo ir?" respondida com um textão enumerando os 16 grupos do catálogo inteiro, e a um segundo screenshot de 2026-09-18 ("sim" sem contexto da pergunta anterior).
 > Gerado em: 2026-09-19 · Estado do código **na geração**: v2.9 fechada (commit `8713d92`), v2.8/v2.9 implementadas sem tickets próprios (commits `401e942`/`8713d92`); último ticket numerado é o 174.
+> **Trilha implementada em 2026-09-19**: 175–180 feitos, um commit por ticket, **1022 testes verdes** (8 skips, os `real_ai`). Achado real durante o 180: a primeira medição de `KIND_MATCH_CUTOFF` reproduziu o mesmo defeito que `WRatio` já tinha causado em busca de produto antes da v2.3.1 (termo curto penalizado contra `kind` composto — "leite" pontuava 71 contra "leite uht", "agua" pontuava mais em "manga" que em "água mineral"); corrigido trocando para `_name_score` (o mesmo scorer palavra-a-palavra da busca de produto), não só ajustando o número. Smoke real (`pytest tests/test_real_ai.py --real-ai`): **9 testes, 16 chamadas, US$ 0,015**, roteamento **6 de 6** — incluindo os dois casos novos ("qual mercado tá mais barato?" sozinho → texto, pedindo a lista; com itens explícitos → `ShoppingComparison`). Detalhe completo em `CLAUDE.md`, parágrafo "v2.10".
 
 ### Visão geral
 
@@ -228,12 +229,12 @@ Trilha única, seguindo a numeração global (174 foi o último ticket numerado;
 
 | # | Ticket | Depende de | Esforço | Estado | Entrega |
 |---|---|---|---|---|---|
-| 175 | [`comparison.py` — escopo + veredito](175-comparison-shopping-scope.md) | — | M | pendente | `compare_stores(conn, kinds=None)`, `shopping_verdict`, `ShoppingVerdict` |
-| 176 | [`actions.py` — `compare_stores(items)`](176-bot-actions-compare-stores-items.md) | 175 | M | pendente | `match_kind`, `ShoppingComparison`, ação exige itens |
-| 177 | [`render.py` — fatos e frase-molde](177-render-shopping-verdict.md) | 175, 176 | S | pendente | `shopping_comparison_facts`, `shopping_verdict_line` |
-| 178 | [`agent.py` — prompt](178-agent-prompt-shopping-list.md) | 176 | S | pendente | 3 frases novas (RF1/RF4/RF5), `BotOutput` |
-| 179 | [`turn.py` — integração](179-turn-shopping-comparison.md) | 175, 176, 177, 178 | S | pendente | branch `ShoppingComparison` em `_render_output` |
-| 180 | [smoke real + docs](180-shopping-list-smoke-and-docs.md) | 179 | M | pendente | `KIND_MATCH_CUTOFF` medido, teste real, `CLAUDE.md`, roteiro manual |
+| 175 | [`comparison.py` — escopo + veredito](175-comparison-shopping-scope.md) | — | M | **feito** (`4aaabb0`) | `compare_stores(conn, kinds=None)`, `shopping_verdict`, `ShoppingVerdict` |
+| 176 | [`actions.py` — `compare_stores(items)`](176-bot-actions-compare-stores-items.md) | 175 | M | **feito** (`150fa8f`) | `match_kind`, `ShoppingComparison`, ação exige itens |
+| 177 | [`render.py` — fatos e frase-molde](177-render-shopping-verdict.md) | 175, 176 | S | **feito** (`f7cee3e`) | `shopping_comparison_facts`, `shopping_verdict_line` |
+| 178 | [`agent.py` — prompt](178-agent-prompt-shopping-list.md) | 176 | S | **feito** (`64d17ae`) | 3 frases novas (RF1/RF4/RF5), `BotOutput` |
+| 179 | [`turn.py` — integração](179-turn-shopping-comparison.md) | 175, 176, 177, 178 | S | **feito** (`cdc5f0e`) | branch `ShoppingComparison` em `_render_output` |
+| 180 | [smoke real + docs](180-shopping-list-smoke-and-docs.md) | 179 | M | **feito** | `KIND_MATCH_CUTOFF` medido (e o scorer corrigido para `_name_score`), teste real, `CLAUDE.md`, roteiro manual |
 
 ### Dependências e caminho crítico
 

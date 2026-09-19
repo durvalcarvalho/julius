@@ -1,5 +1,7 @@
 # 179: `bot/turn.py` — `_render_output` para `ShoppingComparison`
 
+<!-- status:done implemented:2026-09-19 commit:cdc5f0e -->
+
 > O quinto branch de `_render_output`, no mesmo molde exato do de `StoreComparison` — narra quando dá, cai na frase-molde quando não dá.
 
 ## Contexto

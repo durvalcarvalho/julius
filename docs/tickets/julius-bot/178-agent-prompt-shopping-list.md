@@ -1,5 +1,7 @@
 # 178: `bot/agent.py` — prompt: escopo de `compare_stores`, pergunta pendente, acumular itens
 
+<!-- status:done implemented:2026-09-19 commit:64d17ae -->
+
 > Três frases novas no `SYSTEM_PROMPT`, nenhum mecanismo novo: confiar primeiro no histórico que já existe (`HISTORY_TURNS = 3`) antes de construir qualquer estado de conversa.
 
 ## Contexto
