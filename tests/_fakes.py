@@ -15,6 +15,7 @@ _KIND_MARKERS = {
     '"packaging"': "packaging",
     '"stores"': "store",
     '"reply"': "persona",
+    '"tag"': "category",
 }
 
 

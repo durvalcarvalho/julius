@@ -8,9 +8,11 @@ when no action was chosen -- every other reply is rendered from what an action a
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import ModelMessage
 
 from julius.bot.actions import Deps, PendingWrite, ProductListing, ShoppingComparison, StoreListing, WriteFailed, execute
@@ -19,6 +21,10 @@ from julius.bot.render import (
     comparison_facts,
     compare_fallback_line,
     escape,
+    no_match_facts,
+    no_match_fallback_line,
+    price_check_facts,
+    price_check_fallback_line,
     products_facts,
     records_facts,
     render_comparison,
@@ -34,8 +40,9 @@ from julius.bot.render import (
     stores_facts,
 )
 from julius.config import Config
-from julius.domain.models import SearchOutcome, StoreComparison
+from julius.domain.models import PriceCheck, PriceRecord, SearchOutcome, StoreComparison
 from julius.infra import ai_log
+from julius.services import search as search_service
 from julius.services import suggestions
 
 HISTORY_TURNS = 3
@@ -61,10 +68,17 @@ FALLBACK_LINE_MAX_GROUPS = 6
 NARRATE_MAX_RECORDS = 40
 NARRATE_MAX_GROUPS = 20
 
+# Brainstorm 2026-09-20: "quanto tá o kg de alcatra" with nothing in the catalog used to answer
+# "Nenhum resultado." and stop -- the least useful reply a solicitous market clerk could give.
+# 3, not more: the same wall-of-text problem NARRATE_MAX_* already guards against, at a much
+# smaller scale here since this is a curated "here's what I do have" list, not a raw dump.
+ALT_LIMIT = 3
+
 CALL_KIND = "bot_turn"
 
 CANCELLED_NOTICE = "Ação anterior cancelada.\n\n"
 AI_UNREACHABLE = "Não consegui falar com a IA agora. Tente de novo em instantes."
+COULD_NOT_CONFIRM = "Não consegui confirmar isso com segurança — tenta perguntar de novo, mais direto?"
 STALE_TAP = "Essa confirmação não está mais ativa."
 EXPIRED_TAP = "Confirmação expirada — nada foi executado."
 DENIED_TAP = "❌ Cancelado — nada foi executado."
@@ -132,6 +146,69 @@ def _charge(deps: Deps, text: str, *, attempt: int, kind: str | None, latency_ms
     )
 
 
+def _first_per_product(records: Sequence[PriceRecord], limit: int) -> list[PriceRecord]:
+    """One row per distinct product, first (most relevant) occurrence wins, capped at `limit`.
+    Alternatives are different products -- unlike `_collapse_repeated_prices` in render.py, which
+    collapses the same product's repeated (store, price) rows, this never merges two rows of the
+    same product either; it just keeps the first one seen and drops the rest."""
+    seen: set[int] = set()
+    kept: list[PriceRecord] = []
+    for record in records:
+        if record.product_id in seen:
+            continue
+        seen.add(record.product_id)
+        kept.append(record)
+        if len(kept) >= limit:
+            break
+    return kept
+
+
+def _near_match_alternatives(deps: Deps, term: str | None) -> list[PriceRecord]:
+    """Free, no IA: a search miss that's a near-typo of a real product name already in the
+    catalog (services.search.closest_names, v1.1) beats guessing a category -- it's the exact
+    thing the person asked for, just spelled differently."""
+    if not term:
+        return []
+    near = search_service.closest_names(deps.conn, term)
+    records: list[PriceRecord] = []
+    for name, _score in near:
+        records.extend(search_service.search_prices(deps.conn, term=name, limit=5))
+    return _first_per_product(records, ALT_LIMIT)
+
+
+def _category_alternatives(deps: Deps, term: str | None, tag: str | None) -> list[PriceRecord]:
+    """Alternatives from the same tag/category. `tag` is tried first because it may already be
+    known for free (SearchOutcome.tag/detected_tag, from a tag the user named or a word that
+    fuzzy-matched a tag name) -- the IA classification (suggest_category) only runs when nothing
+    deterministic already answered the question, and only a term the deterministic matchers
+    could not connect to any tag by text (e.g. "alcatra" vs "carnes") needs it."""
+    if tag is None:
+        if term is None or deps.client is None:
+            return []
+        tag = suggestions.suggest_category(
+            deps.conn, deps.config, deps.client, term, search_service.known_tags(deps.conn)
+        )
+    if tag is None:
+        return []
+    records = search_service.search_prices(deps.conn, tag=tag, limit=20)
+    return _first_per_product(records, ALT_LIMIT)
+
+
+async def _render_no_match(output: SearchOutcome, deps: Deps) -> Reply:
+    """The other half of a zero-result SearchOutcome (see _render_output): instead of the bare
+    "Nenhum resultado.", try a near-match by name first, then the same category, then narrate
+    whatever was found (or wasn't) through the persona -- same seam as every other reply, never a
+    special-cased second AI mechanism for wording."""
+    alternatives = _near_match_alternatives(deps, output.term)
+    if not alternatives:
+        alternatives = _category_alternatives(deps, output.term, output.tag or output.detected_tag)
+    facts = no_match_facts(output.term, alternatives)
+    remark = await _narrate(deps, "busca sem resultado", facts)
+    if remark:
+        return Reply(escape(remark))
+    return Reply(no_match_fallback_line(output.term, alternatives))
+
+
 async def _narrate(deps: Deps, context: str, facts: str) -> str | None:
     """The one seam between the turn and the persona (ticket 163's `narrate`). No client, or no
     facts, means no call at all -- the exact same "answer without it" behaviour as IA not being
@@ -160,10 +237,14 @@ async def _render_output(output: object, state: ChatState, deps: Deps) -> Reply:
         _log_query(deps.config, output)
         records = output.records
         base = render_records(records)
-        # No client is exactly "IA not configured": the reply must be byte-for-byte what it was
-        # before this ticket, never the Julius-toned fallback line (that line is for when a
-        # configured client tried and failed, not for "there is no client to try").
-        if not records or deps.client is None:
+        if not records:
+            # No client is exactly "IA not configured": the reply must be byte-for-byte what it
+            # was before this ticket, never the Julius-toned fallback line (that line is for when
+            # a configured client tried and failed, not for "there is no client to try").
+            if deps.client is None:
+                return Reply(base)
+            return await _render_no_match(output, deps)
+        if deps.client is None:
             return Reply(base)
         if len(records) > NARRATE_MAX_RECORDS:
             return Reply(base)
@@ -197,6 +278,12 @@ async def _render_output(output: object, state: ChatState, deps: Deps) -> Reply:
         if remark:
             return Reply(escape(remark))
         return Reply(base)
+    if isinstance(output, PriceCheck):
+        base = price_check_fallback_line(output)
+        if deps.client is None:
+            return Reply(base)
+        remark = await _narrate(deps, "conferência de preço ao vivo", price_check_facts(output))
+        return Reply(escape(remark)) if remark else Reply(base)
     if isinstance(output, ProductListing):
         base = render_products(output.products)
         remark = await _narrate(deps, "catálogo de produtos", products_facts(output.products))
@@ -230,6 +317,21 @@ async def handle_text(agent: BotAgent, state: ChatState, deps: Deps, text: str) 
     started = time.monotonic()
     try:
         result = await agent.run(text, deps=deps, message_history=state.history)
+    except UnexpectedModelBehavior as error:
+        # The output-honesty guard (bot/agent.py::no_unlicensed_data_claims) exhausted its
+        # retries without getting a clean answer -- the model kept asserting something no action
+        # backed. Never the fabricated text itself, and never the generic "network" wording of
+        # AI_UNREACHABLE, which would misname the cause (docs/design/agent-output-honesty.md,
+        # Decisão 2).
+        _charge(
+            deps,
+            text,
+            attempt=1,
+            kind=None,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            error=f"agent raised {type(error).__name__}",
+        )
+        return Reply(f"{prefix}{COULD_NOT_CONFIRM}")
     except Exception as error:
         _charge(
             deps,
@@ -243,13 +345,14 @@ async def handle_text(agent: BotAgent, state: ChatState, deps: Deps, text: str) 
     latency_ms = int((time.monotonic() - started) * 1000)
 
     usage = result.usage
+    logged_output = result.output if isinstance(result.output, str) else _output_kind(result.output)
     suggestions.record_usage(
         deps.conn,
         deps.config,
         CALL_KIND,
         attempt=1,
         user_prompt=text,
-        raw_response=_output_kind(result.output),
+        raw_response=logged_output,
         parsed_ok=True,
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,

@@ -12,13 +12,15 @@ import sqlite3
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from pydantic_ai import ModelRetry, RunContext
 
 from julius.config import Config
-from julius.domain.models import Product, SearchOutcome, ShoppingVerdict, Store, StoreComparison
+from julius.domain.models import PriceCheck, Product, SearchOutcome, ShoppingVerdict, Store, StoreComparison
 from julius.domain.formatting import content_text
 from julius.domain.normalization import digits_only, normalize_content, normalize_text
+from julius.infra import ai_log
 from julius.infra.llm_client import LlmClient
 from julius.services import catalog, comparison as comparison_service, search as search_service
 
@@ -32,6 +34,11 @@ class Deps:
     # For turn.py's narrate() calls (voz do Julius, ticket 166) -- None means "answer without the
     # persona", same as IA not being configured at all.
     client: LlmClient | None = None
+    # docs/design/bot-read-only-tier.md: só o papel, não a lista que o calcula -- app.py decide
+    # *como* alguém vira confiável, esta camada só precisa saber *se*. Defaults preservam todo
+    # teste/chamador existente (o caminho "dono").
+    can_write: bool = True
+    chat_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -51,11 +58,19 @@ class StoreListing:
 class ShoppingComparison:
     """The scoped, item-by-item answer to "which market is cheaper" -- unlike bare
     StoreComparison (every kind ever bought), this always carries what the person actually asked
-    to compare, plus what could not be matched, so nothing goes silently missing."""
+    to compare, plus what could not be matched, so nothing goes silently missing.
+
+    `single_store_kinds` is the bucket `unmatched_terms` used to hide (docs/design/
+    shopping-verdict-shape.md, Decisão 2): a term that DID match a known `kind`, but that kind has
+    price registered in only one market -- `comparison_service.compare_stores` drops it silently,
+    so this is the only place that still knows it existed. `requested_count` is `len(terms)`
+    before any matching, so the reply can say how much of the original list this covers."""
 
     comparison: StoreComparison
     verdict: ShoppingVerdict | None
     unmatched_terms: tuple[str, ...]
+    single_store_kinds: tuple[str, ...] = ()
+    requested_count: int = 0
 
 
 def _candidate_list(pairs: list[tuple[int, str]]) -> str:
@@ -168,8 +183,58 @@ async def compare_stores(ctx: RunContext[Deps], items: tuple[str, ...]) -> Shopp
         elif kind not in matched:
             matched.append(kind)
     comparison = comparison_service.compare_stores(ctx.deps.conn, kinds=matched) if matched else StoreComparison((), "", "")
-    verdict = comparison_service.shopping_verdict(comparison) if comparison.comparisons else None
-    return ShoppingComparison(comparison=comparison, verdict=verdict, unmatched_terms=tuple(unmatched))
+    compared_kinds = {group.kind for group in comparison.comparisons}
+    single_store_kinds = tuple(kind for kind in matched if kind not in compared_kinds)
+    category_of = catalog.kind_categories(ctx.deps.conn)
+    verdict = comparison_service.shopping_verdict(comparison, category_of=category_of) if comparison.comparisons else None
+    ai_log.append(
+        ctx.deps.config.query_log_path,
+        {
+            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "channel": "bot",
+            "action": "compare_stores",
+            "items": terms,
+            "matched_kinds": matched,
+            "unmatched_terms": unmatched,
+            "single_store_kinds": list(single_store_kinds),
+        },
+    )
+    return ShoppingComparison(
+        comparison=comparison,
+        verdict=verdict,
+        unmatched_terms=tuple(unmatched),
+        single_store_kinds=single_store_kinds,
+        requested_count=len(terms),
+    )
+
+
+async def check_price(ctx: RunContext[Deps], item: str, price: float, quantity: float | None = None) -> PriceCheck:
+    """Confere se um preço que a pessoa está vendo agora no mercado é bom, comparado ao histórico.
+
+    Use SÓ quando a pessoa informar um valor que ela mesma está vendo (ex.: "os ovos tão a 14
+    reais, tá bom?", "aqui o quilo do tomate tá 9,90"). NUNCA para "está caro?" sem nenhum preço
+    dito -- isso continua indo para search_prices, sem veredito.
+
+    Se o resultado vier com reason="quantity_needed", pergunte à pessoa quanto ela pretende
+    comprar (na mesma unidade que reference_unit já diz) e chame esta ação de novo, com os mesmos
+    item/price mais quantity. Se ela não responder de forma útil depois de perguntar de novo uma
+    vez, chame de novo com uma quantidade pequena (ex.: 1) em vez de insistir -- nunca deixe a
+    conversa travada numa pergunta sem resposta.
+
+    Args:
+        item: o produto, como a pessoa falou (ex.: "ovos").
+        price: o valor que ela informou, em reais.
+        quantity: quanto ela pretende comprar, na mesma unidade que reference_unit de uma resposta
+            anterior. Só informe quando ela já disse isso, ou ao responder à pergunta que uma
+            chamada anterior devolveu.
+    """
+    kind = search_service.match_kind(ctx.deps.conn, item)
+    if kind is None:
+        return PriceCheck(
+            kind=None, verdict=None, informed_price=price, reference_price=None, reference_unit=None,
+            reference_store=None, reference_at=None, diff_pct=None, reason="unknown_item",
+        )
+    return comparison_service.check_price(ctx.deps.conn, kind, price, quantity)
 
 
 async def list_products(ctx: RunContext[Deps], containing: str | None = None) -> ProductListing:
@@ -191,7 +256,7 @@ async def list_stores(ctx: RunContext[Deps]) -> StoreListing:
     return StoreListing(stores=tuple(catalog.list_stores(ctx.deps.conn)))
 
 
-READ_ACTIONS = (search_prices, compare_stores, list_products, list_stores)
+READ_ACTIONS = (search_prices, compare_stores, list_products, list_stores, check_price)
 
 
 @dataclass(frozen=True)

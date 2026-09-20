@@ -8,11 +8,20 @@ FL 3 Costa ones from 12-16/09, so part of any difference can be the month, not t
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
 
 from julius.domain.comparison_basis import basis_value, comparison_basis
 from julius.domain.formatting import store_labels
-from julius.domain.models import KindComparison, PriceExtreme, PriceRecord, ShoppingVerdict, StoreComparison, StorePrice
+from julius.domain.models import (
+    KindComparison,
+    PriceCheck,
+    PriceExtreme,
+    PriceRecord,
+    ShoppingVerdict,
+    StoreComparison,
+    StorePrice,
+)
 from julius.repositories import prices, products
 
 
@@ -76,45 +85,190 @@ def compare_stores(conn: sqlite3.Connection, kinds: Sequence[str] | None = None)
     return StoreComparison(tuple(comparisons), min(used_dates), max(used_dates), *coverage)
 
 
-def shopping_verdict(comparison: StoreComparison) -> ShoppingVerdict | None:
-    """Counts wins per store (each group's entries[0], already cheapest-first) and turns that
-    into a single recommendation -- the same tally `bot/render.py::render_comparison` already
-    does for the raw table, but ending in a winner and a runner-up instead of a row per store.
-
-    Tallied by store_cnpj, never store_nickname: two branches of one chain can share a nickname
-    (see test_compare_stores_keeps_two_branches_that_share_a_nickname) and store_labels() is what
-    turns a shared nickname back into two distinct labels."""
-    if not comparison.comparisons:
-        return None
-    labels = store_labels(comparison)
+def _assemble_verdict(labels: dict[str, str], kind_winner: dict[str, str]) -> ShoppingVerdict:
+    """Counts wins per store from an already-decided kind -> winning-CNPJ map, and turns that into
+    a winner (or a tie of winners) plus a single runner-up for everything left over. Shared by the
+    plain per-kind tally and the category-capped one (Decisão 5, docs/design/shopping-verdict-shape.md)
+    -- they differ only in how `kind_winner` is built, never in how it is summarized."""
     wins: dict[str, int] = {}
-    for group in comparison.comparisons:
-        winner_cnpj = group.entries[0].store_cnpj
-        wins[winner_cnpj] = wins.get(winner_cnpj, 0) + 1
+    for cnpj in kind_winner.values():
+        wins[cnpj] = wins.get(cnpj, 0) + 1
     top = max(wins.values())
     winner_cnpjs = {cnpj for cnpj, count in wins.items() if count == top}
-    won_kinds = tuple(group.kind for group in comparison.comparisons if group.entries[0].store_cnpj in winner_cnpjs)
-    leftover = [group for group in comparison.comparisons if group.entries[0].store_cnpj not in winner_cnpjs]
+    won_kinds = tuple(kind for kind, cnpj in kind_winner.items() if cnpj in winner_cnpjs)
+    leftover = [kind for kind, cnpj in kind_winner.items() if cnpj not in winner_cnpjs]
     runner_up_store: str | None = None
     runner_up_kinds: tuple[str, ...] = ()
     if leftover:
         runner_up_wins: dict[str, int] = {}
-        for group in leftover:
-            cnpj = group.entries[0].store_cnpj
+        for kind in leftover:
+            cnpj = kind_winner[kind]
             runner_up_wins[cnpj] = runner_up_wins.get(cnpj, 0) + 1
         # ponytail: a tie for second place is not broken separately -- it keeps whichever CNPJ
         # sorts first. The primary recommendation (winner_stores) already handles ties honestly;
         # this is secondary information, and no real case has shown this simplification to matter.
         best_runner_up = max(sorted(runner_up_wins), key=lambda cnpj: runner_up_wins[cnpj])
         runner_up_store = labels[best_runner_up]
-        runner_up_kinds = tuple(group.kind for group in leftover if group.entries[0].store_cnpj == best_runner_up)
+        runner_up_kinds = tuple(kind for kind in leftover if kind_winner[kind] == best_runner_up)
     return ShoppingVerdict(
-        total_items=len(comparison.comparisons),
+        total_items=len(kind_winner),
         winner_stores=tuple(labels[cnpj] for cnpj in sorted(winner_cnpjs, key=lambda cnpj: labels[cnpj])),
         won_kinds=won_kinds,
         runner_up_store=runner_up_store,
         runner_up_kinds=runner_up_kinds,
     )
+
+
+def _category_winners(comparison: StoreComparison, category_of: Mapping[str, str]) -> dict[str, str]:
+    """One winning CNPJ per category (the store that won the most kinds of that category), capped
+    to at most 2 distinct stores across all categories -- see docs/design/shopping-verdict-shape.md,
+    Decisão 5. A category with a winner outside the top 2 is reassigned to whichever of the two
+    finalists won more of that category's own kinds (never to the excluded third store, even if it
+    was technically cheaper): going to a 3rd market for one minor category is the exact outcome
+    RF6 rejects."""
+    category_wins: dict[str, dict[str, int]] = {}
+    for group in comparison.comparisons:
+        category = category_of.get(group.kind, "outros")
+        wins = category_wins.setdefault(category, {})
+        cnpj = group.entries[0].store_cnpj
+        wins[cnpj] = wins.get(cnpj, 0) + 1
+    # Tie -> lowest CNPJ, same idiom as the runner-up tie-break in _assemble_verdict.
+    category_winner = {category: max(sorted(wins), key=lambda cnpj: wins[cnpj]) for category, wins in category_wins.items()}
+
+    kinds_per_store: dict[str, int] = {}
+    for category, cnpj in category_winner.items():
+        kinds_per_store[cnpj] = kinds_per_store.get(cnpj, 0) + len(
+            [g for g in comparison.comparisons if category_of.get(g.kind, "outros") == category]
+        )
+    if len(kinds_per_store) > 2:
+        finalists = set(sorted(kinds_per_store, key=lambda cnpj: (-kinds_per_store[cnpj], cnpj))[:2])
+        for category, cnpj in list(category_winner.items()):
+            if cnpj not in finalists:
+                wins = category_wins[category]
+                category_winner[category] = max(sorted(finalists), key=lambda candidate: wins.get(candidate, 0))
+    return category_winner
+
+
+def shopping_verdict(
+    comparison: StoreComparison, category_of: Mapping[str, str] | None = None
+) -> ShoppingVerdict | None:
+    """Turns a StoreComparison into a single recommendation: who to buy from, and where the
+    leftover items are cheaper -- the same tally `bot/render.py::render_comparison` already does
+    for the raw table, but ending in a winner and a runner-up instead of a row per store.
+
+    Tallied by store_cnpj, never store_nickname: two branches of one chain can share a nickname
+    (see test_compare_stores_keeps_two_branches_that_share_a_nickname) and store_labels() is what
+    turns a shared nickname back into two distinct labels.
+
+    `category_of` (kind -> category name, e.g. `products.kind_categories()`), when given, groups
+    whole categories under at most 2 stores instead of tallying wins kind by kind -- never splits
+    a category (like "hortifruti") between the winner and the runner-up. `None`, the default and
+    what every caller before this one still gets (including `julius mercados comparar`, which
+    never scopes to a shopping list), keeps the original per-kind tally, unrestricted in how many
+    stores it can name."""
+    if not comparison.comparisons:
+        return None
+    labels = store_labels(comparison)
+    if category_of is None:
+        kind_winner = {group.kind: group.entries[0].store_cnpj for group in comparison.comparisons}
+    else:
+        category_winner = _category_winners(comparison, category_of)
+        kind_winner = {
+            group.kind: category_winner[category_of.get(group.kind, "outros")] for group in comparison.comparisons
+        }
+    return _assemble_verdict(labels, kind_winner)
+
+
+WORTH_IT_THRESHOLD_REAIS = 15.0
+"""Above this amount in reais (the R$ gap over the cheapest price ever registered, times how much
+the person intends to buy), switching stores is judged worth it (see docs/design/
+quantity-aware-verdict.md, Decisão 1). Replaces the old `LIVE_PRICE_TOLERANCE_PCT`: a percentage
+gate cannot tell a R$0,02 gap on a R$0,20 bag (10%, never worth asking) from a R$5,00 gap on a
+R$35,00 kilo of meat (14%, same band, real money) -- measured on the real catalogue's 17 kinds
+with 2+ stores. Only 1 real data point exists (the conversation that opened this design: R$5-10 on
+a small purchase "não vale", R$70 on a 14kg one "vale") -- recalibrate as soon as a second real
+case exists, same discipline as the constant this one replaces."""
+
+PLAUSIBLE_QTY_MIN = 0.2
+PLAUSIBLE_QTY_MAX = 20.0
+"""The assumed range of "how much someone might plausibly buy" (kg, L or units alike -- ponytail:
+one range for all three, not measured per unit; revisit if a real case, likely a liquid, shows 20
+is implausible). Used only to decide whether the gap already settles the verdict at either end of
+this range, without asking quantity at all (Decisão 1)."""
+
+
+def check_price(conn: sqlite3.Connection, kind: str, price: float, quantity: float | None = None) -> PriceCheck:
+    """Checks a price the person is seeing right now against the cheapest ever registered for
+    `kind` -- the one exception this project makes to "never a verdict on an absolute price" (see
+    docs/design/shopping-verdict-shape.md, Decisão 4 and RNF2 of the requirements doc). `kind`
+    must already be resolved (`search.match_kind`); a term that matches nothing is the caller's
+    "unknown_item" to report, not this function's.
+
+    The reference is the lowest price ever paid, full history, same "menor valor já pago"
+    semantics `search_prices`' `highlight` already uses -- deliberately NOT `compare_stores`'
+    cheapest-per-store collapsing, which answers a different question (what would I pay at EACH
+    store, to compare stores fairly). Here there is only one number to report, and the person's
+    own framing ("o menor preço que conheço") is exactly "ever, anywhere". A stale reference (an
+    old receipt, a store that may have changed since) is not hidden: `reference_at` always rides
+    along in the facts/fallback line, so the date is visible and the person judges staleness
+    themselves -- same "mostra o dado, deixa a pessoa decidir" rule as the rest of this project.
+
+    Never guesses a unit basis: a `kind` with history in more than one `unit` (real case measured
+    against production -- "tomate" has both loose tomatoes by KG and a packaged combo by UN) comes
+    back with `reason="ambiguous_unit"` instead of picking one, same discipline as content never
+    being inferred from text elsewhere in this project. A `kind` whose only history is different
+    UN products with no declared content (comparison_basis finds nothing comparable -- see
+    "Preço por conteúdo" in CLAUDE.md) is `reason="no_comparable_basis"`, never mislabelled as "no
+    history": there IS history, it just cannot be compared without a content declared first.
+
+    Whether the answer needs `quantity` at all is decided by the R$ gap alone, not by `quantity`
+    being given (see docs/design/quantity-aware-verdict.md, Decisão 1): a gap so small that it
+    never clears `WORTH_IT_THRESHOLD_REAIS` even at `PLAUSIBLE_QTY_MAX`, or so large it already
+    clears it at `PLAUSIBLE_QTY_MIN`, is decided immediately -- `quantity`, if given anyway, is
+    ignored in those two cases. Only the middle band asks: `quantity=None` there comes back with
+    `reason="quantity_needed"` (verdict still undecided, every other fact already filled in, so
+    the caller can ask without losing the reference price/store/date); `quantity` given there
+    settles it by `gap * quantity` against `WORTH_IT_THRESHOLD_REAIS`."""
+    typed = [product.id for product in products.list_products(conn) if product.kind == kind]
+    records = prices.prices_for_products(conn, typed) if typed else []
+    empty = PriceCheck(
+        kind=kind, verdict=None, informed_price=price, reference_price=None, reference_unit=None,
+        reference_store=None, reference_at=None, diff_pct=None, reason="no_history",
+    )
+    if not records:
+        return empty
+    if len({record.unit for record in records}) > 1:
+        return replace(empty, reason="ambiguous_unit")
+    basis, participants = comparison_basis(records)
+    priced = [
+        (value, records[index])
+        for index in participants
+        if (value := basis_value(records[index], basis)) is not None
+    ]
+    if not priced:
+        return replace(empty, reason="no_comparable_basis")
+    reference_value, reference_record = min(priced, key=lambda item: item[0])
+    diff_pct = (price - reference_value) / reference_value * 100
+    reference_unit = reference_record.content_unit if basis == "price_per_content" else reference_record.unit
+    base = PriceCheck(
+        kind=kind,
+        verdict=None,
+        informed_price=price,
+        reference_price=reference_value,
+        reference_unit=reference_unit,
+        reference_store=reference_record.store_nickname,
+        reference_at=reference_record.purchased_at,
+        diff_pct=diff_pct,
+        reason=None,
+    )
+    gap = price - reference_value  # direct, never derived back from diff_pct (avoids rounding drift)
+    if gap <= 0 or gap * PLAUSIBLE_QTY_MAX <= WORTH_IT_THRESHOLD_REAIS:
+        return replace(base, verdict=True)
+    if gap * PLAUSIBLE_QTY_MIN >= WORTH_IT_THRESHOLD_REAIS:
+        return replace(base, verdict=False)
+    if quantity is None:
+        return replace(base, reason="quantity_needed")
+    return replace(base, verdict=(gap * quantity) <= WORTH_IT_THRESHOLD_REAIS)
 
 
 def new_extremes(conn: sqlite3.Connection, access_keys: Sequence[str]) -> list[PriceExtreme]:

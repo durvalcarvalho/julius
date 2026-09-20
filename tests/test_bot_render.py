@@ -4,7 +4,16 @@ import pytest
 
 from julius.bot import render
 from julius.bot.actions import ShoppingComparison
-from julius.domain.models import KindComparison, PriceRecord, Product, ShoppingVerdict, Store, StoreComparison, StorePrice
+from julius.domain.models import (
+    KindComparison,
+    PriceCheck,
+    PriceRecord,
+    Product,
+    ShoppingVerdict,
+    Store,
+    StoreComparison,
+    StorePrice,
+)
 
 TODAY = date(2026, 9, 17)
 
@@ -226,6 +235,59 @@ def test_search_fallback_line_never_has_html():
     assert "<" not in text and ">" not in text
 
 
+# --- no_match_facts / no_match_fallback_line (brainstorm 2026-09-20: "alcatra" was a dead end) ---
+
+
+def test_no_match_facts_names_the_missed_term_and_each_alternative():
+    alternatives = [
+        _record(canonical_name="Acém bovino", unit_price=34.99, store_nickname="Costa Atacadao"),
+        _record(canonical_name="Picanha bovina", unit_price=39.90, store_nickname="Assaí Guará"),
+    ]
+
+    facts = render.no_match_facts("alcatra", alternatives)
+
+    assert "sem preço registrado ainda: alcatra" in facts
+    assert "Acém bovino · R$ 34,99 o quilo · Costa Atacadao" in facts
+    assert "Picanha bovina · R$ 39,90 o quilo · Assaí Guará" in facts
+
+
+def test_no_match_facts_never_diffs_across_different_products():
+    """Alternatives are different products, sometimes different sale units -- a cheapest/dearest
+    diff line here would compare things this project's core rule forbids comparing."""
+    alternatives = [
+        _record(canonical_name="Bacon", unit="UN", unit_price=12.0, store_nickname="Costa Atacadao"),
+        _record(canonical_name="Picanha bovina", unit="KG", unit_price=39.90, store_nickname="Assaí Guará"),
+    ]
+
+    facts = render.no_match_facts("alcatra", alternatives)
+
+    assert "diferença" not in facts
+
+
+def test_no_match_facts_with_no_alternatives_still_names_the_term():
+    assert render.no_match_facts("alcatra", []) == "produto pedido, sem preço registrado ainda: alcatra"
+
+
+def test_no_match_facts_without_a_term_uses_a_placeholder():
+    assert "isso" in render.no_match_facts(None, [])
+
+
+def test_no_match_fallback_line_with_alternatives():
+    alternatives = [_record(canonical_name="Acém bovino", unit_price=34.99, store_nickname="Costa Atacadao")]
+
+    text = render.no_match_fallback_line("alcatra", alternatives)
+
+    assert text.startswith("Ainda não tenho preço de alcatra, mas tenho:")
+    assert "Acém bovino a R$ 34,99 o quilo em Costa Atacadao" in text
+    assert text.endswith("Quer ver mais alguma coisa parecida?")
+
+
+def test_no_match_fallback_line_without_alternatives():
+    assert render.no_match_fallback_line("alcatra", []) == (
+        "Ainda não tenho preço de alcatra no catálogo. Me diga outro produto que eu confiro?"
+    )
+
+
 def test_compare_fallback_line_one_line_per_group():
     comparison = _comparison(
         _group("tomate", _entry("Assaí", "1", 11.89), _entry("Dona de Casa", "2", 14.99)),
@@ -238,8 +300,14 @@ def test_compare_fallback_line_one_line_per_group():
     assert "cebola: Assaí sai mais em conta, a R$ 3,99 o quilo." in text
 
 
-def _shopping(comparison, verdict=None, unmatched=()) -> ShoppingComparison:
-    return ShoppingComparison(comparison=comparison, verdict=verdict, unmatched_terms=unmatched)
+def _shopping(comparison, verdict=None, unmatched=(), single_store=(), requested=0) -> ShoppingComparison:
+    return ShoppingComparison(
+        comparison=comparison,
+        verdict=verdict,
+        unmatched_terms=unmatched,
+        single_store_kinds=single_store,
+        requested_count=requested,
+    )
 
 
 def test_shopping_comparison_facts_includes_verdict_line():
@@ -267,6 +335,50 @@ def test_shopping_comparison_facts_includes_unmatched():
     text = render.shopping_comparison_facts(_shopping(comparison, verdict, ("xyzabc",)), today=TODAY)
 
     assert "sem preço comparável registrado ainda para: xyzabc" in text
+
+
+def test_shopping_comparison_facts_includes_single_store_kinds():
+    """RF1 (docs/requirements/shopping-verdict-shape.md): a kind that matched but has price in
+    only one market is named, distinct from `unmatched_terms` (no kind matched at all)."""
+    comparison = _comparison(_group("tomate", _entry("Assaí", "1", 11.89)))
+    verdict = ShoppingVerdict(1, ("Assaí",), ("tomate",), None, ())
+
+    text = render.shopping_comparison_facts(_shopping(comparison, verdict, single_store=("cebola",)), today=TODAY)
+
+    assert "só tem preço de um mercado ainda, sem comparação possível: cebola" in text
+
+
+def test_shopping_comparison_facts_includes_estimated_savings():
+    """Decisão 5, docs/design/quantity-aware-verdict.md: a floor on savings, buying 1 of each
+    winning kind -- summed from the same cheapest-to-dearest gap comparison_facts already prints
+    per group, over only the kinds the verdict actually won."""
+    comparison = _comparison(
+        _group("tomate", _entry("Assaí", "1", 11.89), _entry("Dona de Casa", "2", 14.99)),
+        _group("cebola", _entry("Assaí", "1", 3.99), _entry("Dona de Casa", "2", 5.49)),
+    )
+    verdict = ShoppingVerdict(2, ("Assaí",), ("tomate", "cebola"), None, ())
+
+    text = render.shopping_comparison_facts(_shopping(comparison, verdict), today=TODAY)
+
+    assert "economia mínima estimada, comprando 1 de cada: R$ 4,60" in text  # (14.99-11.89) + (5.49-3.99)
+
+
+def test_shopping_comparison_facts_no_savings_line_when_won_kinds_tie():
+    comparison = _comparison(_group("tomate", _entry("Assaí", "1", 11.89), _entry("Dona de Casa", "2", 11.89)))
+    verdict = ShoppingVerdict(1, ("Assaí",), ("tomate",), None, ())
+
+    text = render.shopping_comparison_facts(_shopping(comparison, verdict), today=TODAY)
+
+    assert "economia mínima estimada" not in text
+
+
+def test_shopping_verdict_line_includes_estimated_savings():
+    comparison = _comparison(_group("tomate", _entry("Assaí", "1", 11.89), _entry("Dona de Casa", "2", 14.99)))
+    verdict = ShoppingVerdict(1, ("Assaí",), ("tomate",), None, ())
+
+    text = render.shopping_verdict_line(_shopping(comparison, verdict))
+
+    assert "Economia mínima estimada, comprando 1 de cada: R$ 3,10." in text
 
 
 def test_shopping_comparison_facts_no_verdict_no_unmatched():
@@ -305,6 +417,20 @@ def test_shopping_verdict_line_with_unmatched_only():
     text = render.shopping_verdict_line(_shopping(_comparison(), unmatched=("xyzabc",)))
 
     assert text == "Não achei preço comparável entre mercados pra: xyzabc."
+
+
+def test_shopping_verdict_line_with_single_store_kind_only():
+    text = render.shopping_verdict_line(_shopping(_comparison(), single_store=("cebola",)))
+
+    assert text == "Só tem preço de um mercado ainda, sem comparação possível: cebola."
+
+
+def test_shopping_verdict_line_with_winner_and_single_store_kind():
+    verdict = ShoppingVerdict(1, ("Assaí",), ("tomate",), None, ())
+
+    text = render.shopping_verdict_line(_shopping(_comparison(), verdict, single_store=("cebola",)))
+
+    assert text == "1 de 1 produtos mais baratos em Assaí, vale ir lá. Só tem preço de um mercado ainda: cebola."
 
 
 def test_compare_fallback_line_no_comparable_groups():
@@ -476,3 +602,97 @@ def test_fit_reports_how_many_lines_it_dropped():
 @pytest.mark.parametrize("raw", ["", "lixo"])
 def test_render_survives_an_unusable_date(raw):
     assert render.render_records([_record(purchased_at=raw)], today=TODAY)
+
+
+def _check(**overrides) -> PriceCheck:
+    base = dict(
+        kind="ovo",
+        verdict=True,
+        informed_price=0.59,
+        reference_price=0.53,
+        reference_unit="UN",
+        reference_store="Assaí Atacadista",
+        reference_at="2026-09-16T10:00:00",
+        diff_pct=11.3,
+        reason=None,
+    )
+    return PriceCheck(**{**base, **overrides})
+
+
+def test_price_check_facts_reason_lines():
+    assert render.price_check_facts(_check(reason="unknown_item")) == "item não reconhecido no catálogo ainda"
+    assert render.price_check_facts(_check(reason="no_history")) == "sem histórico de preço registrado para esse tipo ainda"
+    assert "pergunte qual" in render.price_check_facts(_check(reason="ambiguous_unit"))
+    assert "conteúdo declarado" in render.price_check_facts(_check(reason="no_comparable_basis"))
+
+
+def test_price_check_facts_verdict_sim():
+    text = render.price_check_facts(_check(), today=TODAY)
+
+    assert "veredito: sim" in text
+    assert "preço informado: R$ 0,59 a unidade" in text
+    assert "mais barato já registrado: R$ 0,53 a unidade" in text
+    assert "Assaí Atacadista" in text
+    assert "diferença sobre o mais barato: 11%" in text
+
+
+def test_price_check_facts_verdict_nao():
+    text = render.price_check_facts(_check(verdict=False, diff_pct=41.5), today=TODAY)
+
+    assert "veredito: não" in text
+
+
+def test_price_check_fallback_line_reason_sentences():
+    assert render.price_check_fallback_line(_check(reason="unknown_item")) == "Não conheço esse item ainda."
+    assert render.price_check_fallback_line(_check(reason="no_history")) == "Não tenho preço registrado desse tipo ainda."
+
+
+def test_price_check_fallback_line_yes():
+    text = render.price_check_fallback_line(_check(), today=TODAY)
+
+    assert text.startswith("Sim, vale a pena.")
+    assert "R$ 0,59 a unidade" in text
+    assert "R$ 0,53 a unidade" in text
+    assert "Assaí Atacadista" in text
+    assert "11% de diferença" in text
+
+
+def test_price_check_fallback_line_no():
+    text = render.price_check_fallback_line(_check(verdict=False, diff_pct=41.5), today=TODAY)
+
+    assert text.startswith("Não, tá caro.")
+
+
+def test_price_check_facts_quantity_needed_keeps_the_reference_facts():
+    """Decisão 2, docs/design/quantity-aware-verdict.md: unlike the other reasons, this one must
+    not throw away reference_price/store/date -- there's no "veredito:" line yet, but the persona
+    needs the same facts to write the question."""
+    text = render.price_check_facts(
+        _check(verdict=None, reason="quantity_needed", reference_unit="KG", diff_pct=14.3), today=TODAY
+    )
+
+    assert "veredito:" not in text
+    assert "mais barato já registrado: R$ 0,53 o quilo" in text
+    assert "pergunte quantos quilos a pessoa vai comprar antes do veredito final" in text
+
+
+def test_price_check_fallback_line_quantity_needed_is_the_users_own_example():
+    """This is literally the sentence the user gave as the example in
+    docs/requirements/quantity-aware-verdict.md: "você já conseguiu comprar por R$35, quantos kg
+    vai comprar?"."""
+    text = render.price_check_fallback_line(
+        _check(
+            verdict=None,
+            reason="quantity_needed",
+            informed_price=40.0,
+            reference_price=35.0,
+            reference_unit="KG",
+            reference_store="Costa Atacadao ADE Aguas Claras",
+        ),
+        today=TODAY,
+    )
+
+    assert text == (
+        "Você viu R$ 40,00 o quilo; o mais barato já registrado foi R$ 35,00 o quilo, em "
+        "Costa Atacadao ADE Aguas Claras, ontem. Quantos quilos você vai comprar?"
+    )

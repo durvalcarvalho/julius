@@ -252,7 +252,9 @@ Tudo por variável de ambiente. Sem nenhuma, Julius funciona com os padrões.
 | `JULIUS_AI_OUTPUT_PRICE_USD_PER_1M` | — | Idem, saída (ex.: DeepSeek `1.20`). |
 | `JULIUS_AI_REQUEST_EXTRAS` | `{}` | JSON mesclado no corpo do request, por cima de tudo — a válvula de escape pra peculiaridade de provedor. **DeepSeek precisa** de `'{"thinking":{"type":"disabled"}}'`: sem isso, `deepseek-flash` gasta todo o `max_tokens` "pensando" e nunca devolve o JSON pedido (medido no gate antes do primeiro ticket de IA). |
 | `JULIUS_BOT_TOKEN` | — | Token do bot do Telegram, do `@BotFather`. Só o `julius-bot` usa; a CLI ignora. |
-| `JULIUS_BOT_ALLOWED_CHAT_ID` | — | O **único** `chat_id` que o bot atende. Sem ela o bot não sobe. `0` é o modo de bootstrap: nenhum chat real tem id 0, então ele sobe fechado e só registra quem escreveu — é assim que você descobre o seu número (ver "Bot no Telegram"). |
+| `JULIUS_BOT_ALLOWED_CHAT_ID` | — | O `chat_id` **dono** do bot, sempre sem limite. Sem ela o bot não sobe. `0` é o modo de bootstrap: nenhum chat real tem id 0, então nenhum chat de verdade fica sem limite ainda — mande /start e leia seu chat_id no log (ver "Bot no Telegram"). |
+| `JULIUS_BOT_UNLIMITED_CHAT_IDS` | — | Lista de `chat_id` extras sem limite (amigos de confiança), separados por vírgula. Todo mundo fora dessa lista (e fora do dono) usa o bot mesmo assim, só que com cota por hora. |
+| `JULIUS_BOT_RATE_LIMIT_PER_HOUR` | `20` | Quantas mensagens por hora um `chat_id` sem limite pode mandar. Ao estourar, o bot responde avisando (não fica em silêncio) e a cota reseta uma hora depois da primeira mensagem daquela janela. |
 
 O banco e a pasta são criados no primeiro comando que precisa deles. Importar a CLI (ou rodar `--help`) não toca em disco — há teste garantindo isso.
 
@@ -305,20 +307,22 @@ Fale com o [@BotFather](https://t.me/BotFather) no Telegram, mande `/newbot`, es
 
 ```bash
 export JULIUS_BOT_TOKEN='123456:ABC-DEF...'   # o token do @BotFather
-export JULIUS_BOT_ALLOWED_CHAT_ID=987654321   # o único chat que o bot atende
+export JULIUS_BOT_ALLOWED_CHAT_ID=987654321   # o dono, sempre sem limite
+export JULIUS_BOT_UNLIMITED_CHAT_IDS=111,222  # opcional: amigos de confiança, também sem limite
+export JULIUS_BOT_RATE_LIMIT_PER_HOUR=20      # opcional: cota de quem não está nas duas linhas acima
 ```
 
 As variáveis `JULIUS_AI_*` (as mesmas da curadoria, **com os dois preços**) também são obrigatórias: toda mensagem passa pela IA, não existe modo determinístico. Faltando qualquer uma, `julius-bot` termina com código 2 e diz qual.
 
 ### Descobrir o seu `chat_id`
 
-O bot não sobe aberto, e você ainda não sabe o seu número. O `0` resolve isso sem depender de nenhum outro bot: **nenhum chat do Telegram tem id 0**, então ele sobe configurado e fechado, atendendo ninguém e registrando no log quem escreveu — e é dali que você lê o seu número.
+Você ainda não sabe o seu número na primeira vez. O `0` resolve isso sem depender de nenhum outro bot: **nenhum chat do Telegram tem id 0**, então ele sobe configurado sem nenhum dono real ainda — mande `/start` e leia seu `chat_id` na linha `mensagem de chat_id=…` do log.
 
 Os passos exatos, com o que esperar em cada um, estão no **[guia de teste passo a passo](docs/como-testar-o-bot.md)** (passo 4). Este README descreve o que o bot é; aquele documento é o que você segue com as mãos.
 
 ### Segurança
 
-Só o `chat_id` da variável é atendido; qualquer outro recebe **silêncio** (responder "acesso negado" já confirmaria que há alguém aqui) e uma linha no log. A IA nunca executa nada — ela só propõe, e toda escrita espera um toque seu. O token fica fora do log: `httpx` é capado em `WARNING` antes do polling começar, porque em `INFO` ele imprime a URL do `getUpdates` com o token dentro.
+**O bot responde qualquer `chat_id`** — não existe mais "de fora, silêncio": quem não está em `JULIUS_BOT_ALLOWED_CHAT_ID`/`JULIUS_BOT_UNLIMITED_CHAT_IDS` usa o bot normalmente até estourar `JULIUS_BOT_RATE_LIMIT_PER_HOUR` mensagens na hora, e aí recebe um aviso em vez de resposta (o limite é por `chat_id`, contado em memória do processo — reinicia com o bot). A IA nunca executa nada — ela só propõe, e toda escrita espera um toque de **quem mandou aquela mensagem**, dono ou não. O token fica fora do log: `httpx` é capado em `WARNING` antes do polling começar, porque em `INFO` ele imprime a URL do `getUpdates` com o token dentro.
 
 ### Limitações declaradas
 

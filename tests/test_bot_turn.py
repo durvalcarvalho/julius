@@ -1,5 +1,6 @@
 import asyncio
 import json
+from dataclasses import replace
 
 import pytest
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
@@ -8,7 +9,7 @@ from pydantic_ai.models.function import FunctionModel
 from conftest import copied_fixtures
 from julius import config as config_module
 from julius.bot.actions import Deps
-from julius.bot.agent import build_agent
+from julius.bot.agent import BOT_PROMPT_VERSION, build_agent
 from julius.bot.turn import ChatState, Reply, handle_text
 from julius.parsers.df import DFReceiptParser
 from julius.repositories import ai_usage
@@ -110,7 +111,7 @@ def test_read_turn_charges_and_logs(deps):
     assert suggestions.spent_this_month(deps.conn) > 0
     line = _ai_lines(deps.config)[-1]
     assert line["call_kind"] == "bot_turn"
-    assert line["prompt_version"] == "1"
+    assert line["prompt_version"] == BOT_PROMPT_VERSION
     assert line["raw_response"] == "SearchOutcome"
     assert line["input_tokens"] > 0
 
@@ -130,6 +131,22 @@ def test_write_turn_creates_pending_and_writes_nothing(deps):
     assert reply.pending is not None
     assert state.pending is reply.pending
     assert reply.text.startswith("⚠️")
+    assert catalog.get_product(deps.conn, product.id).canonical_name == product.canonical_name
+
+
+def test_write_turn_is_refused_for_a_read_only_chat(deps):
+    """docs/design/bot-read-only-tier.md, RF2: quem não tem can_write nunca chega a ver o
+    teclado -- o validador troca o tipo antes de _render_output decidir isso, então
+    reply.pending nunca é setado nem state.pending."""
+    product = next(p for p in catalog.list_products(deps.conn) if "PICANHA" in p.canonical_name.upper())
+    model, _ = _model(_action("rename_product", {"product": str(product.id), "name": "Picanha bovina"}))
+    read_only = replace(deps, can_write=False, chat_id=999)
+
+    reply, state = _turn(read_only, model, text="renomeia a picanha")
+
+    assert reply.pending is None
+    assert state.pending is None
+    assert "só consulta" in reply.text
     assert catalog.get_product(deps.conn, product.id).canonical_name == product.canonical_name
 
 
@@ -165,6 +182,30 @@ def test_agent_exception_is_a_reply_not_a_crash(deps):
     assert "Não consegui falar com a IA" in reply.text
     assert _ai_lines(deps.config)[-1]["error"].startswith("agent raised")
     assert state.runs == [], "a turn that never finished is not history"
+
+
+def test_output_guard_falls_back_gracefully_instead_of_the_fabricated_reply(deps):
+    """docs/design/agent-output-honesty.md, Decisão 1/2: reproduz o incidente real -- o modelo
+    insiste numa afirmação que nenhuma ação confirmou. A pessoa nunca lê a frase fabricada, e a
+    mensagem de queda é a específica da guarda, não a genérica de rede."""
+    model, _ = _model(_prose("As buscas voltaram vazias, sem nenhum resultado no banco de dados."))
+
+    reply, _ = _turn(deps, model, text="qual mercado é mais barato pra tomate e cebola?")
+
+    assert "buscas voltaram vazias" not in reply.text
+    assert "Não consegui confirmar isso com segurança" in reply.text
+    assert "Não consegui falar com a IA" not in reply.text
+    assert _ai_lines(deps.config)[-1]["error"] == "agent raised UnexpectedModelBehavior"
+
+
+def test_free_text_reply_logs_the_actual_text_not_just_the_marker(deps):
+    """A lacuna que atrapalhou investigar o incidente real: `raw_response` gravava sempre a
+    string fixa "text" para saída em texto livre, nunca o conteúdo. Agora grava o texto real."""
+    model, _ = _model(_prose("Oi! Isso não tem a ver com preço."))
+
+    _turn(deps, model, text="bom dia")
+
+    assert _ai_lines(deps.config)[-1]["raw_response"] == "Oi! Isso não tem a ver com preço."
 
 
 def test_history_keeps_only_the_last_three_turns_whole(deps):
@@ -329,14 +370,103 @@ def test_search_reply_without_a_client_is_unchanged(deps):
     assert reply.text == render_module.render_records(output.records)
 
 
-def test_search_reply_with_no_results_never_calls_the_persona(deps):
-    client = ScriptedLlmClient([_persona_reply("não deveria rodar")])
+def test_search_reply_with_no_results_and_no_client_is_unchanged(deps):
+    """RF4 of the "alcatra" design (2026-09-20): with no client at all, the reply must stay
+    byte-for-byte what it was before -- the enriched miss only exists when there's a persona to
+    ask through."""
     output = SearchOutcome(records=(), term="produtoquenaoexiste", tag=None)
+
+    reply = asyncio.run(_render_output(output, ChatState(), deps))
+
+    assert reply.text == "Nenhum resultado."
+
+
+def _category_response(tag: object) -> LlmResponse:
+    return LlmResponse(json.dumps({"tag": tag}), 10, 5)
+
+
+def test_no_match_prefers_a_near_name_over_asking_the_model_to_classify(deps):
+    """"pikana" is a real near-typo of "PICANHA BOV FAT kg PROMO" already in the imported
+    catalog (services.search.closest_names) -- that beats guessing a category, and costs no IA
+    classification call at all."""
+    client = ScriptedLlmClient(by_kind={"persona": _persona_reply("Não achei pikana, quis dizer picanha?")})
+    output = SearchOutcome(records=(), term="pikana", tag=None)
 
     reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
 
-    assert reply.text == "Nenhum resultado."
-    assert client.calls == []
+    assert reply.text == "Não achei pikana, quis dizer picanha?"
+    assert len(client.calls) == 1, "only the persona call -- no category classification needed"
+    facts = client.calls[0][1]
+    assert "PICANHA" in facts.upper()
+
+
+def test_no_match_reuses_an_already_known_tag_without_asking_the_model(deps):
+    """`output.tag` came free from the router (an explicit or fuzzy-detected category) -- no
+    reason to spend a classification call confirming what's already known."""
+    client = ScriptedLlmClient(by_kind={"persona": _persona_reply("Ainda não tenho isso nessa categoria.")})
+    output = SearchOutcome(records=(), term="xyzsemperto", tag="carnes")
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == "Ainda não tenho isso nessa categoria."
+    assert len(client.calls) == 1, "only the persona call -- the tag was already known"
+
+
+def test_no_match_asks_the_model_to_classify_when_nothing_deterministic_matched(deps):
+    """The exact "alcatra" case: no near name, no tag from the router -- the term only connects
+    to "carnes" through the model's world knowledge (suggest_category), and the real alternative
+    (picanha, tagged carnes) comes back through the persona's facts."""
+    picanha = next(p for p in catalog.list_products(deps.conn) if "PICANHA" in p.canonical_name.upper())
+    catalog.tag_product(deps.conn, picanha.id, "carnes")
+    client = ScriptedLlmClient(
+        by_kind={
+            "category": _category_response("carnes"),
+            "persona": _persona_reply("Não tenho alcatra, mas tenho picanha."),
+        }
+    )
+    output = SearchOutcome(records=(), term="alcatra", tag=None)
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == "Não tenho alcatra, mas tenho picanha."
+    assert len(client.calls) == 2, "one call to classify the category, one to narrate"
+    assert any("termo: alcatra" in prompt for _, prompt, _ in client.calls)
+    assert any("PICANHA" in prompt.upper() for _, prompt, _ in client.calls)
+
+
+def test_no_match_with_no_alternative_found_anywhere_still_narrates(deps):
+    """No near name, no tag, and the model can't classify it either -- Julius still comments
+    instead of a bare "Nenhum resultado.", just without any alternative to point at."""
+    client = ScriptedLlmClient(
+        by_kind={
+            "category": _category_response(None),
+            "persona": _persona_reply("Não tenho isso ainda. Me fala outro produto?"),
+        }
+    )
+    output = SearchOutcome(records=(), term="xyzsemcategoria", tag=None)
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == "Não tenho isso ainda. Me fala outro produto?"
+
+
+def test_no_match_falls_back_to_the_deterministic_line_when_narration_fails(deps):
+    """Same discipline as every other narrated reply: a persona failure never surfaces as
+    silence, it falls to the hand-written line -- with whatever alternative was already found."""
+    picanha = next(p for p in catalog.list_products(deps.conn) if "PICANHA" in p.canonical_name.upper())
+    catalog.tag_product(deps.conn, picanha.id, "carnes")
+    client = ScriptedLlmClient(
+        by_kind={
+            "category": _category_response("carnes"),
+            "persona": LlmResponse("", 0, 0, error="timeout"),
+        }
+    )
+    output = SearchOutcome(records=(), term="alcatra", tag=None)
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text.startswith("Ainda não tenho preço de alcatra, mas tenho:")
+    assert "PICANHA" in reply.text.upper()
 
 
 def test_compare_reply_uses_the_persona_when_small(deps):
@@ -467,6 +597,62 @@ def test_render_shopping_comparison_empty_and_no_unmatched_skips_ai(deps):
 
     assert reply.text == render_module.shopping_verdict_line(output)
     assert client.calls == []
+
+
+from julius.domain.models import PriceCheck  # noqa: E402
+
+
+def _check(**overrides) -> PriceCheck:
+    base = dict(
+        kind="ovo",
+        verdict=True,
+        informed_price=0.59,
+        reference_price=0.53,
+        reference_unit="UN",
+        reference_store="Assaí Atacadista",
+        reference_at="2026-09-16T10:00:00",
+        diff_pct=11.3,
+        reason=None,
+    )
+    return PriceCheck(**{**base, **overrides})
+
+
+def test_render_price_check_no_client_uses_fallback_line(deps):
+    output = _check()
+
+    reply = asyncio.run(_render_output(output, ChatState(), deps))
+
+    assert reply.text == render_module.price_check_fallback_line(output)
+
+
+def test_render_price_check_narrates_when_client_available(deps):
+    output = _check()
+    client = ScriptedLlmClient([_persona_reply("Sim, compra sem medo.")])
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == "Sim, compra sem medo."
+    assert client.calls
+
+
+def test_render_price_check_narration_fails_falls_back(deps):
+    output = _check()
+    client = ScriptedLlmClient([LlmResponse("", 0, 0, error="timeout")])
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == render_module.price_check_fallback_line(output)
+
+
+def test_render_price_check_reason_still_narrates(deps):
+    """Even an "I don't know" reason goes through the persona when a client is available -- the
+    money guard is a no-op here (no R$ value in the facts), same as write confirmations."""
+    output = _check(reason="unknown_item", verdict=None, reference_price=None, diff_pct=None)
+    client = ScriptedLlmClient([_persona_reply("Não conheço esse item ainda, me fala outra vez?")])
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == "Não conheço esse item ainda, me fala outra vez?"
 
 
 def test_product_listing_gets_a_comment_but_keeps_the_table(deps):

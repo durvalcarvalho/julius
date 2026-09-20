@@ -204,6 +204,27 @@ class ShoppingVerdict:
     runner_up_kinds: tuple[str, ...]
 
 
+PriceCheckReason = Literal["unknown_item", "no_history", "ambiguous_unit", "no_comparable_basis", "quantity_needed"]
+
+
+@dataclass(frozen=True)
+class PriceCheck:
+    """The answer to "os ovos tão a 14 reais, tá bom?" -- a price the person is seeing right now,
+    checked against the cheapest ever registered for that kind (see docs/design/
+    shopping-verdict-shape.md, Decisão 4). `verdict` is computed here, in code, never left for the
+    persona to decide from `diff_pct` -- same discipline as ShoppingVerdict."""
+
+    kind: str | None  # None when `reason == "unknown_item"`
+    verdict: bool | None  # True/False once decided; None when `reason` is set
+    informed_price: float
+    reference_price: float | None
+    reference_unit: str | None  # "UN"/"KG"/"L" -- never omit the sale unit when citing a price, same rule as everywhere else
+    reference_store: str | None
+    reference_at: str | None
+    diff_pct: float | None  # (informed - reference) / reference * 100
+    reason: PriceCheckReason | None = None
+
+
 @dataclass(frozen=True)
 class PriceExtreme:
     product_name: str

@@ -21,6 +21,8 @@ class Config:
     ai_request_extras: dict[str, object] = field(default_factory=dict)
     bot_token: str | None = None
     bot_allowed_chat_id: int | None = None
+    bot_unlimited_chat_ids: frozenset[int] = field(default_factory=frozenset)
+    bot_rate_limit_per_hour: int = 20
 
     @property
     def ai_configured(self) -> bool:
@@ -31,6 +33,15 @@ class Config:
         # `is not None`, not truthiness: 0 is the bootstrap value, a real chat id no one has, and
         # it means "configured, and nobody is allowed yet".
         return bool(self.bot_token) and self.bot_allowed_chat_id is not None
+
+    @property
+    def unlimited_chat_ids(self) -> frozenset[int]:
+        # The owner (bot_allowed_chat_id) is always unlimited; everyone else is unlimited only if
+        # explicitly added -- everyone not in this set falls back to the hourly rate limit instead
+        # of being refused outright (v2.14: friends-of-friends can try the bot without an invite).
+        if self.bot_allowed_chat_id is None:
+            return self.bot_unlimited_chat_ids
+        return self.bot_unlimited_chat_ids | {self.bot_allowed_chat_id}
 
     @property
     def ai_log_path(self) -> Path:
@@ -67,6 +78,8 @@ def load(env: Mapping[str, str] | None = None) -> Config:
         ai_request_extras=_request_extras(env),
         bot_token=env.get("JULIUS_BOT_TOKEN") or None,
         bot_allowed_chat_id=_optional_int(env, "JULIUS_BOT_ALLOWED_CHAT_ID"),
+        bot_unlimited_chat_ids=_int_set(env, "JULIUS_BOT_UNLIMITED_CHAT_IDS"),
+        bot_rate_limit_per_hour=_optional_int(env, "JULIUS_BOT_RATE_LIMIT_PER_HOUR") or 20,
     )
 
 
@@ -88,6 +101,16 @@ def _optional_int(env: Mapping[str, str], name: str) -> int | None:
         return int(raw)
     except ValueError:
         raise ValueError(f"{name} must be an integer, got {raw!r}") from None
+
+
+def _int_set(env: Mapping[str, str], name: str) -> frozenset[int]:
+    raw = env.get(name)
+    if not raw:
+        return frozenset()
+    try:
+        return frozenset(int(piece.strip()) for piece in raw.split(",") if piece.strip())
+    except ValueError:
+        raise ValueError(f"{name} must be a comma-separated list of integers, got {raw!r}") from None
 
 
 def _request_extras(env: Mapping[str, str]) -> dict[str, object]:

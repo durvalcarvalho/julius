@@ -22,7 +22,7 @@ from julius.domain.formatting import (
     store_labels,
     weekday_phrase,
 )
-from julius.domain.models import KindComparison, PriceRecord, Product, Store, StoreComparison
+from julius.domain.models import KindComparison, PriceCheck, PriceRecord, Product, Store, StoreComparison
 from julius.domain.normalization import store_place
 
 if TYPE_CHECKING:  # runtime-free: actions imports pydantic_ai, and rendering text must not.
@@ -34,6 +34,10 @@ TRUNCATION_NOTE = "\n… +{count} linhas não mostradas — peça um limite meno
 
 # Same map as cli/receipts.py: the word the sentence needs, not the unit code.
 _CONTENT_WORDS = {"L": "litro", "KG": "quilo", "UN": "unidade"}
+
+# Plural, for "quantos quilos você vai comprar?" -- asking quantity (Decisão 4, docs/design/
+# quantity-aware-verdict.md) always names more than one, unlike _CONTENT_WORDS' singular.
+_CONTENT_WORDS_PLURAL = {"L": "litros", "KG": "quilos", "UN": "unidades"}
 
 # With the article, for a sale/content unit spoken inline ("R$ 3,79 o quilo") -- unit matters to
 # how a person reads a price (design v2.7 feedback: never omit it), and gender isn't uniform
@@ -126,6 +130,33 @@ def search_fallback_line(records: Sequence[PriceRecord], *, today: date | None =
     )
 
 
+def no_match_facts(term: str | None, alternatives: Sequence[PriceRecord]) -> str:
+    """Facts for the persona when a search came back empty (brainstorm 2026-09-20: "quanto tá o kg
+    de alcatra" answering just "Nenhum resultado." is a dead end). Deliberately never a
+    cheapest/dearest diff line like `records_facts` has -- `alternatives` are different products,
+    sometimes sold by different units, and diffing their prices would break the same
+    never-compare-across-units rule `comparison_basis` exists to enforce elsewhere."""
+    what = term or "isso"
+    lines = [f"produto pedido, sem preço registrado ainda: {what}"]
+    for record in alternatives:
+        unit_word = _UNIT_PHRASES.get(record.unit, "a unidade")
+        lines.append(f"{record.canonical_name} · {money(record.unit_price)} {unit_word} · {record.store_nickname}")
+    return "\n".join(lines)
+
+
+def no_match_fallback_line(term: str | None, alternatives: Sequence[PriceRecord]) -> str:
+    """Same spirit as search_fallback_line: no model, always available."""
+    what = term or "isso"
+    if not alternatives:
+        return f"Ainda não tenho preço de {what} no catálogo. Me diga outro produto que eu confiro?"
+    parts = [
+        f"{record.canonical_name} a {money(record.unit_price)} {_UNIT_PHRASES.get(record.unit, 'a unidade')}"
+        f" em {record.store_nickname}"
+        for record in alternatives
+    ]
+    return f"Ainda não tenho preço de {what}, mas tenho: " + "; ".join(parts) + ". Quer ver mais alguma coisa parecida?"
+
+
 def _collapse_repeated_prices(records: Sequence[PriceRecord]) -> list[PriceRecord]:
     """Same store, same price, different date -- the real screenshot that started the v2.7.1
     humanization round had this exact repetition (Costa Atacadao twice, one price). Keeps the most
@@ -201,6 +232,22 @@ def comparison_facts(comparison: StoreComparison, *, today: date | None = None) 
     return "\n".join(lines)
 
 
+def _estimated_savings(shopping: ShoppingComparison) -> float:
+    """A savings FLOOR, buying 1 unit/kg/L of each winning kind -- not a prediction of what the
+    person will actually buy (see docs/design/quantity-aware-verdict.md, Decisão 5). Nothing new
+    to compute: `KindComparison.entries` is already cheapest-first, the same cheapest-to-dearest
+    gap `comparison_facts` already prints per group, just summed over the kinds the verdict
+    actually won."""
+    if shopping.verdict is None:
+        return 0.0
+    won = set(shopping.verdict.won_kinds)
+    return sum(
+        group.entries[-1].price - group.entries[0].price
+        for group in shopping.comparison.comparisons
+        if group.kind in won
+    )
+
+
 def _verdict_lines(shopping: ShoppingComparison) -> list[str]:
     """Shared by shopping_comparison_facts and shopping_verdict_line: the winner/runner-up/
     unmatched lines, computed once from fields the caller already has -- never re-derived."""
@@ -209,9 +256,14 @@ def _verdict_lines(shopping: ShoppingComparison) -> list[str]:
     if verdict is not None:
         winners = " e ".join(verdict.winner_stores)
         lines.append(f"veredito: {len(verdict.won_kinds)} de {verdict.total_items} itens mais baratos em {winners}")
+        savings = _estimated_savings(shopping)
+        if savings > 0:
+            lines.append(f"economia mínima estimada, comprando 1 de cada: {money(savings)}")
         if verdict.runner_up_store is not None:
             rest = ", ".join(verdict.runner_up_kinds)
             lines.append(f"o resto ({rest}) sai mais em conta em {verdict.runner_up_store}")
+    if shopping.single_store_kinds:
+        lines.append(f"só tem preço de um mercado ainda, sem comparação possível: {', '.join(shopping.single_store_kinds)}")
     if shopping.unmatched_terms:
         lines.append(f"sem preço comparável registrado ainda para: {', '.join(shopping.unmatched_terms)}")
     return lines
@@ -231,16 +283,93 @@ def shopping_verdict_line(shopping: ShoppingComparison, *, today: date | None = 
     del today  # signature symmetry with the other render_X/fallback pairs; unused here
     verdict = shopping.verdict
     if verdict is None:
+        if shopping.single_store_kinds:
+            return (
+                "Só tem preço de um mercado ainda, sem comparação possível: "
+                f"{', '.join(shopping.single_store_kinds)}."
+            )
         if shopping.unmatched_terms:
             return f"Não achei preço comparável entre mercados pra: {', '.join(shopping.unmatched_terms)}."
         return "Não achei preço comparável entre mercados pra esses itens ainda."
     winners = " e ".join(verdict.winner_stores)
     sentence = f"{len(verdict.won_kinds)} de {verdict.total_items} produtos mais baratos em {winners}, vale ir lá."
+    savings = _estimated_savings(shopping)
+    if savings > 0:
+        sentence += f" Economia mínima estimada, comprando 1 de cada: {money(savings)}."
     if verdict.runner_up_store is not None:
         sentence += f" O resto sai mais em conta em {verdict.runner_up_store}."
+    if shopping.single_store_kinds:
+        sentence += f" Só tem preço de um mercado ainda: {', '.join(shopping.single_store_kinds)}."
     if shopping.unmatched_terms:
         sentence += f" Não achei preço comparável pra: {', '.join(shopping.unmatched_terms)}."
     return sentence
+
+
+_PRICE_CHECK_REASON_LINES = {
+    "unknown_item": "item não reconhecido no catálogo ainda",
+    "no_history": "sem histórico de preço registrado para esse tipo ainda",
+    "ambiguous_unit": "tenho preço registrado tanto por peso quanto por unidade -- pergunte qual dos dois",
+    "no_comparable_basis": (
+        "tenho histórico desse tipo, mas de embalagens diferentes sem conteúdo declarado -- "
+        "não dá pra comparar sem isso"
+    ),
+}
+
+_PRICE_CHECK_REASON_SENTENCES = {
+    "unknown_item": "Não conheço esse item ainda.",
+    "no_history": "Não tenho preço registrado desse tipo ainda.",
+    "ambiguous_unit": "Tenho preço registrado tanto por peso quanto por unidade -- me diga qual dos dois.",
+    "no_comparable_basis": (
+        "Tenho preço desse tipo, mas de embalagens diferentes sem conteúdo declarado -- "
+        "não dá pra comparar sem isso (julius produtos definir-conteudo)."
+    ),
+}
+
+
+def price_check_facts(check: PriceCheck, *, today: date | None = None) -> str:
+    """Plain-text facts for the persona (Decisão 4, docs/design/shopping-verdict-shape.md): the
+    verdict is decided here, in code, from `check.verdict` -- the model only ever restates it,
+    same discipline as the shopping-list verdict.
+
+    `reason == "quantity_needed"` (docs/design/quantity-aware-verdict.md, Decisão 2) is NOT one of
+    the "no data" reasons below -- `check.verdict` is still undecided, but the reference price/
+    store/date are already known and must not be thrown away, or the persona could not write the
+    user's own example sentence ("você já conseguiu comprar por R$35, quantos kg vai comprar?")."""
+    if check.reason is not None and check.reason != "quantity_needed":
+        return _PRICE_CHECK_REASON_LINES[check.reason]
+    unit_word = _UNIT_PHRASES.get(check.reference_unit or "", "a unidade")
+    lines = [
+        f"preço informado: {money(check.informed_price)} {unit_word}",
+        f"mais barato já registrado: {money(check.reference_price)} {unit_word} "
+        f"({weekday_phrase(check.reference_at, today=today)}, {check.reference_store})",
+        f"diferença sobre o mais barato: {check.diff_pct:.0f}%",
+    ]
+    if check.reason == "quantity_needed":
+        word = _CONTENT_WORDS_PLURAL.get(check.reference_unit or "", "unidades")
+        lines.append(f"pergunte quantos {word} a pessoa vai comprar antes do veredito final")
+    else:
+        lines.insert(0, f"veredito: {'sim' if check.verdict else 'não'}")
+    return "\n".join(lines)
+
+
+def price_check_fallback_line(check: PriceCheck, *, today: date | None = None) -> str:
+    """Same spirit as compare_fallback_line: no model, always available."""
+    if check.reason is not None and check.reason != "quantity_needed":
+        return _PRICE_CHECK_REASON_SENTENCES[check.reason]
+    unit_word = _UNIT_PHRASES.get(check.reference_unit or "", "a unidade")
+    if check.reason == "quantity_needed":
+        word = _CONTENT_WORDS_PLURAL.get(check.reference_unit or "", "unidades")
+        return (
+            f"Você viu {money(check.informed_price)} {unit_word}; o mais barato já registrado foi "
+            f"{money(check.reference_price)} {unit_word}, em {check.reference_store}, "
+            f"{weekday_phrase(check.reference_at, today=today)}. Quantos {word} você vai comprar?"
+        )
+    verdict_word = "Sim, vale a pena." if check.verdict else "Não, tá caro."
+    return (
+        f"{verdict_word} Você viu {money(check.informed_price)} {unit_word}; o mais barato já "
+        f"registrado foi {money(check.reference_price)} {unit_word}, em {check.reference_store}, "
+        f"{weekday_phrase(check.reference_at, today=today)} -- {check.diff_pct:.0f}% de diferença."
+    )
 
 
 def products_facts(products: Sequence[Product]) -> str:
@@ -359,6 +488,17 @@ def render_stores(stores: Sequence[Store]) -> str:
         suffix = f" · {escape(place)}" if place else ""
         lines.append(f"{escape(store.cnpj)} · {escape(store.nickname)}{suffix}")
     return fit("<pre>" + "\n".join(lines) + "</pre>")
+
+
+WRITE_REFUSED_LINE = (
+    "Essa parte eu não abro pra qualquer um — por aqui você só consulta. Se quiser mexer em nome "
+    "de mercado, categoria ou fusão de produto, peça pra quem te chamou te colocar na lista de "
+    "confiança."
+)
+"""docs/design/bot-read-only-tier.md: mesma família de search_fallback_line/compare_fallback_line
+-- escrita à mão, sem modelo, sempre disponível. Não varia por dado nenhum (nenhum registro,
+nenhuma comparação), por isso é constante e não função como as outras. Nunca deve conter nenhuma
+das frases de bot/agent.py::_UNLICENSED_DATA_CLAIMS."""
 
 
 def render_pending(pending: PendingWrite) -> str:

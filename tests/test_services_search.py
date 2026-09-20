@@ -258,6 +258,31 @@ def test_match_kind_generic_word_finds_a_compound_kind(conn):
     assert match_kind(conn, "leite") == "leite uht"
 
 
+def test_match_kind_prefers_exact_kind_over_a_compound_that_contains_the_word(conn):
+    """Real bug, measured live against production: "passata de tomate" and "tomate" both score
+    100 against the term "tomate" (whole-word match), and the old alphabetical tie-break picked
+    "passata de tomate" (p < t) -- the wrong one. Fixture reproduces the shape with two kinds
+    that tie, one of them equal to the term."""
+    loose = _product(conn, "TOMATE ITALIANO kg", "1")
+    set_kind(conn, loose, "tomate")
+    sauce = _product(conn, "MOLHO PASSATA TOMATE 500G", "2")
+    set_kind(conn, sauce, "passata de tomate")
+
+    assert match_kind(conn, "tomate") == "tomate"
+
+
+def test_match_kind_inexact_tie_keeps_todays_alphabetical_order(conn):
+    """No kind here is exactly "leite" -- the exact-match shortcut must not fire, and the
+    unresolved ambiguity (documented in KIND_MATCH_CUTOFF) stays exactly as it was: whichever
+    tied kind sorts first alphabetically."""
+    condensed = _product(conn, "LEITE CONDENSADO 395G", "1")
+    set_kind(conn, condensed, "leite condensado")
+    cream = _product(conn, "CREME DE LEITE 200G", "2")
+    set_kind(conn, cream, "creme de leite")
+
+    assert match_kind(conn, "leite") == "creme de leite"
+
+
 def test_search_free_text_explicit_tag_skips_detection(conn):
     _import(conn, "qrcode.html")
     picanha = _id_of(conn, "PICANHA")
@@ -335,6 +360,21 @@ def test_every_word_of_a_multi_word_term_must_match(conn):
     _price(conn, queijo, "UN", 15.99, "2026-01-02T00:00:00", "k2")
 
     assert [row.product_id for row in search_prices(conn, "pao de alho")] == [alho]
+
+
+def test_connective_words_in_the_term_do_not_block_a_match(conn):
+    """Real incident 2026-09-20: "suco de uva" matched none of the three grape juices in the
+    production catalog because "DE" had to find a close word in every name."""
+    oq = _product(conn, "Suco OQ integral 1,5L uva", "1")
+    natural_one = _product(conn, "Suco pronto Natural One uva e maçã 1,3L", "2")
+    laranja = _product(conn, "Suco integral 1,5L laranja", "3")
+    for index, product in enumerate((oq, natural_one, laranja), start=1):
+        _price(conn, product, "UN", 10.0 + index, f"2026-01-0{index}T00:00:00", f"k{index}")
+
+    found = {row.product_id for row in search_prices(conn, "suco de uva")}
+
+    assert found == {oq, natural_one}
+    assert search_prices(conn, "suco de uva") == search_prices(conn, "suco uva")
 
 
 def test_collapse_keeps_rows_that_differ_in_price_or_store(conn):

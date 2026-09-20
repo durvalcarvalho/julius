@@ -644,3 +644,66 @@ def test_narrate_client_raises_returns_none(conn, cfg):
 def test_narrate_malformed_json_shape_returns_none(conn, cfg):
     assert suggestions.narrate(conn, cfg, ScriptedLlmClient([LlmResponse(json.dumps({"reply": 123}), 10, 10)]), "c", FACTS, MONTH) is None
     assert suggestions.narrate(conn, cfg, ScriptedLlmClient([LlmResponse(json.dumps({"nope": "x"}), 10, 10)]), "c", FACTS, MONTH) is None
+
+
+# --- suggest_category (brainstorm 2026-09-20: "alcatra" isn't textually close to "carnes") ------
+
+
+def _category_response(tag: object, input_tokens: int = 10, output_tokens: int = 5) -> LlmResponse:
+    return LlmResponse(json.dumps({"tag": tag}), input_tokens, output_tokens)
+
+
+def test_suggest_category_returns_the_matching_known_tag(conn, cfg):
+    client = ScriptedLlmClient([_category_response("carnes")])
+
+    assert suggestions.suggest_category(conn, cfg, client, "alcatra", ["hortifruti", "carnes"], MONTH) == "carnes"
+
+
+def test_suggest_category_prompt_has_term_and_known_tags(conn, cfg):
+    client = ScriptedLlmClient([_category_response(None)])
+
+    suggestions.suggest_category(conn, cfg, client, "alcatra", ["hortifruti", "carnes"], MONTH)
+
+    prompt = client.calls[0][1]
+    assert "termo: alcatra" in prompt
+    assert '"hortifruti"' in prompt and '"carnes"' in prompt
+
+
+def test_suggest_category_is_case_insensitive_but_returns_the_known_spelling(conn, cfg):
+    client = ScriptedLlmClient([_category_response("CARNES")])
+
+    assert suggestions.suggest_category(conn, cfg, client, "alcatra", ["carnes"], MONTH) == "carnes"
+
+
+def test_suggest_category_null_answer_is_none(conn, cfg):
+    client = ScriptedLlmClient([_category_response(None)])
+
+    assert suggestions.suggest_category(conn, cfg, client, "alcatra", ["carnes"], MONTH) is None
+
+
+def test_suggest_category_rejects_a_tag_outside_the_known_list(conn, cfg):
+    """The model never gets to invent a category -- only one of `known_tags` is trusted, same
+    discipline as every other closed-vocabulary answer in this file."""
+    client = ScriptedLlmClient([_category_response("carne bovina")])
+
+    assert suggestions.suggest_category(conn, cfg, client, "alcatra", ["carnes"], MONTH) is None
+
+
+def test_suggest_category_empty_known_tags_or_blank_term_does_not_call(conn, cfg):
+    client = ScriptedLlmClient([_category_response("carnes")])
+
+    assert suggestions.suggest_category(conn, cfg, client, "alcatra", []) is None
+    assert suggestions.suggest_category(conn, cfg, client, "   ", ["carnes"]) is None
+    assert client.calls == []
+
+
+def test_suggest_category_not_configured_returns_none_without_call(conn, cfg):
+    config = replace(cfg, ai_api_key=None)
+    client = ScriptedLlmClient([_category_response("carnes")])
+
+    assert suggestions.suggest_category(conn, config, client, "alcatra", ["carnes"], MONTH) is None
+    assert client.calls == []
+
+
+def test_suggest_category_client_raises_returns_none(conn, cfg):
+    assert suggestions.suggest_category(conn, cfg, RaisingLlmClient(), "alcatra", ["carnes"], MONTH) is None

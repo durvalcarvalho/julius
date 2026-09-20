@@ -132,11 +132,33 @@ def test_a_group_chat_id_is_negative_and_accepted():
 
 
 def test_zero_is_a_configured_chat_id_because_it_is_the_bootstrap():
-    """No real chat has id 0, so it starts the bot closed: it answers nobody and only logs who
-    wrote, which is how the user learns their own id."""
+    """No real chat has id 0, so nobody real is ever the owner by accident: everyone with a real
+    chat_id falls back to the hourly rate limit until the owner exports their real number."""
     cfg = config.load({"JULIUS_BOT_TOKEN": "123:abc", "JULIUS_BOT_ALLOWED_CHAT_ID": "0"})
     assert cfg.bot_allowed_chat_id == 0
     assert cfg.bot_configured is True
+
+
+def test_unlimited_chat_ids_always_include_the_owner():
+    cfg = config.load({"JULIUS_BOT_ALLOWED_CHAT_ID": "1", "JULIUS_BOT_UNLIMITED_CHAT_IDS": "2, 3"})
+    assert cfg.unlimited_chat_ids == frozenset({1, 2, 3})
+
+
+def test_unlimited_chat_ids_without_an_owner_is_just_the_extra_list():
+    assert config.load({"JULIUS_BOT_UNLIMITED_CHAT_IDS": "5"}).unlimited_chat_ids == frozenset({5})
+
+
+def test_unlimited_chat_ids_must_be_integers():
+    with pytest.raises(ValueError, match="JULIUS_BOT_UNLIMITED_CHAT_IDS"):
+        config.load({"JULIUS_BOT_UNLIMITED_CHAT_IDS": "1,abc"})
+
+
+def test_rate_limit_defaults_to_20_per_hour():
+    assert config.load({}).bot_rate_limit_per_hour == 20
+
+
+def test_rate_limit_is_read_from_env():
+    assert config.load({"JULIUS_BOT_RATE_LIMIT_PER_HOUR": "5"}).bot_rate_limit_per_hour == 5
 
 
 def test_conftest_isolates_bot_env():
@@ -145,7 +167,12 @@ def test_conftest_isolates_bot_env():
     check is what fails loudly if someone trims that list."""
     from conftest import ISOLATED_ENV_VARS
 
-    assert {"JULIUS_BOT_TOKEN", "JULIUS_BOT_ALLOWED_CHAT_ID"} <= set(ISOLATED_ENV_VARS)
+    assert {
+        "JULIUS_BOT_TOKEN",
+        "JULIUS_BOT_ALLOWED_CHAT_ID",
+        "JULIUS_BOT_UNLIMITED_CHAT_IDS",
+        "JULIUS_BOT_RATE_LIMIT_PER_HOUR",
+    } <= set(ISOLATED_ENV_VARS)
     cfg = config.load()
     assert cfg.bot_token is None
     assert cfg.bot_allowed_chat_id is None

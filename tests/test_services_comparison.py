@@ -2,7 +2,15 @@ from julius.domain.models import Receipt, ReceiptItem
 from julius.repositories.prices import insert_price
 from julius.repositories.products import resolve_product_id, set_content, set_kind
 from julius.repositories.stores import ensure_store
-from julius.services.comparison import compare_stores, new_extremes, shopping_verdict
+from julius.services.comparison import (
+    PLAUSIBLE_QTY_MAX,
+    PLAUSIBLE_QTY_MIN,
+    WORTH_IT_THRESHOLD_REAIS,
+    check_price,
+    compare_stores,
+    new_extremes,
+    shopping_verdict,
+)
 
 STORE_A = "00000000000001"
 STORE_B = "00000000000002"
@@ -494,6 +502,304 @@ def test_shopping_verdict_uses_cnpj_not_nickname_for_tally(conn):
     # Both "Dona de Casa" branches win one group each -- tallied separately by CNPJ, they tie with
     # STORE_B (0 wins) losing outright, not summed into a single 2-win "Dona de Casa".
     assert verdict.winner_stores == (f"Dona de Casa · {branch_a}", f"Dona de Casa · {branch_b}")
+
+
+def test_shopping_verdict_category_of_none_is_unchanged(conn):
+    """Pin: the default keeps the exact behaviour every caller before Decisão 5 already had --
+    `julius mercados comparar` (CLI) never passes `category_of` and must never see this change."""
+    tomato_a = _product(conn, "TOMATE kg", "1", STORE_A)
+    tomato_b = _product(conn, "TOMATE ITALIANO kg", "2", STORE_B)
+    set_kind(conn, tomato_a, "tomate")
+    set_kind(conn, tomato_b, "tomate")
+    _price(conn, tomato_a, STORE_A, "KG", 10.0, "2026-09-16T10:00:00", "k1")
+    _price(conn, tomato_b, STORE_B, "KG", 12.0, "2026-09-07T10:00:00", "k2")
+
+    comparison = compare_stores(conn)
+    assert shopping_verdict(comparison, category_of=None) == shopping_verdict(comparison)
+
+
+def test_shopping_verdict_by_category_never_splits_one_category_between_two_stores(conn):
+    """RF6 (docs/requirements/shopping-verdict-shape.md): tomate and cebola are both "hortifruti"
+    -- per-kind alone would send tomate to Loja 1 and cebola to Loja 2 (a real split of the same
+    aisle across two markets). Grouped by category, cebola follows the category's own winner."""
+    tomato_a = _product(conn, "TOMATE kg", "1", STORE_A)
+    tomato_b = _product(conn, "TOMATE ITALIANO kg", "2", STORE_B)
+    onion_a = _product(conn, "CEBOLA kg", "3", STORE_A)
+    onion_b = _product(conn, "CEBOLA BRANCA kg", "4", STORE_B)
+    detergent_a = _product(conn, "DETERGENTE", "5", STORE_A)
+    detergent_b = _product(conn, "DETERGENTE NEUTRO", "6", STORE_B)
+    for product_id, kind in (
+        (tomato_a, "tomate"),
+        (tomato_b, "tomate"),
+        (onion_a, "cebola"),
+        (onion_b, "cebola"),
+        (detergent_a, "desengordurante"),
+        (detergent_b, "desengordurante"),
+    ):
+        set_kind(conn, product_id, kind)
+    _price(conn, tomato_a, STORE_A, "KG", 10.0, "2026-09-16T10:00:00", "k1")  # tomate: Loja 1 wins
+    _price(conn, tomato_b, STORE_B, "KG", 12.0, "2026-09-07T10:00:00", "k2")
+    _price(conn, onion_b, STORE_B, "KG", 5.0, "2026-09-16T10:00:00", "k3")  # cebola: Loja 2 wins (raw)
+    _price(conn, onion_a, STORE_A, "KG", 6.0, "2026-09-07T10:00:00", "k4")
+    _price(conn, detergent_b, STORE_B, "KG", 4.0, "2026-09-16T10:00:00", "k5")  # desengordurante: Loja 2 wins
+    _price(conn, detergent_a, STORE_A, "KG", 5.0, "2026-09-07T10:00:00", "k6")
+    comparison = compare_stores(conn)
+
+    # Confirms the premise: per kind alone, tomate and cebola really do have different winners --
+    # this is the split RF6 exists to prevent once they share a category.
+    raw_winner = {group.kind: group.entries[0].store_cnpj for group in comparison.comparisons}
+    assert raw_winner["tomate"] != raw_winner["cebola"]
+
+    category_of = {"tomate": "hortifruti", "cebola": "hortifruti", "desengordurante": "limpeza"}
+    grouped = shopping_verdict(comparison, category_of=category_of)
+
+    assert grouped.winner_stores == ("Loja 1",)
+    assert set(grouped.won_kinds) == {"tomate", "cebola"}  # cebola no longer split off to Loja 2
+    assert grouped.runner_up_store == "Loja 2"
+    assert grouped.runner_up_kinds == ("desengordurante",)
+
+
+def test_shopping_verdict_by_category_caps_at_two_stores(conn):
+    """3 categories, 3 different raw winners -- capped to the 2 stores covering the most kinds;
+    the 3rd store's category is reassigned to a finalist, never left pointing at a 3rd market."""
+    STORE_C = "00000000000003"
+    tomato_a = _product(conn, "TOMATE kg", "1", STORE_A)
+    tomato_b = _product(conn, "TOMATE ITALIANO kg", "2", STORE_B)
+    onion_a = _product(conn, "CEBOLA kg", "3", STORE_A)
+    onion_b = _product(conn, "CEBOLA BRANCA kg", "4", STORE_B)
+    carrot_a = _product(conn, "CENOURA kg", "5", STORE_A)
+    carrot_b = _product(conn, "CENOURA BABY kg", "6", STORE_B)
+    detergent_b = _product(conn, "DETERGENTE", "7", STORE_B)
+    detergent_c = _product(conn, "DETERGENTE NEUTRO", "8", STORE_C)
+    soap_b = _product(conn, "SABAO EM PO", "9", STORE_B)
+    soap_c = _product(conn, "SABAO EM PO NEUTRO", "10", STORE_C)
+    juice_a = _product(conn, "SUCO DE UVA", "11", STORE_A)
+    juice_c = _product(conn, "SUCO DE LARANJA", "12", STORE_C)
+    for product_id, kind in (
+        (tomato_a, "tomate"),
+        (tomato_b, "tomate"),
+        (onion_a, "cebola"),
+        (onion_b, "cebola"),
+        (carrot_a, "cenoura"),
+        (carrot_b, "cenoura"),
+        (detergent_b, "desengordurante"),
+        (detergent_c, "desengordurante"),
+        (soap_b, "sabão em pó"),
+        (soap_c, "sabão em pó"),
+        (juice_a, "suco"),
+        (juice_c, "suco"),
+    ):
+        set_kind(conn, product_id, kind)
+    # hortifruti: Loja 1 wins all 3 kinds
+    _price(conn, tomato_a, STORE_A, "KG", 10.0, "2026-09-16T10:00:00", "k1")
+    _price(conn, tomato_b, STORE_B, "KG", 12.0, "2026-09-07T10:00:00", "k2")
+    _price(conn, onion_a, STORE_A, "KG", 5.0, "2026-09-16T10:00:00", "k3")
+    _price(conn, onion_b, STORE_B, "KG", 6.0, "2026-09-07T10:00:00", "k4")
+    _price(conn, carrot_a, STORE_A, "KG", 3.0, "2026-09-16T10:00:00", "k5")
+    _price(conn, carrot_b, STORE_B, "KG", 4.0, "2026-09-07T10:00:00", "k6")
+    # limpeza: Loja 2 wins both kinds
+    _price(conn, detergent_b, STORE_B, "KG", 4.0, "2026-09-16T10:00:00", "k7")
+    _price(conn, detergent_c, STORE_C, "KG", 5.0, "2026-09-07T10:00:00", "k8")
+    _price(conn, soap_b, STORE_B, "KG", 8.0, "2026-09-16T10:00:00", "k9")
+    _price(conn, soap_c, STORE_C, "KG", 9.0, "2026-09-07T10:00:00", "k10")
+    # bebidas: Loja 3 wins its only kind
+    _price(conn, juice_c, STORE_C, "KG", 9.0, "2026-09-16T10:00:00", "k11")
+    _price(conn, juice_a, STORE_A, "KG", 12.0, "2026-09-07T10:00:00", "k12")
+    comparison = compare_stores(conn)
+    category_of = {
+        "tomate": "hortifruti",
+        "cebola": "hortifruti",
+        "cenoura": "hortifruti",
+        "desengordurante": "limpeza",
+        "sabão em pó": "limpeza",
+        "suco": "bebidas",
+    }
+
+    verdict = shopping_verdict(comparison, category_of=category_of)
+
+    stores_named = {verdict.winner_stores[0], verdict.runner_up_store}
+    assert "Loja 3" not in stores_named, "the 3rd market must never be recommended when capped to 2"
+    assert verdict.winner_stores == ("Loja 1",)
+    assert set(verdict.won_kinds) == {"tomate", "cebola", "cenoura", "suco"}
+    assert verdict.runner_up_store == "Loja 2"
+    assert verdict.runner_up_kinds == ("desengordurante", "sabão em pó")
+
+
+def test_check_price_no_history_for_the_kind(conn):
+    result = check_price(conn, "tomate", 9.99)
+
+    assert result.verdict is None
+    assert result.reason == "no_history"
+    assert result.kind == "tomate"
+    assert result.reference_price is None
+
+
+def test_check_price_ambiguous_unit_never_guesses(conn):
+    """Real case measured against production: "tomate" has both loose tomatoes by KG and a
+    packaged combo by UN -- the check must ask, never silently pick one."""
+    loose = _product(conn, "TOMATE ITALIANO kg", "1", STORE_A)
+    packaged = _product(conn, "TOMATE TREBESCHI 250G DUO", "2", STORE_A)
+    set_kind(conn, loose, "tomate")
+    set_kind(conn, packaged, "tomate")
+    _price(conn, loose, STORE_A, "KG", 11.89, "2026-09-16T10:00:00", "k1")
+    _price(conn, packaged, STORE_A, "UN", 9.90, "2026-09-07T10:00:00", "k2")
+
+    result = check_price(conn, "tomate", 12.0)
+
+    assert result.reason == "ambiguous_unit"
+    assert result.verdict is None
+
+
+def test_check_price_no_comparable_basis_is_not_mislabeled_as_no_history(conn):
+    """Two different UN products, no content declared -- `comparison_basis` finds nothing
+    comparable (same rule that drops these groups from `compare_stores` entirely). There IS
+    history here; it just cannot be compared yet, so this must not read as "no_history"."""
+    a = _product(conn, "DETERGENTE", "1", STORE_A)
+    b = _product(conn, "DETERGENTE NEUTRO", "2", STORE_B)
+    set_kind(conn, a, "desengordurante")
+    set_kind(conn, b, "desengordurante")
+    _price(conn, a, STORE_A, "UN", 4.0, "2026-09-16T10:00:00", "k1")
+    _price(conn, b, STORE_B, "UN", 5.0, "2026-09-07T10:00:00", "k2")
+
+    result = check_price(conn, "desengordurante", 4.5)
+
+    assert result.reason == "no_comparable_basis"
+    assert result.verdict is None
+
+
+def test_check_price_within_tolerance_is_a_yes(conn):
+    # Two different boxes of the same content (30 UN each) -- comparable by price-per-content,
+    # same rule `comparison_basis` already applies everywhere else in this project.
+    a = _product(conn, "OVO A", "1", STORE_A)
+    b = _product(conn, "OVO B", "2", STORE_B)
+    set_kind(conn, a, "ovo")
+    set_kind(conn, b, "ovo")
+    set_content(conn, a, 30, "UN")
+    set_content(conn, b, 30, "UN")
+    _price(conn, a, STORE_A, "UN", 0.53 * 30, "2026-09-16T10:00:00", "k1")
+    _price(conn, b, STORE_B, "UN", 0.57 * 30, "2026-09-07T10:00:00", "k2")
+
+    result = check_price(conn, "ovo", 0.59)  # ~11.3% over 0.53, the user's own "tá bom" example
+
+    assert result.verdict is True
+    assert result.reference_price == 0.53
+    assert result.reference_unit == "UN"  # content_unit, since basis is price_per_content here
+    assert result.reference_store == "Loja 1"
+    assert round(result.diff_pct, 1) == round((0.59 - 0.53) / 0.53 * 100, 1)
+
+
+def test_check_price_small_absolute_gap_is_a_yes_even_at_high_percent(conn):
+    """Deliberate reversal, documented in docs/design/quantity-aware-verdict.md, Decisão 1: this
+    used to be the user's own "bem mais caro" example under the old percentage-only gate (~41.5%
+    over 0.53). Under the R$ gate, the gap (R$0,22) times PLAUSIBLE_QTY_MAX never clears
+    WORTH_IT_THRESHOLD_REAIS -- a few dozen eggs is still just a few reais. Not a bug: RF5 of
+    docs/requirements/quantity-aware-verdict.md says a small absolute gap never changes the
+    answer, whatever the percentage."""
+    a = _product(conn, "OVO A", "1", STORE_A)
+    b = _product(conn, "OVO B", "2", STORE_B)
+    set_kind(conn, a, "ovo")
+    set_kind(conn, b, "ovo")
+    set_content(conn, a, 30, "UN")
+    set_content(conn, b, 30, "UN")
+    _price(conn, a, STORE_A, "UN", 0.53 * 30, "2026-09-16T10:00:00", "k1")
+    _price(conn, b, STORE_B, "UN", 0.55 * 30, "2026-09-07T10:00:00", "k2")
+
+    result = check_price(conn, "ovo", 0.75)
+
+    assert result.verdict is True
+    assert result.reason is None
+
+
+def test_check_price_cheaper_than_reference_is_a_yes(conn):
+    a = _product(conn, "OVO A", "1", STORE_A)
+    b = _product(conn, "OVO B", "2", STORE_B)
+    set_kind(conn, a, "ovo")
+    set_kind(conn, b, "ovo")
+    set_content(conn, a, 30, "UN")
+    set_content(conn, b, 30, "UN")
+    _price(conn, a, STORE_A, "UN", 0.53 * 30, "2026-09-16T10:00:00", "k1")
+    _price(conn, b, STORE_B, "UN", 0.60 * 30, "2026-09-07T10:00:00", "k2")
+
+    result = check_price(conn, "ovo", 0.40)
+
+    assert result.verdict is True
+    assert result.diff_pct < 0
+
+
+def test_check_price_gate_constants_are_positive_and_ordered():
+    assert WORTH_IT_THRESHOLD_REAIS > 0
+    assert 0 < PLAUSIBLE_QTY_MIN < PLAUSIBLE_QTY_MAX
+
+
+def test_check_price_trivial_gap_never_asks_even_at_high_percent(conn):
+    """The measured case that decided the whole design (docs/design/quantity-aware-verdict.md):
+    sacola reutilizável, 10% of difference but R$0,02 -- never worth asking, whatever the
+    quantity."""
+    a = _product(conn, "SACOLA REUTILIZAVEL UND", "1", STORE_A)
+    set_kind(conn, a, "sacola reutilizável")
+    set_content(conn, a, 1, "UN")
+    _price(conn, a, STORE_A, "UN", 0.20, "2026-09-16T10:00:00", "k1")
+
+    result = check_price(conn, "sacola reutilizável", 0.22)
+
+    assert result.verdict is True
+    assert result.reason is None
+
+
+def test_check_price_huge_gap_skips_straight_to_no(conn):
+    """Gap large enough that even PLAUSIBLE_QTY_MIN already clears the threshold -- decided
+    without asking quantity at all."""
+    a = _product(conn, "ITEM CARO", "1", STORE_A)
+    set_kind(conn, a, "item raro")
+    _price(conn, a, STORE_A, "KG", 10.0, "2026-09-16T10:00:00", "k1")
+
+    result = check_price(conn, "item raro", 100.0)  # gap = 90, well above WORTH_IT_THRESHOLD_REAIS / QTY_MIN
+
+    assert result.verdict is False
+    assert result.reason is None
+
+
+def test_check_price_middle_gap_without_quantity_asks(conn):
+    """The user's own example: acém at R$40 against a R$35 reference (gap R$5,00) -- doesn't
+    settle at either extreme, so it comes back asking, with every other fact already filled in."""
+    a = _product(conn, "ACEM BOVINO", "1", STORE_A)
+    set_kind(conn, a, "acém")
+    _price(conn, a, STORE_A, "KG", 35.0, "2026-09-16T10:00:00", "k1")
+
+    result = check_price(conn, "acém", 40.0)
+
+    assert result.verdict is None
+    assert result.reason == "quantity_needed"
+    assert result.reference_price == 35.0
+    assert result.reference_store == "Loja 1"
+    assert result.diff_pct is not None
+
+
+def test_check_price_middle_gap_small_quantity_is_a_yes(conn):
+    """A small purchase (1kg) means the R$5,00/kg gap totals R$5,00 -- trivial, not worth chasing
+    another market for it. verdict=True means "tá bom, pode levar aqui" (same polarity as
+    price_check_fallback_line's "Sim, vale a pena."), not "vale trocar de mercado"."""
+    a = _product(conn, "ACEM BOVINO", "1", STORE_A)
+    set_kind(conn, a, "acém")
+    _price(conn, a, STORE_A, "KG", 35.0, "2026-09-16T10:00:00", "k1")
+
+    result = check_price(conn, "acém", 40.0, quantity=1.0)
+
+    assert result.verdict is True
+    assert result.reason is None
+
+
+def test_check_price_middle_gap_large_quantity_is_a_no(conn):
+    """The same R$5,00/kg gap over 14kg (the user's "compra do mês") totals R$70,00 -- real money,
+    verdict=False, "não, tá caro" (go to the cheaper market instead)."""
+    a = _product(conn, "ACEM BOVINO", "1", STORE_A)
+    set_kind(conn, a, "acém")
+    _price(conn, a, STORE_A, "KG", 35.0, "2026-09-16T10:00:00", "k1")
+
+    result = check_price(conn, "acém", 40.0, quantity=14.0)
+
+    assert result.verdict is False
+    assert result.reason is None
 
 
 def test_new_extremes_repeats_the_name_when_a_product_beats_itself(conn):

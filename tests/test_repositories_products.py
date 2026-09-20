@@ -247,6 +247,45 @@ def test_all_kinds_distinct_and_sorted(conn_with_stores):
     assert products.all_kinds(conn) == ["cebola", "tomate"]
 
 
+def test_kind_categories_empty_catalog(conn_with_stores):
+    assert products.kind_categories(conn_with_stores) == {}
+
+
+def test_kind_categories_majority_tag_wins(conn_with_stores):
+    conn = conn_with_stores
+    tomato_a = products.resolve_product_id(conn, STORE_A, "1", "TOMATE A")
+    tomato_b = products.resolve_product_id(conn, STORE_A, "2", "TOMATE B")
+    onion = products.resolve_product_id(conn, STORE_A, "3", "CEBOLA")
+    products.set_kind(conn, tomato_a, "tomate")
+    products.set_kind(conn, tomato_b, "tomate")
+    products.set_kind(conn, onion, "cebola")
+    products.add_tag(conn, tomato_a, "hortifruti")
+    products.add_tag(conn, tomato_b, "hortifruti")
+    products.add_tag(conn, onion, "hortifruti")
+
+    assert products.kind_categories(conn) == {"tomate": "hortifruti", "cebola": "hortifruti"}
+
+
+def test_kind_categories_tie_breaks_by_tag_name(conn_with_stores):
+    conn = conn_with_stores
+    egg_a = products.resolve_product_id(conn, STORE_A, "1", "OVO A")
+    egg_b = products.resolve_product_id(conn, STORE_A, "2", "OVO B")
+    products.set_kind(conn, egg_a, "ovo")
+    products.set_kind(conn, egg_b, "ovo")
+    products.add_tag(conn, egg_a, "mercearia")
+    products.add_tag(conn, egg_b, "hortifruti")
+
+    assert products.kind_categories(conn) == {"ovo": "hortifruti"}
+
+
+def test_kind_categories_untagged_kind_is_absent(conn_with_stores):
+    conn = conn_with_stores
+    pid = products.resolve_product_id(conn, STORE_A, "1", "TOMATE")
+    products.set_kind(conn, pid, "tomate")
+
+    assert products.kind_categories(conn) == {}
+
+
 def test_clear_content_clears_both_columns(conn_with_stores):
     conn = conn_with_stores
     pid = products.resolve_product_id(conn, STORE_A, "1", "AGUA 500ML")

@@ -28,7 +28,7 @@ from julius import config as config_module
 from julius.bot.actions import Deps, PendingWrite, ProductListing, ShoppingComparison, StoreListing
 from julius.bot.agent import build_agent
 from julius.bot.turn import ChatState, handle_tap, handle_text
-from julius.domain.models import SearchOutcome
+from julius.domain.models import PriceCheck, SearchOutcome
 from julius.bot import render
 from julius.infra import db
 from julius.infra.llm_client import HttpLlmClient
@@ -50,10 +50,30 @@ ROUTING_CASES = (
     # "qual mercado tá mais barato" sozinho não é mais uma chamada de compare_stores.
     ("qual mercado tá mais barato?", "text"),
     ("qual mercado é mais barato pra tomate e cebola?", ShoppingComparison.__name__),
+    # docs/design/quantity-aware-verdict.md: check_price nunca tinha sido exercitado numa rodada
+    # real -- este é o caso base (preço visto ao vivo), antes de medir o loop de quantidade.
+    ("aqui o quilo do tomate tá 9,90, tá bom?", PriceCheck.__name__),
     ("que produtos eu tenho no catálogo?", ProductListing.__name__),
     ("quais mercados eu já usei?", StoreListing.__name__),
     ("bom dia, tudo bem?", "text"),
 )
+
+# Nomes reais de saída de ação -- o que `raw_response` carrega quando NÃO é texto livre. Desde
+# que `handle_text` passou a logar o texto de verdade em vez da string fixa "text" (docs/design/
+# agent-output-honesty.md, Decisão 1: era a lacuna que impedia investigar um texto fabricado),
+# "esperado == 'text'" não pode mais comparar por igualdade -- vira "não é nenhum destes nomes".
+# Uma resposta em português nunca vai colidir por acidente com um destes.
+_ACTION_OUTPUT_NAMES = {
+    SearchOutcome.__name__,
+    ShoppingComparison.__name__,
+    ProductListing.__name__,
+    StoreListing.__name__,
+    PriceCheck.__name__,
+}
+
+
+def _is_free_text(raw_response: str) -> bool:
+    return raw_response not in _ACTION_OUTPUT_NAMES and not raw_response.startswith("PendingWrite:")
 
 _SPENT: list[float] = []
 
@@ -164,7 +184,7 @@ def test_reading_questions_route_to_the_right_action(deps):
         reply = _ask(deps, message)
         got = _last_call(deps)
         _SPENT.append(got["cost_usd"])
-        hit = got["raw_response"] == expected
+        hit = _is_free_text(got["raw_response"]) if expected == "text" else got["raw_response"] == expected
         results.append((message, expected, got["raw_response"], hit))
         print(f"\n  {'✅' if hit else '❌'} {message!r}\n     esperado={expected}  veio={got['raw_response']}")
         assert reply.text, f"resposta vazia para {message!r}"

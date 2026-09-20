@@ -41,6 +41,21 @@ band just below a match: 70-80. Measured on the 5 real receipts: "pikana" -> PIC
 positive: "queijo" -> QUERO 73.
 """
 
+CONNECTIVE_WORDS = frozenset({"DE", "DA", "DO", "DAS", "DOS", "E"})
+"""Term words that carry no product identity and are dropped before scoring (normalized form, so
+uppercase and unaccented). Real incident (2026-09-20, production catalog, 133 products): "quanto tá
+o suco de uva" -> the model extracted "suco de uva", and _name_score requires EVERY term word to
+find a close word in the name, so "DE" (scoring 20-67 against every word of every juice name) sank
+all three grape juices actually in the catalog ("Suco OQ integral 1,5L uva", "Suco Integral
+Parreiras do Sul GF 1,5L Uva", "Suco pronto Natural One uva e maçã 1,3L" -- each scores 100 on
+"suco uva"). The zero-result path then offered the Natural One back as a "category alternative",
+so the bot said "sem preço registrado" and quoted a grape juice price in the same breath.
+
+Deliberately NOT in the set: "COM"/"SEM" ("Água com gás" vs "Água sem gás" is a real distinction
+this catalog carries) and any noun. Only removed from the *term*: extra words in a *name* were
+never penalized. A term made only of these words falls back to the unfiltered words, so it still
+scores like before instead of matching nothing."""
+
 TAG_MATCH_CUTOFF = 75
 """Minimum fuzz.ratio (0-100) for a free-text word to count as a tag (v2.1, natural `consultar`).
 
@@ -63,6 +78,12 @@ def search_prices(
     if term is None and tag is None:
         raise ValueError("term or tag is required")
     return records_for_products(conn, sorted(_candidate_ids(conn, term, tag)), limit)
+
+
+def known_tags(conn: sqlite3.Connection) -> list[str]:
+    """The tag vocabulary, for callers outside `repositories` reach (the bot layer never imports
+    `repositories` directly -- see the DAG rules in CLAUDE.md)."""
+    return products.all_tag_names(conn)
 
 
 def detect_tag(conn: sqlite3.Connection, words: Sequence[str]) -> tuple[str | None, str | None]:
@@ -101,11 +122,21 @@ its real kind, while the worst false positive among unrelated real terms is 66.7
 gap between them, same margin TAG_MATCH_CUTOFF already relies on for the same scorer family.
 Known ambiguity, not fixed by any cutoff: a generic term can tie 100 against more than one real
 kind ("queijo" ties queijo brie/mussarela/parmesão; "leite" ties leite uht/condensado and creme
-de leite; "maca" ties maçã and macarrão) -- match_kind returns whichever sorts first
-alphabetically (all_kinds() is already sorted), which is not always the most obviously "generic"
-one. Accepted the same way "queijo" -> "QUERO" (NEAR_MISS_CUTOFF) was: a real limitation of
-matching a word against a vocabulary that was never designed to be unambiguous, not a bug to
-chase without a concrete wrong answer observed in use."""
+de leite) -- match_kind returns whichever sorts first alphabetically (all_kinds() is already
+sorted), which is not always the most obviously "generic" one. Accepted the same way "queijo" ->
+"QUERO" (NEAR_MISS_CUTOFF) was: a real limitation of matching a word against a vocabulary that
+was never designed to be unambiguous, not a bug to chase without a concrete wrong answer observed
+in use.
+
+One tie IS resolved (ticket shopping-verdict-shape, 2026-09-19, real bug observed in use):
+measured live against the production catalogue, `match_kind(conn, "tomate")` returned
+"passata de tomate" instead of "tomate" -- both score 100 (whole-word match), and alphabetical
+order put the wrong one first. "maca" -> "macarrão" instead of "maçã" is the same shape. When the
+term, normalized, equals a tied kind's own normalized text exactly, that kind wins outright,
+before falling back to the alphabetical order above for every other tie. Measured against the 98
+real kinds and every generic term already documented above: only "tomate" and "maca" change;
+"leite" (no kind is exactly "leite") is untouched, on purpose -- picking a different tie-break for
+an inexact tie is a new guess, not a fix, without its own measured evidence."""
 
 
 def match_kind(conn: sqlite3.Connection, term: str) -> str | None:
@@ -120,13 +151,17 @@ def match_kind(conn: sqlite3.Connection, term: str) -> str | None:
     if not kinds:
         return None
     term_words = normalize_text(term).split()
-    best_kind: str | None = None
-    best_score = -1.0
-    for kind in kinds:
-        score = _name_score(term_words, normalize_text(kind).split())
-        if score > best_score:
-            best_kind, best_score = kind, score
-    return best_kind if best_score >= KIND_MATCH_CUTOFF else None
+    scored = [(_name_score(term_words, normalize_text(kind).split()), kind) for kind in kinds]
+    best_score = max(score for score, _ in scored)
+    if best_score < KIND_MATCH_CUTOFF:
+        return None
+    tied = [kind for score, kind in scored if score == best_score]
+    if len(tied) > 1:
+        term_norm = " ".join(term_words)
+        exact = [kind for kind in tied if " ".join(normalize_text(kind).split()) == term_norm]
+        if exact:
+            return exact[0]
+    return tied[0]
 
 
 def search_free_text(
@@ -190,6 +225,7 @@ def _name_score(term_words: Sequence[str], name_words: Sequence[str]) -> float:
     *name* ("LING" for linguiça) still misses, and the durable fix for that is the AI rename."""
     if not term_words or not name_words:
         return 0.0
+    term_words = [word for word in term_words if word not in CONNECTIVE_WORDS] or term_words
     return min(
         max(max(fuzz.ratio(word, other), fuzz.ratio(word, other[: len(word)])) for other in name_words)
         for word in term_words

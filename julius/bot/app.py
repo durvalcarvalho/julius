@@ -1,11 +1,13 @@
-"""The only module that knows what an Update is. It refuses to start open, checks who is talking,
-opens a connection for the turn, and delivers the reply -- nothing else."""
+"""The only module that knows what an Update is. It refuses to start half-configured, gates who's
+talking (unlimited owner/friends vs. rate-limited strangers), opens a connection for the turn, and
+delivers the reply -- nothing else."""
 
 from __future__ import annotations
 
 import logging
 import re
 import sys
+import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction, ParseMode
@@ -36,9 +38,10 @@ GREETING = (
 
 NO_TOKEN = "JULIUS_BOT_TOKEN não definido — crie o bot no @BotFather e exporte o token."
 NO_ALLOWLIST = (
-    "JULIUS_BOT_ALLOWED_CHAT_ID não definido — o bot não sobe aberto. Para descobrir seu chat_id: "
-    "exporte JULIUS_BOT_ALLOWED_CHAT_ID=0 (ninguém autorizado), suba o bot, mande /start e leia "
-    '"mensagem ignorada de chat_id=…" no log; depois exporte o número e reinicie.'
+    "JULIUS_BOT_ALLOWED_CHAT_ID não definido — o bot não sobe sem um dono. Para descobrir seu "
+    "chat_id: exporte JULIUS_BOT_ALLOWED_CHAT_ID=0 (bootstrap, dono nenhum ainda), suba o bot, "
+    'mande /start e leia "mensagem de chat_id=…" no log; depois exporte o número de verdade e '
+    "reinicie."
 )
 NO_AI = (
     "IA não configurada (JULIUS_AI_API_KEY, JULIUS_AI_BASE_URL, JULIUS_AI_MODEL e os dois preços "
@@ -56,8 +59,8 @@ _OUTCOMES = {
 
 
 def check_startup(settings: Config) -> None:
-    """Fail fast and loud: a bot that starts half-configured is one that answers strangers or dies
-    on the first message."""
+    """Fail fast and loud: a bot that starts half-configured is one that dies on the first
+    message, or has no owner to fall back to once a stranger hits the rate limit."""
     if not settings.bot_token:
         _die(NO_TOKEN)
     if settings.bot_allowed_chat_id is None:
@@ -82,16 +85,53 @@ def configure_logging() -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
-def _authorized(update: Update, settings: Config) -> bool:
-    chat = update.effective_chat
-    return chat is not None and chat.id == settings.bot_allowed_chat_id
+RATE_LIMIT_WINDOW_SECONDS = 3600.0
+RATE_LIMIT_REPLY = (
+    "Chegou no limite de mensagens grátis por hora. Tenta de novo daqui a pouco, ou peça pra quem "
+    "te chamou te colocar na lista sem limite."
+)
+
+# ponytail: janela fixa por chat_id, em memória de processo -- reinicia com o bot, mesmo trade-off
+# já aceito pro ChatState (v2.6, PC doméstico que liga e desliga). Um Redis/SQLite valeria a pena
+# se o limite precisasse sobreviver a reinícios frequentes; não é o caso hoje.
+_rate_limit_state: dict[int, tuple[float, int]] = {}
 
 
-def _refuse(update: Update) -> None:
-    """Silence, not "acesso negado": an answer would confirm there is someone here. The line is
-    also the bootstrap -- it is where the owner reads their own chat_id the first time."""
+def _unlimited(update: Update, settings: Config) -> bool:
     chat = update.effective_chat
-    log.info("mensagem ignorada de chat_id=%s (fora da allowlist)", chat.id if chat else None)
+    return chat is not None and chat.id in settings.unlimited_chat_ids
+
+
+def _allow_rate_limited(chat_id: int, limit: int, *, now: float | None = None) -> bool:
+    now = time.monotonic() if now is None else now
+    window_start, count = _rate_limit_state.get(chat_id, (now, 0))
+    if now - window_start >= RATE_LIMIT_WINDOW_SECONDS:
+        window_start, count = now, 0
+    if count >= limit:
+        _rate_limit_state[chat_id] = (window_start, count)
+        return False
+    _rate_limit_state[chat_id] = (window_start, count + 1)
+    return True
+
+
+async def _gate(update: Update, settings: Config) -> bool:
+    """True quando esta mensagem pode ser processada agora. Diferente da allowlist antiga: o bot
+    está aberto pra qualquer chat_id, sem confirmação nenhuma exigida -- só quem não está na lista
+    sem limite (`unlimited_chat_ids`) esbarra na cota por hora, e é avisado disso, não ignorado em
+    silêncio (o silêncio era o próprio bug que motivou abrir o bot: parecia travado)."""
+    chat = update.effective_chat
+    if chat is None:
+        return False
+    # Sempre logado, autorizado ou não -- é como o dono lê o próprio chat_id no bootstrap (era só
+    # logado na recusa, antes de o bot aceitar qualquer chat_id).
+    log.info("mensagem de chat_id=%s", chat.id)
+    if _unlimited(update, settings):
+        return True
+    if _allow_rate_limited(chat.id, settings.bot_rate_limit_per_hour):
+        return True
+    log.info("chat_id=%s no limite de %s/h", chat.id, settings.bot_rate_limit_per_hour)
+    await _send(update, RATE_LIMIT_REPLY)
+    return False
 
 
 def _keyboard(nonce: str) -> InlineKeyboardMarkup:
@@ -154,16 +194,14 @@ async def _show_typing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings, _ = _settings_and_agent(context)
-    if not _authorized(update, settings):
-        _refuse(update)
+    if not await _gate(update, settings):
         return
     await _send(update, GREETING)
 
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings, agent = _settings_and_agent(context)
-    if not _authorized(update, settings):
-        _refuse(update)
+    if not await _gate(update, settings):
         return
     if update.message is None or not update.message.text:
         return
@@ -171,7 +209,15 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state = context.chat_data.setdefault("state", ChatState())
     conn = db.connect(settings.db_path)
     try:
-        deps = Deps(conn=conn, config=settings, client=context.bot_data.get("client"))
+        # _gate já retornou True: update.effective_chat não é None a esta altura.
+        chat = update.effective_chat
+        deps = Deps(
+            conn=conn,
+            config=settings,
+            client=context.bot_data.get("client"),
+            can_write=_unlimited(update, settings),
+            chat_id=chat.id if chat else None,
+        )
         reply = await handle_text(agent, state, deps, update.message.text)
     finally:
         conn.close()
@@ -190,8 +236,7 @@ async def on_tap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if query is None:
         return
     await query.answer()
-    if not _authorized(update, settings):
-        _refuse(update)
+    if not await _gate(update, settings):
         return
     try:
         _, nonce, verdict = (query.data or "").split("|", 2)

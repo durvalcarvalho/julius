@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelResponse, RetryPromptPart, TextPart, ToolCallPart
@@ -6,7 +8,7 @@ from pydantic_ai.models.function import FunctionModel
 from conftest import copied_fixtures
 from julius.bot.actions import READ_ACTIONS, Deps, ProductListing, ShoppingComparison, StoreListing, resolve_product, resolve_store
 from julius.config import Config
-from julius.domain.models import SearchOutcome
+from julius.domain.models import PriceCheck, SearchOutcome
 from julius.parsers.df import DFReceiptParser
 from julius.services import catalog, comparison as comparison_service, importing, search
 
@@ -238,6 +240,48 @@ def test_compare_stores_action_all_unmatched_returns_empty_comparison(stocked, c
     assert calls == [], "compare_stores must not be called when nothing matched"
 
 
+def _onion_id(stocked) -> int:
+    (onion,) = [p.id for p in catalog.list_products(stocked) if "CEBOLA" in p.canonical_name.upper()]
+    return onion
+
+
+def test_compare_stores_action_reports_requested_count_and_single_store_kinds(stocked, cfg):
+    """RF1/RF2 (docs/requirements/shopping-verdict-shape.md): a term that matches a known kind
+    but has price in only one market must not vanish -- it goes to `single_store_kinds`, distinct
+    from `unmatched_terms` (a term that matched no kind at all)."""
+    a, b = _tomato_ids(stocked)
+    catalog.set_product_kind(stocked, a, "tomate")
+    catalog.set_product_kind(stocked, b, "tomate")
+    onion = _onion_id(stocked)
+    catalog.set_product_kind(stocked, onion, "cebola")  # only 1 store in this fixture -> single-store kind
+
+    result, _ = _run(READ_ACTIONS[1], {"items": ("tomate", "cebola", "xyzabc")}, stocked, cfg)
+
+    assert [c.kind for c in result.output.comparison.comparisons] == ["tomate"]
+    assert result.output.single_store_kinds == ("cebola",)
+    assert result.output.unmatched_terms == ("xyzabc",)
+    assert result.output.requested_count == 3
+
+
+def test_compare_stores_action_logs_the_match(stocked, cfg):
+    """The only record of what `compare_stores` actually resolved -- without it, diagnosing a
+    silently-dropped item means rerunning `match_kind` by hand against production, exactly what
+    this session had to do (docs/design/shopping-verdict-shape.md, Decisão 2)."""
+    a, b = _tomato_ids(stocked)
+    catalog.set_product_kind(stocked, a, "tomate")
+    catalog.set_product_kind(stocked, b, "tomate")
+
+    _run(READ_ACTIONS[1], {"items": ("tomate", "xyzabc")}, stocked, cfg)
+
+    lines = cfg.query_log_path.read_text(encoding="utf-8").strip().splitlines()
+    record = json.loads(lines[-1])
+    assert record["action"] == "compare_stores"
+    assert record["channel"] == "bot"
+    assert record["items"] == ["tomate", "xyzabc"]
+    assert record["matched_kinds"] == ["tomate"]
+    assert record["unmatched_terms"] == ["xyzabc"]
+
+
 def test_list_products_filters_by_containing(stocked, cfg):
     everything, _ = _run(READ_ACTIONS[2], {}, stocked, cfg)
     tomatoes, _ = _run(READ_ACTIONS[2], {"containing": "tomate"}, stocked, cfg)
@@ -260,6 +304,36 @@ def test_list_stores_returns_listing(stocked, cfg):
 
     assert isinstance(result.output, StoreListing)
     assert len(result.output.stores) == 3
+
+
+def test_check_price_action_unknown_item_returns_reason(stocked, cfg):
+    result, _ = _run(READ_ACTIONS[4], {"item": "xyzabc", "price": 10.0}, stocked, cfg)
+
+    assert result.output.reason == "unknown_item"
+    assert result.output.kind is None
+
+
+def test_check_price_action_passes_quantity_to_the_service(stocked, cfg, monkeypatch):
+    """The bridge for the two-turn quantity loop (docs/design/quantity-aware-verdict.md, Decisão
+    4): the action itself does no gate logic, it just forwards `quantity` -- monkeypatched here so
+    the test doesn't depend on the fixture's real prices landing in the gate's middle band."""
+    onion = _onion_id(stocked)
+    catalog.set_product_kind(stocked, onion, "cebola")
+    calls = []
+
+    def fake_check_price(conn, kind, price, quantity=None):
+        calls.append((kind, price, quantity))
+        return PriceCheck(
+            kind=kind, verdict=True, informed_price=price, reference_price=1.0, reference_unit="KG",
+            reference_store="Loja", reference_at="2026-09-01T00:00:00", diff_pct=0.0, reason=None,
+        )
+
+    monkeypatch.setattr(comparison_service, "check_price", fake_check_price)
+
+    result, _ = _run(READ_ACTIONS[4], {"item": "cebola", "price": 12.0, "quantity": 3.0}, stocked, cfg)
+
+    assert calls == [("cebola", 12.0, 3.0)]
+    assert result.output.verdict is True
 
 
 def test_matching_product_ids_is_public_and_drives_the_same_search(stocked):

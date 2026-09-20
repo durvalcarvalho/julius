@@ -5,7 +5,7 @@ import sys
 from types import SimpleNamespace
 
 import pytest
-from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 
 from julius import config as config_module
@@ -62,22 +62,72 @@ def _update(chat_id):
     return SimpleNamespace(effective_chat=None if chat_id is None else SimpleNamespace(id=chat_id))
 
 
-def test_authorized_compares_effective_chat_id():
+def test_unlimited_compares_effective_chat_id():
     settings = _settings(JULIUS_BOT_ALLOWED_CHAT_ID="1")
 
-    assert bot_app._authorized(_update(1), settings) is True
-    assert bot_app._authorized(_update(2), settings) is False
-    assert bot_app._authorized(_update(None), settings) is False
+    assert bot_app._unlimited(_update(1), settings) is True
+    assert bot_app._unlimited(_update(2), settings) is False
+    assert bot_app._unlimited(_update(None), settings) is False
 
 
-def test_bootstrap_zero_authorizes_nobody():
-    """No Telegram chat has id 0, so the bot starts configured and still closed -- it only logs who
-    wrote, which is how the owner learns their own id."""
+def test_unlimited_also_covers_the_extra_list():
+    settings = _settings(JULIUS_BOT_ALLOWED_CHAT_ID="1", JULIUS_BOT_UNLIMITED_CHAT_IDS="2,3")
+
+    assert bot_app._unlimited(_update(2), settings) is True
+    assert bot_app._unlimited(_update(4), settings) is False
+
+
+def test_bootstrap_zero_makes_every_real_chat_fall_back_to_the_rate_limit():
+    """No Telegram chat has id 0, so the bot starts configured with an owner nobody real can be --
+    every real chat_id falls back to `_allow_rate_limited` instead of being unlimited."""
     settings = _settings(JULIUS_BOT_ALLOWED_CHAT_ID="0")
 
     assert settings.bot_configured is True
     for chat_id in (1, -1001234567890, 999999999):
-        assert bot_app._authorized(_update(chat_id), settings) is False
+        assert bot_app._unlimited(_update(chat_id), settings) is False
+
+
+def test_allow_rate_limited_resets_after_the_window():
+    assert bot_app._allow_rate_limited(1, limit=1, now=0.0) is True
+    assert bot_app._allow_rate_limited(1, limit=1, now=1.0) is False
+    assert bot_app._allow_rate_limited(1, limit=1, now=bot_app.RATE_LIMIT_WINDOW_SECONDS + 1.0) is True
+
+
+def test_allow_rate_limited_tracks_chat_ids_independently():
+    assert bot_app._allow_rate_limited(10, limit=1, now=0.0) is True
+    assert bot_app._allow_rate_limited(11, limit=1, now=0.0) is True
+    assert bot_app._allow_rate_limited(10, limit=1, now=0.0) is False
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limit_state():
+    """Global, in-process counter (see the ponytail note on `_rate_limit_state`) -- without a
+    reset, an earlier test's calls for the same chat_id would leak into this one."""
+    bot_app._rate_limit_state.clear()
+    yield
+    bot_app._rate_limit_state.clear()
+
+
+def test_gate_sends_the_rate_limit_reply_once_the_quota_is_spent():
+    import asyncio
+
+    settings = _settings(JULIUS_BOT_ALLOWED_CHAT_ID="1", JULIUS_BOT_RATE_LIMIT_PER_HOUR="1")
+    stranger = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=999),
+        effective_message=SimpleNamespace(reply_text=_recording_reply()),
+    )
+
+    assert asyncio.run(bot_app._gate(stranger, settings)) is True
+    assert asyncio.run(bot_app._gate(stranger, settings)) is False
+    assert stranger.effective_message.reply_text.calls == [bot_app.RATE_LIMIT_REPLY]
+
+
+def _recording_reply():
+    async def reply_text(text, **kwargs):
+        reply_text.calls.append(text)
+
+    reply_text.calls = []
+    return reply_text
 
 
 def test_keyboard_callback_data_carries_the_nonce():
@@ -277,6 +327,44 @@ def test_send_recovers_per_chunk_when_telegram_refuses_the_html():
     assert first_attempt.kwargs.get("parse_mode") is not None
     assert "parse_mode" not in recovered.kwargs
     assert second_block.kwargs.get("parse_mode") is not None
+
+
+# --- can_write/chat_id chegam a Deps corretos (docs/design/bot-read-only-tier.md) -------------
+
+
+def test_on_text_wires_the_role_into_deps_end_to_end(tmp_path):
+    """A linha que decide quem escreve mora em on_text -- este teste prova que ela não está
+    invertida, de ponta a ponta (Update fake -> handle_text -> agent -> validador -> render)."""
+    from conftest import copied_fixtures
+    from julius.infra import db
+    from julius.parsers.df import DFReceiptParser
+    from julius.services import catalog, importing
+
+    settings = _settings(JULIUS_DB=str(tmp_path / "prices.db"), JULIUS_BOT_ALLOWED_CHAT_ID="1")
+    fixtures = copied_fixtures(tmp_path)
+    conn = db.connect(settings.db_path)
+    importing.import_receipt(conn, fixtures / "qrcode.html", DFReceiptParser())
+    product = next(p for p in catalog.list_products(conn) if "PICANHA" in p.canonical_name.upper())
+    conn.close()
+
+    model = FunctionModel(
+        lambda messages, info: ModelResponse(
+            parts=[ToolCallPart("final_result_rename_product", {"product": str(product.id), "name": "X"})]
+        )
+    )
+    agent = build_agent(settings, model=model)
+
+    def _run_as(chat_id):
+        message = SimpleNamespace(text="renomeia a picanha", reply_text=AsyncMock())
+        update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=chat_id), message=message, effective_message=message
+        )
+        context = SimpleNamespace(bot=AsyncMock(), bot_data={"settings": settings, "agent": agent}, chat_data={})
+        asyncio.run(bot_app.on_text(update, context))
+        return message.reply_text.await_args_list[0].args[0]
+
+    assert "Confirmar" in _run_as(1)  # o dono, chat_id da JULIUS_BOT_ALLOWED_CHAT_ID
+    assert "só consulta" in _run_as(2)  # estranho, mesma ação, mesmo agente
 
 
 def test_no_module_level_sleep_is_used_for_the_typing_delay():

@@ -29,7 +29,8 @@ PROMPT_VERSIONS: dict[str, str] = {
     "match": "1",
     "packaging": "1",
     "store": "1",
-    "persona": "4",
+    "persona": "6",
+    "category": "1",
 }
 
 SYSTEM_PROMPTS: dict[str, str] = {
@@ -131,6 +132,20 @@ SYSTEM_PROMPTS: dict[str, str] = {
         'categoria óbvia (ex.: "carne" → picanha, fraldinha, linguiça). Nada corresponde → lista vazia. Responda '
         'somente com json: {"ids": [60, 61]}'
     ),
+    # Nasceu de um caso real (brainstorm 2026-09-20): "alcatra" não tem preço registrado, e nem
+    # detect_tag() nem closest_names() conectam esse nome à tag "carnes" -- não são parecidos por
+    # texto, é conhecimento de mundo. Escopo estreito de propósito, diferente de `match_products`
+    # (que mapeia termo -> produto do catálogo, rejeitado nesta rodada por decisão do usuário):
+    # aqui a IA só escolhe UMA tag entre as já cadastradas, nunca inventa uma nova, e o código
+    # nunca confia no texto cru -- suggest_category valida a resposta contra `known_tags` antes de
+    # devolver algo.
+    "category": (
+        "Você recebe um termo de busca que não bateu com nenhum produto do catálogo, e a lista de categorias "
+        "(tags) já cadastradas. Diga a qual categoria esse termo provavelmente pertence, usando conhecimento "
+        'geral de supermercado (ex.: "alcatra" é um corte de carne bovina -> categoria "carnes"). Só escolha '
+        "uma categoria da lista dada; se nenhuma combinar ou você não tiver certeza, devolva null. Responda "
+        'somente com json: {"tag": "carnes"} ou {"tag": null}'
+    ),
     # Ponto único de narração do bot (design "voz do Julius", v2.7, ticket 163): um só prompt para
     # busca, comparação, listagens e confirmações de escrita. context (no user_prompt) diz o que
     # está sendo narrado; a guarda de dinheiro em narrate() é o que impede a resposta de inventar um
@@ -155,6 +170,22 @@ SYSTEM_PROMPTS: dict[str, str] = {
     # limite quando a busca é ampla (ex.: "quanto tá custando as carnes", vários tipos de carne).
     # Decisão tomada no design: quem agrupa é a própria persona (ela já demonstrou isso sozinha na
     # v2.7.1, agrupando 4 produtos num veredito só), não um algoritmo Python novo.
+    # v5 (2026-09-19, design docs/design/shopping-verdict-shape.md): três screenshots reais depois
+    # da v2.10 -- "qual mercado" numa lista de 20 itens voltou a instrução acionável só na última
+    # de 4 mensagens, depois de duas exceções; "tomate e cebola" não disse nada sobre tomate (causa
+    # raiz medida: `match_kind` casava o tipo errado, corrigido à parte, não neste prompt); "os ovos
+    # tão 14 reais, tá bom?" voltou uma comparação em vez de sim/não. Ganha a exceção de ordem
+    # (contexto "veredito de lista de compras"/"conferência de preço ao vivo" abrem com a
+    # instrução, ao contrário da regra 3 geral), a instrução de nunca esconder um item "só um
+    # mercado ainda" em silêncio, e a ação nova `check_price` (contexto "conferência de preço ao
+    # vivo") -- a única exceção deste projeto a "nunca dar veredito de preço absoluto", estreita de
+    # propósito: só quando a pessoa informa um preço que ela mesma está vendo agora, nunca para
+    # "está caro?" sem preço nenhum dito (esse caminho continua em `search_prices`, sem opinião).
+    # v6 (2026-09-19, design docs/design/quantity-aware-verdict.md): "conferência de preço ao vivo"
+    # ganhou um terceiro estado, além de sim/não -- os fatos podem vir sem nenhuma linha "veredito:"
+    # e com uma linha "pergunte quantos ... a pessoa vai comprar" no lugar, quando o gap em reais
+    # não decide sozinho (nem trivial, nem claramente alto) sem saber a quantidade. Sem exemplo
+    # próprio, a v5 tentaria inventar um sim/não que os fatos não têm.
     "persona": (
         "Você é o Julius Rock: pai de família, pão-duro extremo, sabe o preço de tudo de cabeça, nunca aceita "
         "o primeiro preço como bom. Tom grave, direto, categórico, sem ironia fina nem gíria da moda. Você está "
@@ -179,6 +210,15 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "direto: \"compra em X\" ou \"não compra em Y\", apontando o mercado do menor preço dado -- nunca uma "
         "pergunta retórica no lugar do veredito nesse caso. Com um só registro, sem nada pra comparar, não "
         "existe veredito -- só a informação e o comentário.\n"
+        "Exceção de ordem: quando o contexto for \"veredito de lista de compras\" ou \"conferência de preço ao "
+        "vivo\", inverta a estrutura acima -- a resposta ABRE com a instrução (pra que mercado ir e com quais "
+        "itens, ou o sim/não do preço) e só DEPOIS vem a informação e o comentário que justificam. A pessoa "
+        "perguntou \"qual mercado\" ou \"tá bom esse preço\"; a resposta é o mercado ou o sim/não, não uma "
+        "exceção citada primeiro e a resposta escondida no fim. Nos outros contextos a ordem de sempre "
+        "continua: informação, comentário, veredito por último.\n"
+        "Se os fatos citarem um item que só tem preço de um mercado ainda, ou um item sem tipo cadastrado, "
+        "mencione isso numa frase curta à parte -- nunca finja que ele foi comparado, e nunca invente por que "
+        "ele ficou de fora além do que os fatos já dizem.\n"
         "Quando os fatos trazem VÁRIOS produtos ou grupos diferentes de uma vez (uma busca ampla, tipo "
         "\"carnes\", ou uma comparação com muitos grupos), NUNCA tente nomear todos -- isso vira uma lista "
         "enorme, o oposto do que se pede aqui. Duas situações, tratamento diferente:\n"
@@ -237,7 +277,46 @@ SYSTEM_PROMPTS: dict[str, str] = {
         '{"reply": "5 preços de hortifruti registrados, de R$ 2,49 (laranja pera, Costa Atacadao) a R$ 49,90 '
         '(alho, Dona de Casa Candangolândia).\\n\\nR$ 47,41 de diferença entre o mais barato e o mais caro -- '
         'alho não é fruta rara, é assalto.\\n\\nOs outros três ficam no meio, sem nada que grite mais alto que '
-        'isso."}'
+        'isso."}\n'
+        "\n"
+        "Exemplo de entrada (veredito de lista de compras -- a resposta ABRE com a instrução, e um item sem "
+        "comparação ainda é citado, nunca escondido):\n"
+        "contexto: veredito de lista de compras\n"
+        "fatos:\n"
+        "cebola · Costa Atacadao ADE Aguas Claras · R$ 7,89 o quilo (mais barato) · quarta-feira\n"
+        "cebola · Mercado Hollywood — Taguatinga Sul · R$ 9,29 o quilo · ontem\n"
+        "cebola · Dona de Casa Candangolândia · R$ 9,99 o quilo (mais caro) · quinta-feira passada\n"
+        "cebola: diferença entre o mais barato e o mais caro: R$ 2,10\n"
+        "veredito: 1 de 1 itens mais baratos em Costa Atacadao ADE Aguas Claras\n"
+        "só tem preço de um mercado ainda, sem comparação possível: tomate\n"
+        "Exemplo de saída:\n"
+        '{"reply": "Compra no Costa Atacadao pra cebola.\\n\\nLá tá R$ 7,89 o quilo -- no Mercado Hollywood '
+        'era R$ 9,29 ontem, no Dona de Casa R$ 9,99, R$ 2,10 a mais sem motivo nenhum.\\n\\nTomate eu ainda só '
+        'tenho preço de um mercado, sem comparação pra fazer."}\n'
+        "\n"
+        "Exemplo de entrada (conferência de preço ao vivo -- a resposta ABRE com sim ou não):\n"
+        "contexto: conferência de preço ao vivo\n"
+        "fatos:\n"
+        "veredito: sim\n"
+        "preço informado: R$ 0,59 a unidade\n"
+        "mais barato já registrado: R$ 0,53 a unidade (sexta-feira passada, Assai Atacadista Guará)\n"
+        "diferença sobre o mais barato: 11%\n"
+        "Exemplo de saída:\n"
+        '{"reply": "Sim, compra sem medo.\\n\\nR$ 0,59 a unidade tá perto do mais barato que já vi, R$ 0,53 '
+        'no Assai Atacadista Guará, sexta passada -- 11% a mais é migalha."}\n'
+        "\n"
+        "Exemplo de entrada (conferência de preço ao vivo -- sem veredito ainda, os fatos pedem a "
+        "quantidade antes de decidir):\n"
+        "contexto: conferência de preço ao vivo\n"
+        "fatos:\n"
+        "preço informado: R$ 40,00 o quilo\n"
+        "mais barato já registrado: R$ 35,00 o quilo (quarta-feira, Costa Atacadao ADE Aguas Claras)\n"
+        "diferença sobre o mais barato: 14%\n"
+        "pergunte quantos quilos a pessoa vai comprar antes do veredito final\n"
+        "Exemplo de saída:\n"
+        '{"reply": "Você já conseguiu por R$ 35,00 o quilo, no Costa Atacadao ADE Aguas Claras, '
+        'quarta-feira.\\n\\nR$ 40,00 agora é 14% a mais -- pra uma peça só não é nada, pra estocar já '
+        'pesa. Quantos quilos você vai comprar?"}'
     ),
 }
 
@@ -677,6 +756,40 @@ def match_products(
         return result
     except Exception:
         return []
+
+
+def suggest_category(
+    conn: sqlite3.Connection,
+    config: Config,
+    client: LlmClient,
+    term: str,
+    known_tags: Sequence[str],
+    month: str | None = None,
+) -> str | None:
+    """Which known tag a search term probably belongs to, or None. Only called when a search came
+    back empty and no tag was already known (explicit or detected by word-matching) -- `term` here
+    is a product name the deterministic matchers could not connect to a category by text alone
+    (e.g. "alcatra" vs the tag "carnes"), so this is the one place the bot leans on the model's
+    world knowledge instead of string similarity.
+
+    Never trusts the raw answer: the returned string must equal one of `known_tags`
+    (case-insensitive), or the result is None -- same discipline as `_valid_kind`, but against a
+    closed vocabulary instead of a free string."""
+    if not known_tags or not term or not term.strip():
+        return None
+    try:
+        user_prompt = f"termo: {term}\ncategorias: {json.dumps(list(known_tags), ensure_ascii=False)}"
+        data = _ask(conn, config, client, "category", user_prompt, max_tokens=60, month=month)
+        candidate = data.get("tag") if isinstance(data, dict) else None
+        if not isinstance(candidate, str):
+            return None
+        normalized = candidate.strip().lower()
+        for tag in known_tags:
+            if tag.lower() == normalized:
+                return tag
+        return None
+    except Exception:
+        return None
 
 
 _MONEY_RE = re.compile(r"R\$\s?\d{1,3}(?:\.\d{3})*,\d{2}")

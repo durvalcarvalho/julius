@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "julius"
-version = "0.1.0"
+version = "2.12.0"
 description = "Memória pessoal de preços de mercado a partir de recibos NFC-e"
 requires-python = ">=3.10"
 dependencies = [
@@ -18,8 +18,8 @@ julius = "julius.cli:app"
 julius-bot = "julius.bot:main"
 
 [project.optional-dependencies]
-dev = ["pytest", "python-telegram-bot>=21", "pydantic-ai-slim[openai]"]
-bot = ["python-telegram-bot>=21", "pydantic-ai-slim[openai]"]
+dev = ["pytest", "python-telegram-bot>=21", "pydantic-ai-slim[openai]==2.45.0"]
+bot = ["python-telegram-bot>=21", "pydantic-ai-slim[openai]==2.45.0"]
 
 [tool.setuptools.packages.find]
 include = ["julius*"]

@@ -79,6 +79,29 @@ def all_kinds(conn: sqlite3.Connection) -> list[str]:
     return [row["kind"] for row in rows]
 
 
+def kind_categories(conn: sqlite3.Connection) -> dict[str, str]:
+    """One category (a `tags` name) per `kind`, for grouping a shopping-list verdict without a
+    taxonomy of its own -- see docs/design/shopping-verdict-shape.md, Decisão 5. Measured against
+    the real catalogue: 98 of 98 kinds have at least one tagged product, and only 4 have products
+    disagreeing on the tag; the majority (by product count, ties broken by tag name) is the
+    category. A kind with no tagged product at all (none observed yet) is simply absent from the
+    result -- callers fall back to a name of their choosing."""
+    rows = conn.execute(
+        """
+        SELECT p.kind, t.name, COUNT(*) AS n
+          FROM products p
+          JOIN product_tags pt ON pt.product_id = p.id
+          JOIN tags t ON t.id = pt.tag_id
+         WHERE p.kind IS NOT NULL
+         GROUP BY p.kind, t.name
+        """
+    )
+    counts: dict[str, dict[str, int]] = {}
+    for row in rows:
+        counts.setdefault(row["kind"], {})[row["name"]] = row["n"]
+    return {kind: max(sorted(tags), key=lambda name: tags[name]) for kind, tags in counts.items()}
+
+
 def _kind_key(kind: str) -> str:
     """Two spellings of one kind. Accents and case were always folded here; the trailing `s` was
     added after `ovo` (Assaí) and `ovos` (Costa) turned out to be the same 30-egg box in two

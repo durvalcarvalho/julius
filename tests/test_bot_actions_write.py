@@ -433,7 +433,7 @@ def test_unmerge_by_name_never_unmerges(deps):
 
 
 def test_all_actions_have_unique_names_and_documented_parameters():
-    assert len({action.__name__ for action in ALL_ACTIONS}) == 14
+    assert len({action.__name__ for action in ALL_ACTIONS}) == 15
 
     for action in ALL_ACTIONS:
         assert action.__doc__, action.__name__
