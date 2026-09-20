@@ -368,8 +368,20 @@ async def handle_text(agent: BotAgent, state: ChatState, deps: Deps, text: str) 
     return Reply(f"{prefix}{reply.text}", pending=reply.pending) if prefix else reply
 
 
+EXPIRY_EPSILON_SECONDS = 1e-6
+"""Real bug (2026-09-20): `now - pending.created_at > PENDING_TTL_SECONDS` compared against a
+`created_at` that is `time.monotonic()` -- a float whose magnitude grows with process uptime.
+`(a + 300.0) - a` is not always exactly `300.0` in IEEE754: sampling 2M random magnitudes for `a`
+found about 1 in 2200 landing close enough to a rounding boundary to overshoot by up to ~1e-11,
+which flips the strict `>` and marks a tap "expired" at the exact TTL instant -- the one case
+`test_tap_at_exactly_the_ttl_is_still_valid` fixes as required behavior. This bit only in CI/test
+runs long-lived enough to reach an unlucky monotonic value (test passed most of the time, which is
+what made it look flaky rather than a comparison bug). 1e-6 s is far below anything a real network
+round-trip or button tap could land on, so it can't mask a genuinely expired confirmation."""
+
+
 def _expired(pending: PendingWrite, now: float) -> bool:
-    return now - pending.created_at > PENDING_TTL_SECONDS
+    return now - pending.created_at > PENDING_TTL_SECONDS + EXPIRY_EPSILON_SECONDS
 
 
 def _tap_comment(deps: Deps, facts: str) -> str | None:

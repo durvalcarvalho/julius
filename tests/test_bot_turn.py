@@ -1,6 +1,7 @@
 import asyncio
 import json
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
@@ -747,6 +748,19 @@ def test_tap_at_exactly_the_ttl_is_still_valid(deps):
 
     assert reply.text.startswith("✅")
     assert catalog.get_product(deps.conn, product.id).canonical_name == "Picanha bovina"
+
+
+def test_expired_tolerates_float_rounding_at_the_ttl_boundary():
+    """Real bug (2026-09-20): `created_at` is `time.monotonic()`, whose magnitude grows with
+    process uptime -- `(a + 300.0) - a` is not always exactly 300.0 in IEEE754. This `created_at`
+    is a sampled value that overshoots by ~7e-12 without EXPIRY_EPSILON_SECONDS, which used to
+    flip the strict `>` and mark an on-time tap as expired -- exactly what made
+    test_tap_at_exactly_the_ttl_is_still_valid fail intermittently depending on the real clock."""
+    created_at = 65528.10902158461
+    pending = SimpleNamespace(created_at=created_at)
+    now = created_at + PENDING_TTL_SECONDS
+    assert now - created_at > PENDING_TTL_SECONDS  # the raw float overshoot this bug depends on
+    assert turn_module._expired(pending, now) is False
 
 
 def test_tap_deny_clears_without_executing(deps):

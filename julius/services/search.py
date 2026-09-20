@@ -31,15 +31,44 @@ word starting with the term, so a 1-2 letter term is a prefix listing ("a" and "
 22 of the 105 products). Wide but never wrong, so no minimum term length is enforced.
 """
 
-NEAR_MISS_CUTOFF = 70
+NEAR_MISS_CUTOFF = 75
 """Minimum fuzz.ratio (0-100) between the term and a single word of a non-matching name for a
 "did you mean" suggestion.
 
-Same word-level comparison as MATCH_SCORE_CUTOFF, minus the prefix bonus, so this is simply the
-band just below a match: 70-80. Measured on the 5 real receipts: "pikana" -> PICANHA 77 and
-"arros" -> ARR 75 stay in; "frango" -> FGO 67 and "sabao" -> ARBO 67 stay out. Known false
-positive: "queijo" -> QUERO 73.
+Was 70 until a real incident (2026-09-20, production catalog, 298 products): "quanto tá o kg de
+alcatra" (a cut of beef, not in the catalog) suggested "Cerveja Heineken lata..." as an
+alternative -- "alcatra" scored 72.7 against the single word "lata", coincidental shared letters
+(a-l-a-t-a), not a plausible typo. Re-measuring the same real catalog with a broad sweep of common
+grocery terms not yet in it turned up two more of the same shape, both worse (cross-category,
+nothing food-related in common): "maminha" (a cut of beef) -> "Maizena" 71.4, "patinho" (a cut of
+beef) -> "...com gatilho" (a spray bottle's trigger) 71.4. Raising the cutoff from 70 to 75 drops
+all three while leaving every real match intact: "pikana" -> PICANHA stays at 76.9, and "arros"
+-> "ARR" (the other case the previous docstring cited from the 5 original receipts) stays at 75.
+
+Known residual false positives at 75, not chased further: "morango" (strawberry) -> "frango"
+(chicken) 76.9, "farinha" (flour) -> "Fraldinha" (a cut of beef) 75, "mortadela" (a deli meat) ->
+"framboesa"/"Mamão" (raspberry jam / papaya) 75-77 -- all score in the same band as the genuine
+"pikana"->PICANHA match, so no cutoff value separates them from real typos without also losing
+that match. This is the same shape of limitation this project already accepts for "queijo"->QUERO
+(see history below) and for KIND_MATCH_CUTOFF's ties: a real limitation of a cheap word-level
+string metric applied to short, generic words, not a bug to chase without a concrete wrong answer
+observed in use -- and going further (real semantics) is exactly what this project's design
+rejects as disproportionate for a personal catalog of a few hundred items (see
+"Identidade de produto e busca" in CLAUDE.md).
+
+Original measurement (70, on the 5 real receipts, 105 products): "pikana" -> PICANHA 77 and
+"arros" -> ARR 75 stayed in; "frango" -> FGO 67 and "sabao" -> ARBO 67 stayed out. Known false
+positive at the time: "queijo" -> QUERO 73 (now excluded too, at 75 -- no test ever required it,
+it was only ever documented as accepted, not desired).
 """
+
+NEAR_MISS_MAX_LEN_DIFF = 2
+"""Same 2026-09-20 incident as NEAR_MISS_CUTOFF: fuzz.ratio alone doesn't penalize comparing
+strings of very different lengths, the same shape of bug MATCH_SCORE_CUTOFF's docstring already
+documents for WRatio -- "alcatra" (7 letters) against "lata" (4 letters) is a length gap of 3.
+Kept as defense in depth alongside the raised cutoff (a longer coincidental overlap could in
+principle still clear 75): a max length difference of 2 drops "lata" (diff 3) while leaving every
+match in NEAR_MISS_CUTOFF's docstring (all diff 0-1) untouched."""
 
 CONNECTIVE_WORDS = frozenset({"DE", "DA", "DO", "DAS", "DOS", "E"})
 """Term words that carry no product identity and are dropped before scoring (normalized form, so
@@ -211,7 +240,14 @@ def closest_names(conn: sqlite3.Connection, term: str, limit: int = 3) -> list[t
     for product_id, name in products.product_names(conn):
         if product_id in matched:
             continue
-        score = max((fuzz.ratio(normalized_term, word) for word in normalize_text(name).split()), default=0)
+        score = max(
+            (
+                fuzz.ratio(normalized_term, word)
+                for word in normalize_text(name).split()
+                if abs(len(word) - len(normalized_term)) <= NEAR_MISS_MAX_LEN_DIFF
+            ),
+            default=0,
+        )
         if score >= NEAR_MISS_CUTOFF:
             scores[name] = max(int(score), scores.get(name, 0))
     return sorted(scores.items(), key=lambda item: -item[1])[:limit]

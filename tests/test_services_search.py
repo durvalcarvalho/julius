@@ -89,6 +89,28 @@ def test_closest_names_empty_when_nothing_close(conn):
     assert closest_names(conn, "hortifruti") == []
 
 
+def test_closest_names_ignores_coincidental_short_word_overlap(conn):
+    """Real incident (2026-09-20): "alcatra" (a cut of beef) scored 72.7 against the single word
+    "lata" ("can", from a beer product) via plain fuzz.ratio -- coincidental shared letters
+    (a-l-a-t-a), not a plausible typo. The bot then suggested beer as an alternative to a beef
+    search. NEAR_MISS_MAX_LEN_DIFF blocks comparing a term against a word that much shorter."""
+    _product(conn, "Cerveja Heineken lata caixa 8 unidades 269ml", "1")
+    assert closest_names(conn, "alcatra") == []
+
+
+def test_closest_names_ignores_coincidental_same_length_overlap(conn):
+    """Same shape as the alcatra/lata incident, found by sweeping common grocery terms against
+    the real catalog right after that fix: same-length words can still coincidentally overlap
+    enough to clear the old cutoff (70) even though NEAR_MISS_MAX_LEN_DIFF doesn't help (the
+    words being compared are the same length). "maminha" (a cut of beef) scored 71.4 against
+    "Maizena" (cornstarch), "patinho" (a cut of beef) scored 71.4 against "...com gatilho" (a
+    spray bottle's trigger) -- both nonsense, both now below the raised NEAR_MISS_CUTOFF (75)."""
+    _product(conn, "Amido de Milho Maizena Caixa 200g", "1")
+    _product(conn, "Desengordurante Uau 500ml com gatilho", "2")
+    assert closest_names(conn, "maminha") == []
+    assert closest_names(conn, "patinho") == []
+
+
 def test_never_mixes_units_in_highlight(conn):
     a = _product(conn, "AGUA MINERAL 500ML", "1")
     b = _product(conn, "AGUA MINERAL GALAO", "2")
