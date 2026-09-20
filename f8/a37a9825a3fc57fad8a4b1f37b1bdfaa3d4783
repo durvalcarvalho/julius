@@ -1,0 +1,36 @@
+tests/test_bot_turn.py
+  s_7cb7c325e4a3a3::t_6c5d55503ad91a 753-765
+  s_7cb7c325e4a3a3::t_583ff77750e928 4
+julius/services/search.py
+  s_7cb7c325e4a3a3::t_42a5b03cf82e5b 34,38-62,65-71
+  s_7cb7c325e4a3a3::t_52bc4e5d413b6c 243-250
+  s_8d5ba576a54efb::t_ce4305e950eb82 72
+julius/bot/turn.py
+  s_7cb7c325e4a3a3::t_591a8e7e16efd4 371-382,384
+tests/test_services_search.py
+  s_7cb7c325e4a3a3::t_24a1596746eed7 92-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f8a37a9825a3fc57fad8a4b1f37b1bdfaa3d4783",
+  "prompts": {},
+  "sessions": {
+    "s_7cb7c325e4a3a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "862867ee-de48-4254-9f8f-785f7bf15f1e",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    },
+    "s_8d5ba576a54efb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fc3526e7-3b58-4df8-9084-6cb886cf7629",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
