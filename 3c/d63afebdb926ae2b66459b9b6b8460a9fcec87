@@ -1,0 +1,132 @@
+julius/services/suggestions.py
+  s_9e2339d44c91d4::t_15893598246073 323-339
+  s_9e2339d44c91d4::t_c4657e951dcd42 36
+docs/design/kind-resolution-in-routing.md
+  s_36f8cccf1d7828::t_e80498f3df2001 161-164
+  s_36f8cccf1d7828::t_d36f596d99c58c 1-35,37,46-55,57-128,133-160,165-176
+  s_36f8cccf1d7828::t_dd6c8d80ef8e70 129-132
+  s_36f8cccf1d7828::t_17172bb0cfd32d 177-188,191
+  s_36f8cccf1d7828::t_46ba9e00e97a96 36,38-45,56
+  s_36f8cccf1d7828::t_14ef62b827adfd 189-190
+tests/test_bot_agent.py
+  s_36f8cccf1d7828::t_15a65c033b5379 25
+  s_36f8cccf1d7828::t_69dde2a0858c67 302-304,310-329
+  s_9e2339d44c91d4::t_a10e165148cc5e 353
+  s_36f8cccf1d7828::t_937a8a882f2029 118-137
+  s_36f8cccf1d7828::t_bfbeb13047f14c 23-24
+  s_36f8cccf1d7828::t_48426225a82b7a 290-299
+  s_36f8cccf1d7828::t_023a02474f0565 300-301
+docs/requirements/kind-resolution-in-routing.md
+  s_36f8cccf1d7828::t_86ea97f4773090 1-84
+tests/test_bot_actions_read.py
+  s_36f8cccf1d7828::t_3eb6e01bae300b 410-431
+  s_36f8cccf1d7828::t_08e8b326c39940 398-399,409
+  s_36f8cccf1d7828::t_da002442f37152 372-389
+  s_36f8cccf1d7828::t_399fc77234632f 13-14
+  s_36f8cccf1d7828::t_a7288467b3235d 250-303
+julius/bot/actions.py
+  s_36f8cccf1d7828::t_ad152fdcdab9da 139-155
+  s_36f8cccf1d7828::t_985b9cf2040fbe 20
+  s_36f8cccf1d7828::t_539001061b841f 197
+  s_36f8cccf1d7828::t_c4066d48ae651c 262-265
+  s_36f8cccf1d7828::t_623d3de6f40ac7 266
+  s_36f8cccf1d7828::t_7c16f6a53de0f0 228-230,237-242,249-252,258-260,272
+julius/services/search.py
+  s_36f8cccf1d7828::t_a382d0aa76d44a 230-238,255-259
+  s_36f8cccf1d7828::t_c00afc1b096896 222-229,246,254
+  s_36f8cccf1d7828::t_5a41c1bd33b0d8 263-275,285-298,310-312
+  s_36f8cccf1d7828::t_11d3df9cd3c734 3
+  s_36f8cccf1d7828::t_53c0257250cf23 299-309
+  s_36f8cccf1d7828::t_0d0c3ebed8bdd2 181-210,218-221,242,261-262,276-284
+  s_36f8cccf1d7828::t_0dcb86809ddba9 119-127
+  s_36f8cccf1d7828::t_a27b4d412463cb 253,260
+  s_36f8cccf1d7828::t_305d281ab0a7d8 375-407,417
+tests/test_services_search.py
+  s_36f8cccf1d7828::t_ef22e6225db15a 15-16
+  s_36f8cccf1d7828::t_f894a736991997 77
+  s_36f8cccf1d7828::t_836c49d857ecc3 67-76,78-79
+  s_36f8cccf1d7828::t_f572e9dcda1db4 323-365
+  s_36f8cccf1d7828::t_3beb936fc5b66e 401-418
+  s_36f8cccf1d7828::t_d72cb405a3e64c 366-400,419-429
+julius/services/comparison.py
+  s_36f8cccf1d7828::t_36996b1b7eee0b 201-203
+  s_36f8cccf1d7828::t_23fa7c23beb961 227-240
+  s_36f8cccf1d7828::t_093b8334982d6b 21
+  s_36f8cccf1d7828::t_0343c9ec01b08c 251-252
+julius/bot/turn.py
+  s_36f8cccf1d7828::t_080e6a89f962ed 264-265
+  s_36f8cccf1d7828::t_11458cb8187ec0 149-161
+tests/test_bot_render.py
+  s_9e2339d44c91d4::t_209c3e1d93a65b 286-299
+julius/bot/agent.py
+  s_9e2339d44c91d4::t_217fb1e6283bc8 112-120
+  s_36f8cccf1d7828::t_a5cf47c91dca07 104-105
+  s_9e2339d44c91d4::t_ec96f646ef174d 28
+  s_9e2339d44c91d4::t_335aaa6e1a0cf4 87-88
+  s_36f8cccf1d7828::t_f9ad37d14abed6 171,173-179,190-199
+  s_36f8cccf1d7828::t_19ccd16dbae396 172,180-189
+  s_36f8cccf1d7828::t_a95f0edae1ec5a 24
+  s_36f8cccf1d7828::t_4ad38642bd3aba 91-93,99-101
+  s_9e2339d44c91d4::t_3afb2f6a3ca8d8 106-111
+tests/test_services_comparison.py
+  s_36f8cccf1d7828::t_eccda3aeffe376 653-683
+docs/design/manual-price-report.md
+  s_9e2339d44c91d4::t_04debf2da6c3c8 3-4
+  s_9e2339d44c91d4::t_1548e61ca4d467 1-2,5-104
+tests/test_real_ai.py
+  s_36f8cccf1d7828::t_b0e51ad8fcb856 201-226,228-231
+  s_9e2339d44c91d4::t_0e6b7d85731182 285-291,293,297,303
+  s_36f8cccf1d7828::t_e5bed9d3622d22 227
+  s_9e2339d44c91d4::t_b2554d8bb86706 235,259-261,263-284,292,294-296,298-302,304-319
+  s_9e2339d44c91d4::t_d6ffeee62c94ef 232-234,236-258,262
+docs/requirements/bot-persona-fallback-improvements.md
+  s_9e2339d44c91d4::t_b5f0eb61f6f5e1 48
+  s_9e2339d44c91d4::t_c4cd3071ab25c7 74-86,88-102,104-107,111-118
+  s_9e2339d44c91d4::t_f34df8718a2419 164-165
+  s_9e2339d44c91d4::t_41b48228060e6b 142-149,151,154,156,173
+  s_9e2339d44c91d4::t_4e5f808671fed1 52-55
+  s_9e2339d44c91d4::t_d3af9f0465a411 174-205
+  s_9e2339d44c91d4::t_1e695f4ac3fe0d 87
+  s_9e2339d44c91d4::t_1edd7cace861c8 120-121,124-127,129,131-134,136,138-140
+  s_9e2339d44c91d4::t_537e2cafebd1a4 1-6,8-42,44-47,49-51,56-70,73,119,141,206-207
+  s_9e2339d44c91d4::t_69e3b52ecdc319 43
+  s_9e2339d44c91d4::t_237e4a7dca0cd4 150,152-153,155,157-163,166-167,169
+  s_9e2339d44c91d4::t_66af567f8e56c6 168,170-172
+  s_9e2339d44c91d4::t_835e540bff0339 103
+  s_9e2339d44c91d4::t_57c0171fe538c0 122-123,128,130,135,137
+  s_9e2339d44c91d4::t_d11e68c278be0e 108-110
+  s_9e2339d44c91d4::t_a7a032589662e1 71-72
+  s_9e2339d44c91d4::t_7583de901d081c 7
+docs/design/fallback-voice-and-context-prompts.md
+  s_9e2339d44c91d4::t_7cb8a22a92fddb 50-56,58-59
+  s_9e2339d44c91d4::t_3a14a0628aeeb0 57
+  s_9e2339d44c91d4::t_d0ade9c4766420 1-49,60-61
+tests/test_bot_turn.py
+  s_36f8cccf1d7828::t_e6fe3a48536a8c 305-335
+julius/bot/render.py
+  s_9e2339d44c91d4::t_c42819e213425a 148-157,160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3cd63afebdb926ae2b66459b9b6b8460a9fcec87",
+  "prompts": {},
+  "sessions": {
+    "s_36f8cccf1d7828": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dd3cd7fe-add2-4dd0-beae-979d6aeadc2b",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    },
+    "s_9e2339d44c91d4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0d3e5c32-0cb0-4b68-a5c3-57e6409e106d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
