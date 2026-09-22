@@ -1,0 +1,19 @@
+docs/design/fallback-voice-and-context-prompts.md
+  s_9e2339d44c91d4::t_7bef7329e21c00 57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "885950d5d0599702806c50778603e0b30886e0d5",
+  "prompts": {},
+  "sessions": {
+    "s_9e2339d44c91d4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0d3e5c32-0cb0-4b68-a5c3-57e6409e106d",
+        "model": "unknown"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
