@@ -1,0 +1,44 @@
+docs/requirements/entity-resolution-architecture.md
+  s_36f8cccf1d7828::t_6d259eeaddfc91 1-110
+docs/tickets/entity-resolution-architecture/182-claude-md-entity-resolution-decisions.md
+  s_36f8cccf1d7828::t_571e4b5d515119 1-64
+claudedocs/research_typesafe_entity_resolution_fit_20260922.md
+  s_36f8cccf1d7828::t_6be3741a95a9d4 1-52
+docs/design/entity-resolution-architecture.md
+  s_36f8cccf1d7828::t_476ba466a2dfa2 68
+  s_36f8cccf1d7828::t_e89f5c791b2c18 77,79,81
+  s_36f8cccf1d7828::t_1442728ae9b09a 52,54,56,58,60,62,65,67,69,71,73,90
+  s_36f8cccf1d7828::t_1d34f2415e6996 1-50,91-163,165-180,183-187
+  s_36f8cccf1d7828::t_46af2da1275184 51,53,55,57,59,61,63-64,66,70,72,74-76,78,80,82
+  s_36f8cccf1d7828::t_ab014300bf0b53 83-89
+  s_36f8cccf1d7828::t_a87756f6aa666f 164
+  s_36f8cccf1d7828::t_2e71e3b05e24a1 182
+  s_36f8cccf1d7828::t_b77137c490df4c 181
+docs/tickets/entity-resolution-architecture/index.md
+  s_36f8cccf1d7828::t_4eb065aa5b66c4 37-38
+  s_36f8cccf1d7828::t_adda635779c26e 64-71
+  s_36f8cccf1d7828::t_efd5a7e014c76f 74
+  s_36f8cccf1d7828::t_2c782c486c8ba2 1-36,40-63,72-73,75-76
+  s_36f8cccf1d7828::t_3f5668f8766780 39
+CLAUDE.md
+  s_36f8cccf1d7828::t_725db4fa31a491 452-455
+  s_36f8cccf1d7828::t_fa9b35905316fe 765
+docs/tickets/entity-resolution-architecture/181-turn-pin-first-history-turn.md
+  s_36f8cccf1d7828::t_dc06129160f140 1-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1b868fd8abc7cdc01fc365343c8f097781901e22",
+  "prompts": {},
+  "sessions": {
+    "s_36f8cccf1d7828": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dd3cd7fe-add2-4dd0-beae-979d6aeadc2b",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
