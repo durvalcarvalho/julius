@@ -1,0 +1,89 @@
+julius/repositories/decision_usage.py
+  s_3000053a84071b::t_550a08cf5c35f4 1-18
+docs/requirements/structured-ai-decisions.md
+  s_3000053a84071b::t_96cdf2394d155e 1-64
+julius/config.py
+  s_3000053a84071b::t_ba6faa5b5fa4e1 26-30,36-40
+  s_3000053a84071b::t_d525769f112278 96-100
+  s_3000053a84071b::t_e3617c140c496f 81-82
+  s_3000053a84071b::t_00e304231c96d0 41
+julius/cli/products.py
+  s_3000053a84071b::t_f1b0af108a965c 15
+  s_3000053a84071b::t_e9e075000aaafe 246-249
+tests/test_config.py
+  s_3000053a84071b::t_65b7c1e661b852 18-52
+julius/services/curation.py
+  s_3000053a84071b::t_84d23e80362865 11
+  s_3000053a84071b::t_7e6ef05ea13bd6 155,160-163
+docs/design/structured-ai-decisions.md
+  s_3000053a84071b::t_3493aa8f68140e 1-145
+julius/infra/migrations/0006_decision_usage.sql
+  s_3000053a84071b::t_654fc1c6a2e380 1-10
+tests/test_services_curation.py
+  s_3000053a84071b::t_e0736916fc0be7 2,7,10
+  s_3000053a84071b::t_0668d724d8e0cf 314
+  s_3000053a84071b::t_5c4533bf180440 298-313,315-323
+  s_3000053a84071b::t_4add245e1a6255 14
+  s_3000053a84071b::t_d07753dcf0fcfb 324-325
+tests/_fakes.py
+  s_3000053a84071b::t_276829406bf07e 7
+  s_3000053a84071b::t_656c3d1437db83 68-104
+tests/test_db.py
+  s_3000053a84071b::t_4c9f289c461385 7-16
+julius/cli/_review.py
+  s_3000053a84071b::t_68504f62c1f7ac 273-274
+  s_3000053a84071b::t_5c37a34c4f3716 237
+  s_3000053a84071b::t_bc022036572861 27
+tests/test_repositories_decision_usage.py
+  s_3000053a84071b::t_cb46fcc8df0ab7 1-16
+tests/test_services_suggestions.py
+  s_3000053a84071b::t_44d429647758d5 195-258
+  s_3000053a84071b::t_17d1cd7b2ef3ad 6,9,11
+  s_3000053a84071b::t_7722651d9fd7da 259-260
+tests/conftest.py
+  s_3000053a84071b::t_51dd310859093a 52-56
+julius/infra/decision_client.py
+  s_3000053a84071b::t_8fd6761a46cc4c 1-145
+tests/test_decision_client.py
+  s_3000053a84071b::t_5e32cafca46f2e 1,3-162,173-176
+  s_3000053a84071b::t_bdc238531c0109 2
+  s_3000053a84071b::t_369b02559da186 163-172
+claudedocs/research_typesafe_ai_20260921.md
+  s_3000053a84071b::t_a30627cf4466ae 1-48,67-68,70-83
+  s_3000053a84071b::t_97d47e4e3f98ed 49-66,69
+julius/services/suggestions.py
+  s_3000053a84071b::t_c1f1feead4e7ce 516
+  s_3000053a84071b::t_b93faa41540a70 524-526,528
+  s_3000053a84071b::t_f2a18b9e14d84c 27-29
+  s_3000053a84071b::t_77504d7c87fc1d 436-515,517-523,527,529-530
+  s_3000053a84071b::t_3a5be503afd2c4 22
+  s_3000053a84071b::t_a4adbea634ab4a 20
+  s_b0370c0c6f81eb::t_4875650f72d304 531-532
+julius/cli/receipts.py
+  s_3000053a84071b::t_fe85bcd67da42b 28
+  s_3000053a84071b::t_c571b268084eb2 94,96-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f86db0631df27cde431a0092195bc0bbc1fcc41d",
+  "prompts": {},
+  "sessions": {
+    "s_3000053a84071b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e8e812fd-3ec1-4152-aaf4-b139feca4ff1",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    },
+    "s_b0370c0c6f81eb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e8ddd2e-09ea-440d-b0ac-0343de210a54",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
