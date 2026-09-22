@@ -1,0 +1,19 @@
+CLAUDE.md
+  s_11d12fc5b12c39::t_35ae47dc265b94 448-449
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2408c58282d90217ca7e362759ada5fd269b6cc8",
+  "prompts": {},
+  "sessions": {
+    "s_11d12fc5b12c39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eef471fd-554d-4650-a50a-1219b325780d",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
