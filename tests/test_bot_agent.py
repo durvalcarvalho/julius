@@ -20,7 +20,9 @@ from julius.bot.agent import (
 from julius.bot.render import WRITE_REFUSED_LINE
 from julius.config import Config
 from julius.parsers.df import DFReceiptParser
-from julius.services import importing
+from julius.repositories.products import resolve_product_id
+from julius.repositories.stores import ensure_store
+from julius.services import catalog, importing
 
 
 @pytest.fixture
@@ -111,6 +113,26 @@ def test_retry_reaches_the_model_and_a_second_call_happens(cfg, deps):
     assert state["calls"] == 2
     assert isinstance(result.output, str)
     assert any("Não existe produto com id 99999" in content for content in retries)
+
+
+def test_ambiguous_kind_exhausts_retries_when_the_model_keeps_guessing(cfg, deps):
+    """Same shape as test_output_guard_exhausts_retries_when_the_model_insists, for the NEW
+    ModelRetry `_resolve_kind` raises on brand ambiguity (docs/design/kind-resolution-in-routing.md,
+    Decisão 3) -- the `retries=2` budget it spends is shared with the output-honesty guard, and a
+    model that keeps calling check_price with the same ambiguous item instead of asking the person
+    must exhaust it the same way, ending in `UnexpectedModelBehavior` rather than ever returning a
+    guessed `kind`."""
+    ensure_store(deps.conn, "00000000000099", "Synthetic store")
+    soda = resolve_product_id(deps.conn, "00000000000099", "s1", "PEPSI REFRIGERANTE PET 2L")
+    snack = resolve_product_id(deps.conn, "00000000000099", "s2", "PEPSICO SNACK BATATA 100G")
+    catalog.set_product_kind(deps.conn, soda, "refrigerante")
+    catalog.set_product_kind(deps.conn, snack, "salgadinho")
+    model, state = _scripted(ModelResponse(parts=[ToolCallPart("final_result_check_price", {"item": "pepsi", "price": 10.0})]))
+
+    with pytest.raises(UnexpectedModelBehavior):
+        build_agent(cfg, model=model).run_sync("a pepsi tá 10 reais, tá bom?", deps=deps)
+
+    assert state["calls"] >= 2
 
 
 def test_build_model_uses_the_configured_endpoint(cfg):
@@ -265,12 +287,46 @@ def test_blocked_write_attempt_is_logged_with_chat_id_and_action(cfg, deps, capl
 
 
 def test_the_prompt_reaches_the_model(cfg, deps):
+    """`deps`'s catalogue (one imported receipt, no `kind` set on anything yet) makes the dynamic
+    `kind_vocabulary` system prompt come back empty -- still its own part (`dynamic=True` runners
+    always contribute one, per `pydantic_ai._system_prompt.resolve_system_prompts`), not folded
+    into `SYSTEM_PROMPT` itself."""
     model, state = _scripted(ModelResponse(parts=[TextPart("oi")]))
 
     build_agent(cfg, model=model).run_sync("oi", deps=deps)
 
     system = [part.content for part in state["messages"][0].parts if getattr(part, "part_kind", "") == "system-prompt"]
-    assert system == [SYSTEM_PROMPT]
+    assert system == [SYSTEM_PROMPT, ""]
+
+
+def test_kind_vocabulary_lists_registered_kinds(cfg, deps):
+    product = catalog.list_products(deps.conn)[0]
+    catalog.set_product_kind(deps.conn, product.id, "tomate")
+    model, state = _scripted(ModelResponse(parts=[TextPart("oi")]))
+
+    build_agent(cfg, model=model).run_sync("oi", deps=deps)
+
+    system = [part.content for part in state["messages"][0].parts if getattr(part, "part_kind", "") == "system-prompt"]
+    assert "tomate" in system[1]
+    assert "check_price/compare_stores" in system[1]
+
+
+def test_kind_vocabulary_stays_current_across_turns_sharing_history(cfg, deps):
+    """`dynamic=True` is what makes this work (docs/design/kind-resolution-in-routing.md, Decisão
+    1): `bot/turn.py::handle_text` always reuses `message_history`, so a system-prompt function
+    evaluated only once (the default, `dynamic=False`) would freeze the vocabulary at whatever the
+    catalogue looked like on the chat's first turn -- a `kind` registered afterwards by a separate
+    `julius produtos revisar` run would never reach a conversation already in progress."""
+    model, state = _scripted(ModelResponse(parts=[TextPart("primeiro")]), ModelResponse(parts=[TextPart("segundo")]))
+    agent = build_agent(cfg, model=model)
+
+    first = agent.run_sync("oi", deps=deps)
+    product = catalog.list_products(deps.conn)[0]
+    catalog.set_product_kind(deps.conn, product.id, "tomate")
+    agent.run_sync("de novo", deps=deps, message_history=first.new_messages())
+
+    system = [part.content for part in state["messages"][0].parts if getattr(part, "part_kind", "") == "system-prompt"]
+    assert "tomate" in system[1], "the second run must see the kind registered after the first"
 
 
 @pytest.mark.parametrize(
@@ -294,7 +350,7 @@ def test_system_prompt_states_the_rules_it_has_to_state(required):
 def test_prompt_is_versioned_and_stays_out_of_the_curation_versions():
     from julius.services import suggestions
 
-    assert BOT_PROMPT_VERSION == "2"
+    assert BOT_PROMPT_VERSION == "4"
     assert "bot_turn" not in suggestions.PROMPT_VERSIONS
 
 

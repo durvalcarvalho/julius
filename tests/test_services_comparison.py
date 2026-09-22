@@ -650,6 +650,37 @@ def test_check_price_ambiguous_unit_never_guesses(conn):
     assert result.verdict is None
 
 
+def test_check_price_unit_resolves_the_ambiguity(conn):
+    """Real bug (2026-09-22, confirmed live against production): reason="ambiguous_unit" told the
+    caller to ask "por peso ou por unidade", but nothing accepted the answer -- a real "por quilo"
+    reply just asked the same question again forever. `unit` closes that loop: filters history to
+    that sale unit before anything else, same as if the kind only ever had that one unit."""
+    loose = _product(conn, "TOMATE ITALIANO kg", "1", STORE_A)
+    packaged = _product(conn, "TOMATE TREBESCHI 250G DUO", "2", STORE_A)
+    set_kind(conn, loose, "tomate")
+    set_kind(conn, packaged, "tomate")
+    _price(conn, loose, STORE_A, "KG", 11.89, "2026-09-16T10:00:00", "k1")
+    _price(conn, packaged, STORE_A, "UN", 9.90, "2026-09-07T10:00:00", "k2")
+
+    by_weight = check_price(conn, "tomate", 12.0, unit="KG")
+
+    assert by_weight.reason is None
+    assert by_weight.reference_unit == "KG"
+    assert by_weight.reference_price == 11.89
+
+
+def test_check_price_unit_filtering_can_still_land_on_no_history(conn):
+    """A unit nobody has ever registered a price in (e.g. the person misheard/mistyped) is
+    "no_history", not a silent empty match on the other unit."""
+    loose = _product(conn, "TOMATE ITALIANO kg", "1", STORE_A)
+    set_kind(conn, loose, "tomate")
+    _price(conn, loose, STORE_A, "KG", 11.89, "2026-09-16T10:00:00", "k1")
+
+    result = check_price(conn, "tomate", 12.0, unit="UN")
+
+    assert result.reason == "no_history"
+
+
 def test_check_price_no_comparable_basis_is_not_mislabeled_as_no_history(conn):
     """Two different UN products, no content declared -- `comparison_basis` finds nothing
     comparable (same rule that drops these groups from `compare_stores` entirely). There IS

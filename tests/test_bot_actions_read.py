@@ -10,6 +10,8 @@ from julius.bot.actions import READ_ACTIONS, Deps, ProductListing, ShoppingCompa
 from julius.config import Config
 from julius.domain.models import PriceCheck, SearchOutcome
 from julius.parsers.df import DFReceiptParser
+from julius.repositories.products import resolve_product_id
+from julius.repositories.stores import ensure_store
 from julius.services import catalog, comparison as comparison_service, importing, search
 
 GAVE_UP = "desisti"
@@ -245,6 +247,60 @@ def _onion_id(stocked) -> int:
     return onion
 
 
+def _add_kind_ambiguous_brand(conn) -> None:
+    """Same shape as `test_match_kind_ambiguous_brand_fallback_stays_unresolved`
+    (test_services_search.py): two real products, "pepsi" matches both by name, and they disagree
+    on kind -- `_match_kind_via_product` refuses, `kind_candidates` has both to offer."""
+    ensure_store(conn, "00000000000099", "Synthetic store")
+    soda = resolve_product_id(conn, "00000000000099", "s1", "PEPSI REFRIGERANTE PET 2L")
+    snack = resolve_product_id(conn, "00000000000099", "s2", "PEPSICO SNACK BATATA 100G")
+    catalog.set_product_kind(conn, soda, "refrigerante")
+    catalog.set_product_kind(conn, snack, "salgadinho")
+
+
+def test_check_price_action_ambiguous_brand_asks_instead_of_guessing(stocked, cfg):
+    _add_kind_ambiguous_brand(stocked)
+
+    result, state = _run(READ_ACTIONS[4], {"item": "pepsi", "price": 10.0}, stocked, cfg)
+
+    retries = _retries(result)
+    assert any("refrigerante" in content and "salgadinho" in content for content in retries)
+    assert any("Pergunte à pessoa qual" in content for content in retries)
+    assert state["calls"] == 2, "a ModelRetry gives the model a second turn, same as any other one"
+
+
+def test_compare_stores_action_ambiguous_brand_aborts_the_whole_call(stocked, cfg):
+    """RF3/Decisão 3 of docs/design/kind-resolution-in-routing.md: tudo-ou-nada, mesmo precedente
+    de resolve_product -- um item ambíguo no meio da lista aborta a chamada inteira, mesmo com
+    "tomate" já resolvido antes dele."""
+    _add_kind_ambiguous_brand(stocked)
+    a, b = _tomato_ids(stocked)
+    catalog.set_product_kind(stocked, a, "tomate")
+    catalog.set_product_kind(stocked, b, "tomate")
+
+    result, state = _run(READ_ACTIONS[1], {"items": ("tomate", "pepsi")}, stocked, cfg)
+
+    retries = _retries(result)
+    assert any("refrigerante" in content and "salgadinho" in content for content in retries)
+    assert not isinstance(result.output, ShoppingComparison), "the call must abort, not return a partial result"
+
+
+def test_check_price_action_pre_existing_kind_tie_still_resolves_silently(stocked, cfg):
+    """Limite de escopo da Decisão 3 (docs/design/kind-resolution-in-routing.md): o empate já
+    aceito do match direto contra o vocabulário de kind (v2.10, KIND_MATCH_CUTOFF -- "leite" ->
+    "creme de leite") não é a ambiguidade nova que pergunta; continua resolvendo em silêncio."""
+    ensure_store(stocked, "00000000000098", "Synthetic store")
+    condensed = resolve_product_id(stocked, "00000000000098", "c1", "LEITE CONDENSADO 395G")
+    cream = resolve_product_id(stocked, "00000000000098", "c2", "CREME DE LEITE 200G")
+    catalog.set_product_kind(stocked, condensed, "leite condensado")
+    catalog.set_product_kind(stocked, cream, "creme de leite")
+
+    result, state = _run(READ_ACTIONS[4], {"item": "leite", "price": 10.0}, stocked, cfg)
+
+    assert state["calls"] == 1, "must not retry -- the tie resolves silently, same as today"
+    assert result.output.kind == "creme de leite"
+
+
 def test_compare_stores_action_reports_requested_count_and_single_store_kinds(stocked, cfg):
     """RF1/RF2 (docs/requirements/shopping-verdict-shape.md): a term that matches a known kind
     but has price in only one market must not vanish -- it goes to `single_store_kinds`, distinct
@@ -313,6 +369,24 @@ def test_check_price_action_unknown_item_returns_reason(stocked, cfg):
     assert result.output.kind is None
 
 
+@pytest.mark.parametrize("price", [0.0, -5.0])
+def test_check_price_action_rejects_a_non_positive_price(stocked, cfg, price):
+    """Achado real de monkey test (2026-09-22): sem esta guarda, "a picanha tá -5 reais o quilo,
+    boa?" respondia "Sim, vale a pena... -111% de diferença" -- um veredito sem sentido em vez de
+    pedir confirmação, a mesma disciplina que set_product_content já aplica pra quantidade."""
+    result, state = _run(READ_ACTIONS[4], {"item": "picanha", "price": price}, stocked, cfg)
+
+    assert any("preço precisa ser maior que zero" in content for content in _retries(result))
+    assert state["calls"] == 2
+
+
+def test_check_price_action_rejects_a_non_positive_quantity(stocked, cfg):
+    result, state = _run(READ_ACTIONS[4], {"item": "picanha", "price": 10.0, "quantity": 0.0}, stocked, cfg)
+
+    assert any("quantidade precisa ser maior que zero" in content for content in _retries(result))
+    assert state["calls"] == 2
+
+
 def test_check_price_action_passes_quantity_to_the_service(stocked, cfg, monkeypatch):
     """The bridge for the two-turn quantity loop (docs/design/quantity-aware-verdict.md, Decisão
     4): the action itself does no gate logic, it just forwards `quantity` -- monkeypatched here so
@@ -321,8 +395,8 @@ def test_check_price_action_passes_quantity_to_the_service(stocked, cfg, monkeyp
     catalog.set_product_kind(stocked, onion, "cebola")
     calls = []
 
-    def fake_check_price(conn, kind, price, quantity=None):
-        calls.append((kind, price, quantity))
+    def fake_check_price(conn, kind, price, quantity=None, unit=None):
+        calls.append((kind, price, quantity, unit))
         return PriceCheck(
             kind=kind, verdict=True, informed_price=price, reference_price=1.0, reference_unit="KG",
             reference_store="Loja", reference_at="2026-09-01T00:00:00", diff_pct=0.0, reason=None,
@@ -332,7 +406,29 @@ def test_check_price_action_passes_quantity_to_the_service(stocked, cfg, monkeyp
 
     result, _ = _run(READ_ACTIONS[4], {"item": "cebola", "price": 12.0, "quantity": 3.0}, stocked, cfg)
 
-    assert calls == [("cebola", 12.0, 3.0)]
+    assert calls == [("cebola", 12.0, 3.0, None)]
+
+
+def test_check_price_action_passes_unit_to_the_service(stocked, cfg, monkeypatch):
+    """The bridge for the ambiguous_unit loop (real bug, 2026-09-22): before this, "por quilo"
+    after check_price asked "por peso ou por unidade" had no parameter to answer through, and the
+    conversation asked the same question forever."""
+    onion = _onion_id(stocked)
+    catalog.set_product_kind(stocked, onion, "cebola")
+    calls = []
+
+    def fake_check_price(conn, kind, price, quantity=None, unit=None):
+        calls.append((kind, price, quantity, unit))
+        return PriceCheck(
+            kind=kind, verdict=True, informed_price=price, reference_price=1.0, reference_unit="KG",
+            reference_store="Loja", reference_at="2026-09-01T00:00:00", diff_pct=0.0, reason=None,
+        )
+
+    monkeypatch.setattr(comparison_service, "check_price", fake_check_price)
+
+    result, _ = _run(READ_ACTIONS[4], {"item": "cebola", "price": 8.0, "unit": "KG"}, stocked, cfg)
+
+    assert calls == [("cebola", 8.0, None, "KG")]
     assert result.output.verdict is True
 
 

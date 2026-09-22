@@ -12,6 +12,8 @@ from julius.services.search import (
     catalog_for_matching,
     closest_names,
     detect_tag,
+    kind_candidates,
+    known_kinds,
     match_kind,
     records_for_products,
     search_free_text,
@@ -60,6 +62,19 @@ def test_typo_still_matches(conn):
     exact = [(r.purchased_at, r.unit_price) for r in search_prices(conn, "picanha")]
     typo = [(r.purchased_at, r.unit_price) for r in search_prices(conn, "pcanha")]
     assert typo == exact
+
+
+def test_typo_tolerance_does_not_pull_in_an_unrelated_shorter_word(conn):
+    """Real incident (2026-09-21, monkey test against the production catalog): "picanha" matched
+    "Pinha" (id 112, a fruit) at score 83.3 -- above MATCH_SCORE_CUTOFF -- and its price was shown
+    as the cheapest in the same table as the real picanha. See WORD_LENGTH_GAP_LIMIT."""
+    _import(conn, "qrcode.html")
+    fruit = _product(conn, "Pinha", "999")
+    _price(conn, fruit, "KG", 16.99, "2026-09-18T00:00:00", "fruta-key")
+
+    rows = search_prices(conn, "picanha")
+
+    assert all(r.canonical_name != "Pinha" for r in rows), "Pinha nao e picanha"
 
 
 def test_unrelated_term_returns_empty(conn):
@@ -303,6 +318,113 @@ def test_match_kind_inexact_tie_keeps_todays_alphabetical_order(conn):
     set_kind(conn, cream, "creme de leite")
 
     assert match_kind(conn, "leite") == "creme de leite"
+
+
+def test_known_kinds_matches_all_kinds(conn):
+    product = _product(conn, "TOMATE ITALIANO kg", "1")
+    set_kind(conn, product, "tomate")
+
+    assert known_kinds(conn) == ["tomate"]
+
+
+def test_kind_candidates_empty_when_match_kind_already_resolves(conn):
+    """No caso já coberto pelo patch em produção (marca única resolvendo sem ambiguidade), não há
+    candidato nenhum a oferecer -- kind_candidates só existe para o caso em que match_kind
+    realmente se recusou por ambiguidade concreta."""
+    soda = _product(conn, "REFRIGERANTE COCA-COLA ORIGINAL PET 1,5L", "1")
+    set_kind(conn, soda, "refrigerante")
+
+    assert match_kind(conn, "coca") == "refrigerante"
+    assert kind_candidates(conn, "coca") == ()
+
+
+def test_kind_candidates_lists_disagreeing_products_for_an_ambiguous_brand(conn):
+    """Mesma fixture de test_match_kind_ambiguous_brand_fallback_stays_unresolved: match_kind
+    recusa (None), e é isto que kind_candidates devolve para o bot perguntar em vez de adivinhar
+    (docs/design/kind-resolution-in-routing.md, Decisão 3)."""
+    soda = _product(conn, "PEPSI REFRIGERANTE PET 2L", "1")
+    set_kind(conn, soda, "refrigerante")
+    snack = _product(conn, "PEPSICO SNACK BATATA 100G", "2")
+    set_kind(conn, snack, "salgadinho")
+
+    assert match_kind(conn, "pepsi") is None
+    assert kind_candidates(conn, "pepsi") == ("refrigerante", "salgadinho")
+
+
+def test_kind_candidates_stays_empty_for_the_pre_existing_accepted_tie(conn):
+    """Limite de escopo da Decisão 3: o empate já aceito do match direto contra o vocabulário
+    (v2.10, "leite" -> "creme de leite") não tem candidato de kind_candidates -- não é a
+    ambiguidade nova que este mecanismo cobre."""
+    condensed = _product(conn, "LEITE CONDENSADO 395G", "1")
+    set_kind(conn, condensed, "leite condensado")
+    cream = _product(conn, "CREME DE LEITE 200G", "2")
+    set_kind(conn, cream, "creme de leite")
+
+    assert kind_candidates(conn, "leite") == ()
+
+
+def test_match_kind_strips_article_and_quantity_noise(conn):
+    """Real incident (2026-09-21, bot channel): "Devo comprar um refrigerante por 12 reais de 2
+    litros?" resolved to kind=None even though "refrigerante" alone scores 100 -- _name_score
+    requires EVERY term word to match, and "um"/"2"/"litros" match nothing in any kind."""
+    product = _product(conn, "REFRIGERANTE PEPSI PET 2L", "1")
+    set_kind(conn, product, "refrigerante")
+
+    assert match_kind(conn, "um refrigerante de 2 litros") == "refrigerante"
+    assert match_kind(conn, "refrigerante 500ml") == "refrigerante"
+
+
+def test_match_kind_falls_back_to_product_name_for_a_brand(conn):
+    """A brand has no `kind` of its own, only the category it belongs to -- "guarana" (no kind
+    named that) must still resolve to "refrigerante" through the one product that carries it."""
+    product = _product(conn, "REFRIGERANTE ANTARCTICA GUARANA PET 1,5L", "1")
+    set_kind(conn, product, "refrigerante")
+
+    assert match_kind(conn, "guarana") == "refrigerante"
+
+
+def test_match_kind_prefers_product_over_a_borderline_coincidental_kind_match(conn):
+    """Real incident: "coca" scores exactly KIND_MATCH_CUTOFF (75) against "cacau em po"
+    (coincidental letter overlap via the prefix trick, same shape MATCH_SCORE_CUTOFF's docstring
+    already documents), while resolving cleanly to "refrigerante" through the real Coca-Cola
+    product. A confident match (not exactly at the cutoff) is never second-guessed this way --
+    covered by test_match_kind_exact_and_typo's "tomatee" and the pikana/arroz cases measured
+    against the real catalogue (see KIND_MATCH_CUTOFF's docstring)."""
+    cocoa = _product(conn, "CACAU EM PO 200G", "1")
+    set_kind(conn, cocoa, "cacau em pó")
+    soda = _product(conn, "REFRIGERANTE COCA-COLA ORIGINAL PET 1,5L", "2")
+    set_kind(conn, soda, "refrigerante")
+
+    assert match_kind(conn, "coca") == "refrigerante"
+
+
+def test_match_kind_borderline_coincidence_yields_to_real_brand_ambiguity(conn):
+    """Achado de revisão (advisor), não observado em produção ainda: quando o score cai exatamente
+    no corte (a mesma coincidência de "coca" ~ "cacau em pó") E o fallback por produto encontra
+    2+ kinds discordando (ambiguidade de marca de verdade, não uma correção confiante única), a
+    ambiguidade tem que prevalecer sobre a coincidência -- None, para kind_candidates assumir,
+    nunca a coincidência silenciosa. "coca" sozinho (test_match_kind_prefers_product_over_a_
+    borderline_coincidental_kind_match) não cai aqui porque lá o fallback é unânime."""
+    cocoa = _product(conn, "CACAU EM PO 200G", "1")
+    set_kind(conn, cocoa, "cacau em pó")
+    soda = _product(conn, "REFRIGERANTE COCA-COLA ORIGINAL PET 1,5L", "2")
+    set_kind(conn, soda, "refrigerante")
+    candy = _product(conn, "COCADA CREMOSA 200G", "3")
+    set_kind(conn, candy, "doces")
+
+    assert match_kind(conn, "coca") is None
+    assert kind_candidates(conn, "coca") == ("doces", "refrigerante")
+
+
+def test_match_kind_ambiguous_brand_fallback_stays_unresolved(conn):
+    """The product-name fallback never guesses between two disagreeing kinds -- same discipline as
+    the pre-existing "ambiguous_unit"/tie-break rules elsewhere in this module."""
+    soda = _product(conn, "PEPSI REFRIGERANTE PET 2L", "1")
+    set_kind(conn, soda, "refrigerante")
+    snack = _product(conn, "PEPSICO SNACK BATATA 100G", "2")
+    set_kind(conn, snack, "salgadinho")
+
+    assert match_kind(conn, "pepsi") is None
 
 
 def test_search_free_text_explicit_tag_skips_detection(conn):

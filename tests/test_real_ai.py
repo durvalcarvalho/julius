@@ -198,6 +198,125 @@ def test_reading_questions_route_to_the_right_action(deps):
     )
 
 
+def test_the_original_coca_incident_no_longer_says_not_in_catalog(deps):
+    """Regressão de ponta a ponta do incidente real (2026-09-21) que abriu
+    docs/requirements/kind-resolution-in-routing.md: a mesma frase do usuário, contra o modelo de
+    verdade, não pode mais terminar em "não tá no catálogo" -- o produto (Coca-Cola Zero/original)
+    sempre existiu; o que faltava era resolver "coca" -> "refrigerante", que o patch determinístico
+    (`_match_kind_via_product`) já cobre desde o `/sc:troubleshoot --fix` desta mesma sessão."""
+    reply = _ask(deps, "Devo comprar uma coca por 12 reais?")
+    call = _last_call(deps)
+    _SPENT.append(call["cost_usd"])
+
+    print(f"\n  {call['raw_response']}: {reply.text}")
+    assert call["raw_response"] == PriceCheck.__name__, f"esperava check_price, veio {call['raw_response']}"
+    assert "não tá no catálogo" not in reply.text.lower()
+    assert "não conheço" not in reply.text.lower()
+
+
+def test_a_real_brand_ambiguity_becomes_a_question_not_a_guess(deps):
+    """"pepsi" bate em dois produtos reais do catálogo de produção que discordam de kind
+    (Refrigerante Pepsi vs. Cream cheese President -- o mesmo falso positivo do scorer de palavra
+    já documentado em MATCH_SCORE_CUTOFF, medido ao vivo contra este banco antes de escrever este
+    teste). `_resolve_kind` levanta ModelRetry com os dois candidatos; o modelo, seguindo o
+    SYSTEM_PROMPT, deve perguntar em texto -- nunca inventar um veredito de sim/não."""
+    reply = _ask(deps, "a pepsi tá 8 reais o litro, tá bom?")
+    call = _last_call(deps)
+    _SPENT.append(call["cost_usd"])
+
+    print(f"\n  {reply.text}")
+    assert _is_free_text(call["raw_response"]), f"esperava texto perguntando, veio {call['raw_response']}"
+    assert reply.text, "resposta vazia"
+
+
+def test_zero_result_fallback_never_asks_for_price_or_store_back(settings):
+    """docs/requirements/bot-persona-fallback-improvements.md §9/§10, Caso 1 -- valida os dois
+    remédios de docs/design/fallback-voice-and-context-prompts.md §1 de ponta a ponta.
+
+    Achado ao escrever este teste: a fixture `deps` compartilhada do resto deste arquivo NUNCA
+    passa `client=`, e `bot/turn.py::_render_output`/`_render_no_match` tratam `deps.client is
+    None` como "sem narração" (mesmo com a IA configurada) -- o resto da suíte mede só ROTEAMENTO
+    (qual ação foi chamada), nunca a narração da persona, exatamente como o docstring do arquivo
+    já dizia ("Roteamento (medido e reportado)"). Sem um client de verdade aqui, este teste
+    validaria só o caminho "Nenhum resultado." puro, nunca `no_match_fallback_line` (Remédio A)
+    nem o exemplo novo do prompt `persona` (Remédio B) -- por isso monta seu próprio `Deps` com
+    `HttpLlmClient`, em vez de reaproveitar a fixture `deps`.
+
+    "feijão" é o mesmo termo do exemplo novo em SYSTEM_PROMPTS["persona"] e, medido contra o
+    catálogo real (2026-09-22), não existe produto de feijão cadastrado -- garante que
+    search_prices roda e o caminho de zero-resultado é de fato exercitado."""
+    conn = db.connect(settings.db_path)
+    try:
+        deps = Deps(conn=conn, config=settings, client=HttpLlmClient.from_config(settings))
+        agent = build_agent(settings)
+        reply = asyncio.run(handle_text(agent, ChatState(), deps, "quanto tá o feijão?"))
+        call = _last_call(deps)
+        _SPENT.append(call["cost_usd"])
+    finally:
+        conn.close()
+
+    print(f"\n  {reply.text}")
+    lowered = reply.text.lower()
+    for red_flag in ("me diz o preço", "me diga o preço", "me fala o preço", "me informa o preço", "qual mercado"):
+        assert red_flag not in lowered, f"pediu dado de volta: {reply.text!r}"
+    assert reply.text != "Nenhum resultado.", "caiu no caminho antigo sem narração nenhuma"
+
+
+def test_echoing_the_bots_own_remark_does_not_search_for_it_as_a_product(deps):
+    """Caso 2 do requisito: a piada real do usuário ("sabe quanto tempo de luz isso paga?") ecoando
+    um comentário anterior do próprio Julius, não um pedido de preço novo. Dois turnos de verdade,
+    não histórico fabricado -- turno 1 estabelece um comentário real do bot sobre um produto real
+    (picanha, já usado em ROUTING_CASES); turno 2 é a piada, sem citar nenhum produto de mercado.
+    O SYSTEM_PROMPT (regra nova) deve responder em texto, nunca chamar search_prices com "luz" ou
+    "tempo" como se fossem item novo."""
+    state = ChatState()
+    setup = _ask(deps, "quanto paguei de picanha?", state)
+    _SPENT.append(_last_call(deps)["cost_usd"])
+    assert setup.text, "resposta vazia no turno de preparo"
+
+    reply = _ask(deps, "sabe quanto tempo de luz isso paga?", state)
+    call = _last_call(deps)
+    _SPENT.append(call["cost_usd"])
+
+    print(f"\n  turno 1: {setup.text}\n  turno 2 ({call['raw_response']}): {reply.text}")
+    assert _is_free_text(call["raw_response"]), f"tratou a piada como item novo: {call['raw_response']}"
+
+
+def test_a_repeated_price_on_a_similar_item_asks_before_assuming_a_new_product(deps):
+    """Caso 3 do requisito, versão fiel ao incidente real: "coca por 12 reais" seguido de
+    "refrigerante 2L por 12 reais" -- o MESMO preço repetido é o sinal, não só o tamanho sozinho
+    (achado do troubleshoot de 2026-09-22: a primeira versão deste teste não repetia o preço, e por
+    isso testava um sinal mais fraco do que o incidente real trazia; o modelo buscou direto porque
+    "refrigerante 2 litros" tem resposta real própria -- o catálogo tem um Pepsi 2L de verdade).
+    Repetir o preço não ajuda `search_prices` a desambiguar nada sozinho, então só resta perguntar."""
+    state = ChatState()
+    setup = _ask(deps, "coca por 12 reais, tá bom?", state)
+    _SPENT.append(_last_call(deps)["cost_usd"])
+    assert setup.text, "resposta vazia no turno de preparo"
+
+    reply = _ask(deps, "e refrigerante 2L por 12 reais?", state)
+    call = _last_call(deps)
+    _SPENT.append(call["cost_usd"])
+
+    print(f"\n  turno 1: {setup.text}\n  turno 2 ({call['raw_response']}): {reply.text}")
+    assert _is_free_text(call["raw_response"]), (
+        f"tratou como pergunta nova sem checar se é a mesma compra: {call['raw_response']}"
+    )
+
+
+def test_a_bare_vague_question_asks_for_the_item_instead_of_an_empty_search(deps):
+    """Caso 5 do requisito: "tá caro?" sem nenhum item, numa conversa nova (sem histórico pra
+    juntar) -- o bot tem de perguntar qual item, nunca chamar search_prices com termo vazio nem dar
+    veredito por conta própria."""
+    reply = _ask(deps, "tá caro?")
+    call = _last_call(deps)
+    _SPENT.append(call["cost_usd"])
+
+    print(f"\n  {call['raw_response']}: {reply.text}")
+    assert _is_free_text(call["raw_response"]), f"esperava pergunta pelo item, veio {call['raw_response']}"
+    assert reply.text, "resposta vazia"
+
+
 # --- invariantes: valem qualquer que seja a escolha do modelo --------------------
 
 

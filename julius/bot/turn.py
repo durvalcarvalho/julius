@@ -146,6 +146,19 @@ def _charge(deps: Deps, text: str, *, attempt: int, kind: str | None, latency_ms
     )
 
 
+def _search_narration_context(records: Sequence[PriceRecord]) -> str:
+    """Real bug found by monkey test (2026-09-22): a search for a generic word like "leite" hits
+    4 different products (two creme de leite, a leite UHT, a leite condensado) -- narrated with the
+    old fixed context "histórico de preço de um produto" (singular), the persona reliably (temp=0,
+    reproduced twice) attributed the whole count to just the first product's name ("4 compras
+    registradas de Creme de leite Itambé"), even though `records_facts` lists all four correctly.
+    The context label is what told it "this is one product's history"; it wasn't. Telling it
+    accurately when the search actually spans more than one product removes the false premise."""
+    if len({record.product_id for record in records}) <= 1:
+        return "histórico de preço de um produto"
+    return "histórico de preço de vários produtos diferentes que bateram na mesma busca"
+
+
 def _first_per_product(records: Sequence[PriceRecord], limit: int) -> list[PriceRecord]:
     """One row per distinct product, first (most relevant) occurrence wins, capped at `limit`.
     Alternatives are different products -- unlike `_collapse_repeated_prices` in render.py, which
@@ -248,7 +261,8 @@ async def _render_output(output: object, state: ChatState, deps: Deps) -> Reply:
             return Reply(base)
         if len(records) > NARRATE_MAX_RECORDS:
             return Reply(base)
-        remark = await _narrate(deps, "histórico de preço de um produto", records_facts(records))
+        context = _search_narration_context(records)
+        remark = await _narrate(deps, context, records_facts(records))
         if remark:
             return Reply(escape(remark))
         if len(records) <= FALLBACK_LINE_MAX_RECORDS:

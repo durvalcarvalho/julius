@@ -33,7 +33,7 @@ PROMPT_VERSIONS: dict[str, str] = {
     "match": "1",
     "packaging": "1",
     "store": "1",
-    "persona": "6",
+    "persona": "7",
     "category": "1",
 }
 
@@ -320,7 +320,23 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "Exemplo de saída:\n"
         '{"reply": "Você já conseguiu por R$ 35,00 o quilo, no Costa Atacadao ADE Aguas Claras, '
         'quarta-feira.\\n\\nR$ 40,00 agora é 14% a mais -- pra uma peça só não é nada, pra estocar já '
-        'pesa. Quantos quilos você vai comprar?"}'
+        'pesa. Quantos quilos você vai comprar?"}\n'
+        "\n"
+        # v7 (2026-09-22, docs/design/fallback-voice-and-context-prompts.md, Remédio B): dos 6
+        # contextos que a persona narra, "busca sem resultado" era o único sem exemplo próprio --
+        # só a regra genérica de não explicar a ausência (linha acima). Medido no incidente que
+        # abriu esta rodada: sem exemplo, a resposta saía genérica/repetida ("esse item ainda não
+        # tá no catálogo...") mesmo com a IA respondendo de verdade. Nunca pede preço/mercado de
+        # volta -- não existe ação pra gravar isso (§9 do requisito), então pedir seria prometer o
+        # que o sistema não faz.
+        "Exemplo de entrada (busca sem resultado nenhum -- nunca explique a ausência nem peça "
+        "preço/mercado de volta, só comente):\n"
+        "contexto: busca sem resultado\n"
+        "fatos:\n"
+        "produto pedido, sem preço registrado ainda: feijão\n"
+        "Exemplo de saída:\n"
+        '{"reply": "Feijão eu ainda não tenho na conta.\\n\\nEsse aí sobe junto com o dólar toda '
+        'vez -- vou ficar de olho quando alguém comprar."}'
     ),
 }
 

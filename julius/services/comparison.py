@@ -18,6 +18,7 @@ from julius.domain.models import (
     PriceCheck,
     PriceExtreme,
     PriceRecord,
+    SaleUnit,
     ShoppingVerdict,
     StoreComparison,
     StorePrice,
@@ -197,7 +198,9 @@ is implausible). Used only to decide whether the gap already settles the verdict
 this range, without asking quantity at all (Decisão 1)."""
 
 
-def check_price(conn: sqlite3.Connection, kind: str, price: float, quantity: float | None = None) -> PriceCheck:
+def check_price(
+    conn: sqlite3.Connection, kind: str, price: float, quantity: float | None = None, unit: SaleUnit | None = None
+) -> PriceCheck:
     """Checks a price the person is seeing right now against the cheapest ever registered for
     `kind` -- the one exception this project makes to "never a verdict on an absolute price" (see
     docs/design/shopping-verdict-shape.md, Decisão 4 and RNF2 of the requirements doc). `kind`
@@ -221,6 +224,20 @@ def check_price(conn: sqlite3.Connection, kind: str, price: float, quantity: flo
     "Preço por conteúdo" in CLAUDE.md) is `reason="no_comparable_basis"`, never mislabelled as "no
     history": there IS history, it just cannot be compared without a content declared first.
 
+    `unit`, when given, filters the history to that sale unit before anything else -- the second
+    half of `reason="ambiguous_unit"`, which used to be a dead end: the reason told the caller to
+    ask "por peso ou por unidade", but nothing accepted the answer, so a real "por quilo" reply
+    from the person (confirmed live, 2026-09-22) just asked the same question again forever. The
+    caller resolves the answer to "KG"/"UN" (same vocabulary `PriceRecord.unit`/`ReceiptItem.unit`
+    already use) and calls again with `unit` set.
+
+    Real bug found and fixed the same day (2026-09-22, live against the production model): the
+    caller (`bot/actions.py::check_price`) let the model pass `quantity` on the very first ask,
+    before the person ever said how much -- `deepseek-flash` defaulted to `quantity=1` unprompted,
+    skipping `reason="quantity_needed"` (and the question that reason exists to trigger) entirely.
+    The fix lives in the action's docstring/prompt discipline, not here: this function still never
+    second-guesses whatever `quantity` it receives, same as before.
+
     Whether the answer needs `quantity` at all is decided by the R$ gap alone, not by `quantity`
     being given (see docs/design/quantity-aware-verdict.md, Decisão 1): a gap so small that it
     never clears `WORTH_IT_THRESHOLD_REAIS` even at `PLAUSIBLE_QTY_MAX`, or so large it already
@@ -231,6 +248,8 @@ def check_price(conn: sqlite3.Connection, kind: str, price: float, quantity: flo
     settles it by `gap * quantity` against `WORTH_IT_THRESHOLD_REAIS`."""
     typed = [product.id for product in products.list_products(conn) if product.kind == kind]
     records = prices.prices_for_products(conn, typed) if typed else []
+    if unit is not None:
+        records = [record for record in records if record.unit == unit]
     empty = PriceCheck(
         kind=kind, verdict=None, informed_price=price, reference_price=None, reference_unit=None,
         reference_store=None, reference_at=None, diff_pct=None, reason="no_history",

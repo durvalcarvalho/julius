@@ -283,9 +283,20 @@ def test_no_match_fallback_line_with_alternatives():
 
 
 def test_no_match_fallback_line_without_alternatives():
-    assert render.no_match_fallback_line("alcatra", []) == (
-        "Ainda não tenho preço de alcatra no catálogo. Me diga outro produto que eu confiro?"
-    )
+    """docs/requirements/bot-persona-fallback-improvements.md §9: voz, sem pedir dado de volta --
+    não existe ação pra gravar preço avulso, então convidar a reportar seria promessa vazia."""
+    assert render.no_match_fallback_line("alcatra", []) == "Alcatra eu ainda não tenho na conta."
+
+
+def test_no_match_fallback_line_without_alternatives_and_without_a_term():
+    assert render.no_match_fallback_line(None, []) == "Isso eu ainda não tenho na conta."
+
+
+def test_no_match_fallback_line_without_alternatives_never_asks_for_data_back():
+    text = render.no_match_fallback_line("feijão", [])
+    assert "?" not in text
+    assert "preço" not in text.lower()
+    assert "mercado" not in text.lower()
 
 
 def test_compare_fallback_line_one_line_per_group():

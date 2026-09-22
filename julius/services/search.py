@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import replace
@@ -115,6 +116,15 @@ def known_tags(conn: sqlite3.Connection) -> list[str]:
     return products.all_tag_names(conn)
 
 
+def known_kinds(conn: sqlite3.Connection) -> list[str]:
+    """The kind vocabulary, for callers outside `repositories` reach -- same shape as
+    `known_tags`. Consumed by `bot/agent.py`'s dynamic system prompt (docs/design/
+    kind-resolution-in-routing.md): the routing model is told these exact spellings so it can
+    already return one of them for `check_price`/`compare_stores`, instead of free text that
+    `match_kind` then has to bridge alone."""
+    return products.all_kinds(conn)
+
+
 def detect_tag(conn: sqlite3.Connection, words: Sequence[str]) -> tuple[str | None, str | None]:
     """Tests each word of `words` against the known tags; the single best-scoring word above
     TAG_MATCH_CUTOFF (if any) is consumed as the tag, the rest re-joined as the term."""
@@ -168,6 +178,36 @@ real kinds and every generic term already documented above: only "tomate" and "m
 an inexact tie is a new guess, not a fix, without its own measured evidence."""
 
 
+KIND_NOISE_WORDS = frozenset({
+    "UM", "UMA", "UNS", "UMAS",
+    "LITRO", "LITROS", "MILILITRO", "MILILITROS",
+    "QUILO", "QUILOS", "GRAMA", "GRAMAS",
+    "UNIDADE", "UNIDADES",
+})
+"""Term words stripped before match_kind scores, on top of what _name_score already drops
+(CONNECTIVE_WORDS) -- articles and spelled-out units that a live-price question naturally carries
+("uma coca", "refrigerante de 2 litros") but no `kind` value ever contains: measured against the
+98 real kinds, zero collisions. Bare unit *letters* (L, KG, G, UN, ML) are handled separately by
+_QUANTITY_TOKEN below, because in real phrasing they arrive glued to the number ("2L", "500G"),
+not as their own word.
+
+Real incident (2026-09-21, production catalog, bot channel): "Devo comprar uma coca por 12 reais?"
+and "Devo comprar um refrigerante por 12 reais de 2 litros?" both came back reason=unknown_item
+even though "refrigerante" alone scores 100 against its own kind -- _name_score requires EVERY term
+word to find a match, and "uma"/"2"/"litros" match nothing in any kind, dragging the minimum below
+KIND_MATCH_CUTOFF. Same shape of bug CONNECTIVE_WORDS already fixed for "suco de uva" (v2.8), for
+the word class a live-price question introduces that plain search terms mostly don't."""
+
+_QUANTITY_TOKEN = re.compile(r"^[0-9]+([.,][0-9]+)?[A-Z]{0,4}$")
+"""A term word that is a bare number or a number glued to a unit ("2", "1,5L", "500G", "30UN") --
+never part of a `kind`'s identity. Stripped alongside KIND_NOISE_WORDS in match_kind."""
+
+
+def _strip_kind_noise(words: Sequence[str]) -> list[str]:
+    filtered = [word for word in words if word not in KIND_NOISE_WORDS and not _QUANTITY_TOKEN.match(word)]
+    return filtered or list(words)
+
+
 def match_kind(conn: sqlite3.Connection, term: str) -> str | None:
     """One term, one kind -- unlike detect_tag (a list of words competing for one tag), each item
     of a shopping list is matched independently. No kind registered yet -> None, without paying
@@ -175,22 +215,101 @@ def match_kind(conn: sqlite3.Connection, term: str) -> str | None:
 
     Uses _name_score (word-level, prefix-aware), not whole-string fuzz.ratio: a `kind` vocabulary
     mixes single words ("tomate") with compounds ("leite uht"), the same short-term-vs-long-name
-    shape that already broke product-name matching before v2.3.1 -- see KIND_MATCH_CUTOFF."""
+    shape that already broke product-name matching before v2.3.1 -- see KIND_MATCH_CUTOFF.
+
+    Falls back to product-name resolution (`_match_kind_via_product`) when no `kind` value itself
+    matches -- a brand ("coca", "pepsi") has no `kind` of its own, only the category it belongs to
+    ("refrigerante") does. Also consulted, and preferred, when the direct match barely clears
+    KIND_MATCH_CUTOFF (score exactly at the cutoff, not above it): real incident, "coca" scores
+    exactly 75 against "cacau em pó" (`fuzz.ratio("COCA", "CACAU"[:4])`, the same prefix trick that
+    lets "refri" reach "REFRIGERANTE" catching a coincidental 4-letter overlap) while resolving
+    cleanly to "refrigerante" through the two real Coca-Cola products. Scoped to exactly-at-cutoff
+    on purpose, the same band MATCH_SCORE_CUTOFF's and NEAR_MISS_CUTOFF's docstrings already
+    document as where a coincidental overlap survives, never above it -- a confident fuzzy match
+    like "pikana" -> "picanha" (76.9, a typo one edit away) is not second-guessed, only measured to
+    confirm it doesn't land exactly on 75 too.
+
+    In that same borderline band, if the product fallback itself finds 2+ disagreeing kinds
+    (genuine brand ambiguity, not a single confident correction), this returns `None` rather than
+    the coincidental direct match -- found by `advisor` review, not observed in production yet:
+    without this, a term landing exactly on the cutoff *and* matching two real, disagreeing
+    products would silently keep the coincidence (`match_kind` non-`None`), and `kind_candidates`
+    would never even be consulted (`_resolve_kind` only calls it when `match_kind` refused). `None`
+    here is what lets that ambiguity surface as a question instead of a guess."""
     kinds = products.all_kinds(conn)
     if not kinds:
         return None
-    term_words = normalize_text(term).split()
+    term_words = _strip_kind_noise(normalize_text(term).split())
     scored = [(_name_score(term_words, normalize_text(kind).split()), kind) for kind in kinds]
     best_score = max(score for score, _ in scored)
     if best_score < KIND_MATCH_CUTOFF:
-        return None
+        return _match_kind_via_product(conn, term_words)
     tied = [kind for score, kind in scored if score == best_score]
     if len(tied) > 1:
         term_norm = " ".join(term_words)
         exact = [kind for kind in tied if " ".join(normalize_text(kind).split()) == term_norm]
         if exact:
             return exact[0]
-    return tied[0]
+    direct = tied[0]
+    if best_score == KIND_MATCH_CUTOFF:
+        found = _kinds_via_product(conn, term_words)
+        if len(found) > 1:
+            return None
+        if len(found) == 1 and next(iter(found)) != direct:
+            return next(iter(found))
+    return direct
+
+
+def _kinds_via_product(conn: sqlite3.Connection, term_words: Sequence[str]) -> frozenset[str]:
+    """The `kind`s of every product `term_words` matches by name (`matching_product_ids`, the same
+    calibrated matcher `search_prices` uses) -- the raw evidence both `_match_kind_via_product`
+    (resolve when unanimous) and `kind_candidates` (offer when it's not) are built from."""
+    term = " ".join(term_words)
+    if not term:
+        return frozenset()
+    ids = matching_product_ids(conn, term)
+    return frozenset(
+        product.kind for product in products.list_products(conn) if product.id in ids and product.kind is not None
+    )
+
+
+def _match_kind_via_product(conn: sqlite3.Connection, term_words: Sequence[str]) -> str | None:
+    """When no `kind` name itself matches, resolves via product name instead -- the same
+    calibrated matcher `search_prices` already uses (`matching_product_ids`, MATCH_SCORE_CUTOFF),
+    reused instead of a hand-maintained brand-to-kind list that would need a new entry for every
+    brand the catalog ever gains. Real incident: "coca" and "pepsi" have no `kind` of their own
+    (both live under kind "refrigerante"), but "coca" already matches exactly the two Coca-Cola
+    products by name. Resolves only when every matched product agrees on the same kind -- "pepsi"
+    also brushes "Cream cheese President" (a known false positive of the word-level scorer, see
+    MATCH_SCORE_CUTOFF's docstring), and the two disagree on kind, so this stays unresolved
+    (`None`) rather than guessing between them; `kind_candidates` is where that disagreement
+    surfaces instead of being discarded."""
+    found = _kinds_via_product(conn, term_words)
+    return next(iter(found)) if len(found) == 1 else None
+
+
+def kind_candidates(conn: sqlite3.Connection, term: str) -> tuple[str, ...]:
+    """What `match_kind` knows but discards when it refuses by brand ambiguity (2+ real products
+    disagreeing on kind, via `_match_kind_via_product`) -- the same information `resolve_product`
+    already exposes so the bot can ask the person instead of guessing (docs/design/
+    kind-resolution-in-routing.md, Decisão 3). Empty whenever `match_kind` already resolved, or its
+    refusal has nothing concrete to offer -- deliberately NOT the tie already accepted for a direct
+    match against the `kind` vocabulary itself (e.g. "leite" -> "creme de leite", KIND_MATCH_CUTOFF):
+    that ambiguity was measured and accepted in v2.10, and reopening it needs its own evidence, not
+    a side effect of this function.
+
+    Checks `match_kind` itself first, rather than trusting the caller to only ask when it already
+    returned `None`: "leite" alone would otherwise report "leite condensado"/"creme de leite" as
+    candidates too, via the exact same `_kinds_via_product` machinery -- real failure caught by
+    `test_kind_candidates_stays_empty_for_the_pre_existing_accepted_tie` before this check existed.
+    The extra `match_kind` call is cheap (same cost this project already pays everywhere else for
+    a personal catalog of a few hundred products) and makes the scope boundary above true by
+    construction, not just by convention at the one call site that happens to honor it today."""
+    if match_kind(conn, term) is not None:
+        return ()
+    term_words = _strip_kind_noise(normalize_text(term).split())
+    found = _kinds_via_product(conn, term_words)
+    return tuple(sorted(found)) if len(found) > 1 else ()
 
 
 def search_free_text(
@@ -253,6 +372,39 @@ def closest_names(conn: sqlite3.Connection, term: str, limit: int = 3) -> list[t
     return sorted(scores.items(), key=lambda item: -item[1])[:limit]
 
 
+WORD_LENGTH_GAP_LIMIT = 1
+"""Real incident (2026-09-21, monkey test against the production catalog): `matching_product_ids`
+matched "picanha" (a search for beef) to "Pinha" (id 112, a fruit) at score 83.3 -- above
+MATCH_SCORE_CUTOFF, and high enough to mark the fruit's price as the group's cheapest in the reply
+table. The prefix trick is a no-op in this direction (truncating "PINHA" to 7 characters, the
+length of "PICANHA", changes nothing -- it is already shorter), so the whole-string coincidence
+alone cleared the bar: a two-character deletion ("PICANHA" minus "CA") between two completely
+unrelated products.
+
+Measured against every pair of distinct words in the real catalog (150+ words, no substring
+relationship) that scores >= MATCH_SCORE_CUTOFF in the *query-is-longer-than-catalog-word*
+direction: every one of them is a coincidence between unrelated products, none is a required
+match. The one required case that scores exactly at the cutoff in this same direction, "arros" ->
+"Arroz" (both 5 letters, one substitution), has length gap 0 -- so does every other required
+one-edit typo this project relies on (a substitution keeps length identical; the closest real
+insertion/deletion case is "pcanha" -> "Picanha", but there the catalog word is *longer*, the
+opposite direction, untouched by this guard). Gap 1 is kept with margin to spare; nothing measured
+needs it. Scoped to only this direction on purpose: when the catalog word is longer than the query
+(the abbreviation/prefix case, "refri" -> "REFRIGERANTE"), the same coincidence shape is the
+*price* of that feature (see MATCH_SCORE_CUTOFF's "pao" -> "Cacau em pó" etc.) and is not touched
+here -- fixing that direction too would need to weaken the prefix trick itself, unmeasured and
+out of scope for one incident."""
+
+
+def _word_score(word: str, other: str) -> float:
+    """The best of whole-string and prefix similarity for one term word against one name word --
+    see WORD_LENGTH_GAP_LIMIT for why a large length gap voids the whole-string score when `other`
+    is the shorter one."""
+    if len(other) <= len(word) and len(word) - len(other) > WORD_LENGTH_GAP_LIMIT:
+        return 0.0
+    return max(fuzz.ratio(word, other), fuzz.ratio(word, other[: len(word)]))
+
+
 def _name_score(term_words: Sequence[str], name_words: Sequence[str]) -> float:
     """Every word of the term has to find a close word in the name: min over the term's words of
     the best per-word score. The prefix comparison is what keeps an abbreviated term matching
@@ -262,10 +414,7 @@ def _name_score(term_words: Sequence[str], name_words: Sequence[str]) -> float:
     if not term_words or not name_words:
         return 0.0
     term_words = [word for word in term_words if word not in CONNECTIVE_WORDS] or term_words
-    return min(
-        max(max(fuzz.ratio(word, other), fuzz.ratio(word, other[: len(word)])) for other in name_words)
-        for word in term_words
-    )
+    return min(max(_word_score(word, other) for other in name_words) for word in term_words)
 
 
 def matching_product_ids(conn: sqlite3.Connection, term: str) -> set[int]:

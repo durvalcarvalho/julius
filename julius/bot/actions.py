@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pydantic_ai import ModelRetry, RunContext
 
 from julius.config import Config
-from julius.domain.models import PriceCheck, Product, SearchOutcome, ShoppingVerdict, Store, StoreComparison
+from julius.domain.models import PriceCheck, Product, SaleUnit, SearchOutcome, ShoppingVerdict, Store, StoreComparison
 from julius.domain.formatting import content_text
 from julius.domain.normalization import digits_only, normalize_content, normalize_text
 from julius.infra import ai_log
@@ -136,6 +136,23 @@ def resolve_store(conn: sqlite3.Connection, reference: str) -> Store:
     raise ModelRetry(f"Nenhum mercado chamado «{reference}». Use list_stores para ver os mercados.")
 
 
+def _resolve_kind(conn: sqlite3.Connection, item: str) -> str | None:
+    """Like `resolve_product`/`resolve_store`, but for `kind`: returns the resolved type, `None`
+    for today's "not recognized" behavior, or raises `ModelRetry` when `match_kind` refused with
+    concrete candidates to offer (a brand matching two real products that disagree on kind) --
+    never picks between them on its own (docs/design/kind-resolution-in-routing.md, Decisão 3)."""
+    kind = search_service.match_kind(conn, item)
+    if kind is not None:
+        return kind
+    candidates = search_service.kind_candidates(conn, item)
+    if candidates:
+        raise ModelRetry(
+            f"Mais de um tipo combina com «{item}»: {', '.join(candidates)}. "
+            "Pergunte à pessoa qual, e chame de novo com o tipo escolhido."
+        )
+    return None
+
+
 async def search_prices(ctx: RunContext[Deps], words: str, tag: str | None = None, limit: int = 20) -> SearchOutcome:
     """Busca no histórico de preços já pagos, por nome de produto e/ou categoria.
 
@@ -177,7 +194,7 @@ async def compare_stores(ctx: RunContext[Deps], items: tuple[str, ...]) -> Shopp
     matched: list[str] = []
     unmatched: list[str] = []
     for term in terms:
-        kind = search_service.match_kind(ctx.deps.conn, term)
+        kind = _resolve_kind(ctx.deps.conn, term)
         if kind is None:
             unmatched.append(term)
         elif kind not in matched:
@@ -208,12 +225,20 @@ async def compare_stores(ctx: RunContext[Deps], items: tuple[str, ...]) -> Shopp
     )
 
 
-async def check_price(ctx: RunContext[Deps], item: str, price: float, quantity: float | None = None) -> PriceCheck:
+async def check_price(
+    ctx: RunContext[Deps], item: str, price: float, quantity: float | None = None, unit: SaleUnit | None = None
+) -> PriceCheck:
     """Confere se um preço que a pessoa está vendo agora no mercado é bom, comparado ao histórico.
 
     Use SÓ quando a pessoa informar um valor que ela mesma está vendo (ex.: "os ovos tão a 14
     reais, tá bom?", "aqui o quilo do tomate tá 9,90"). NUNCA para "está caro?" sem nenhum preço
     dito -- isso continua indo para search_prices, sem veredito.
+
+    NUNCA informe `quantity` nesta primeira chamada, mesmo que pareça razoável assumir "1" --
+    deixe de fora e deixe esta ação decidir se precisa perguntar. Exemplo: "a picanha tá 60 reais
+    o quilo, compro?" -> chame check_price(item="picanha", price=60), SEM quantity. Só informe
+    quantity quando a pessoa já tiver dito quanto vai levar, ou ao responder a uma pergunta que uma
+    chamada anterior sua já fez.
 
     Se o resultado vier com reason="quantity_needed", pergunte à pessoa quanto ela pretende
     comprar (na mesma unidade que reference_unit já diz) e chame esta ação de novo, com os mesmos
@@ -221,20 +246,30 @@ async def check_price(ctx: RunContext[Deps], item: str, price: float, quantity: 
     vez, chame de novo com uma quantidade pequena (ex.: 1) em vez de insistir -- nunca deixe a
     conversa travada numa pergunta sem resposta.
 
+    Se o resultado vier com reason="ambiguous_unit", pergunte se o preço é por peso (quilo) ou por
+    unidade, e chame de novo com o mesmo item/price mais unit="KG" ou unit="UN" conforme a
+    resposta.
+
     Args:
         item: o produto, como a pessoa falou (ex.: "ovos").
         price: o valor que ela informou, em reais.
         quantity: quanto ela pretende comprar, na mesma unidade que reference_unit de uma resposta
             anterior. Só informe quando ela já disse isso, ou ao responder à pergunta que uma
-            chamada anterior devolveu.
+            chamada anterior devolveu. NUNCA chute um valor.
+        unit: "KG" ou "UN", só ao responder à pergunta que uma chamada anterior fez por causa de
+            reason="ambiguous_unit". Nunca informe por conta própria.
     """
-    kind = search_service.match_kind(ctx.deps.conn, item)
+    if price <= 0:
+        raise ModelRetry(f"O preço precisa ser maior que zero, recebi {price:g}. Confirme com a pessoa.")
+    if quantity is not None and quantity <= 0:
+        raise ModelRetry(f"A quantidade precisa ser maior que zero, recebi {quantity:g}.")
+    kind = _resolve_kind(ctx.deps.conn, item)
     if kind is None:
         return PriceCheck(
             kind=None, verdict=None, informed_price=price, reference_price=None, reference_unit=None,
             reference_store=None, reference_at=None, diff_pct=None, reason="unknown_item",
         )
-    return comparison_service.check_price(ctx.deps.conn, kind, price, quantity)
+    return comparison_service.check_price(ctx.deps.conn, kind, price, quantity, unit)
 
 
 async def list_products(ctx: RunContext[Deps], containing: str | None = None) -> ProductListing:

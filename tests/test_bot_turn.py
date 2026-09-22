@@ -302,6 +302,37 @@ def test_search_reply_uses_the_persona_when_small_and_a_client_is_configured(dep
     assert client.calls, "the persona client should have been asked"
 
 
+def test_search_narration_context_says_when_results_span_several_products(deps):
+    """Real bug (monkey test, 2026-09-22): a search for "leite" hits 4 different products, but the
+    old fixed context "histórico de preço de um produto" (singular) told the persona this was one
+    product's history -- reproduced twice (temp=0) attributing the whole count to just the first
+    product's name. The context now says accurately whether the results are one product or many."""
+    client = ScriptedLlmClient([_persona_reply("resposta")])
+    many = SearchOutcome(
+        records=(
+            _price_record(product_id=1, canonical_name="Creme de leite Itambé"),
+            _price_record(product_id=2, canonical_name="Leite UHT Italac"),
+        ),
+        term="leite",
+        tag=None,
+    )
+
+    asyncio.run(_render_output(many, ChatState(), _with_client(deps, client)))
+
+    context_line = client.calls[-1][1].splitlines()[0]
+    assert context_line == "contexto: histórico de preço de vários produtos diferentes que bateram na mesma busca"
+
+
+def test_search_narration_context_stays_singular_for_one_product(deps):
+    client = ScriptedLlmClient([_persona_reply("resposta")])
+    one = SearchOutcome(records=(_price_record(product_id=1), _price_record(product_id=1, unit_price=3.5)), term="banana", tag=None)
+
+    asyncio.run(_render_output(one, ChatState(), _with_client(deps, client)))
+
+    context_line = client.calls[-1][1].splitlines()[0]
+    assert context_line == "contexto: histórico de preço de um produto"
+
+
 def test_search_reply_falls_back_to_a_julius_line_when_the_model_fails(deps):
     """The grounding guard in narrate() is what turn.py relies on here -- a price absent from the
     facts must never reach the user, persona or not."""

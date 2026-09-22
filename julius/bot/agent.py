@@ -21,10 +21,11 @@ from julius.bot.actions import ALL_ACTIONS, Deps, PendingWrite, ProductListing, 
 from julius.bot.render import WRITE_REFUSED_LINE
 from julius.config import Config
 from julius.domain.models import PriceCheck, SearchOutcome, StoreComparison
+from julius.services import search as search_service
 
 log = logging.getLogger("julius.bot")
 
-BOT_PROMPT_VERSION = "2"
+BOT_PROMPT_VERSION = "4"
 MAX_OUTPUT_TOKENS = 600
 
 ROUTING_TEMPERATURE = 0.0
@@ -83,16 +84,40 @@ Leitura:
 - "que produtos eu tenho", "quais mercados" → list_products ou list_stores.
 - "está caro?" sem nenhum preço dito não é um veredito seu: chame search_prices e deixe a pessoa
   decidir olhando o histórico. Você mostra o que foi pago; nunca diz se um preço é caro ou barato.
+  Se nem a mensagem atual nem as últimas mensagens da conversa citarem QUAL item, não chame
+  search_prices com um termo vazio: pergunte em texto qual item, antes de qualquer ação.
 - Exceção: a pessoa está no mercado agora e diz o preço que ela mesma está vendo ("os ovos tão a
   14 reais, tá bom?", "aqui o tomate tá 9,90 o quilo") → check_price, com esse valor. Só nesse
-  caso — preço visto ao vivo, não uma nota importada — você compara e responde sim ou não.
+  caso — preço visto ao vivo, não uma nota importada — você compara e responde sim ou não. NUNCA
+  informe quantity nessa primeira chamada, nem para assumir "1" — deixe o parâmetro de fora; é
+  check_price quem decide se precisa perguntar (reason="quantity_needed").
 - Se check_price responder pedindo quantidade (reason="quantity_needed"), pergunte quanto a
   pessoa vai comprar, na mesma unidade que a resposta já deu. Quando ela responder, chame
   check_price de novo com o mesmo item e preço mais essa quantidade. Se a resposta não ajudar
   depois de perguntar uma segunda vez, chame de novo com uma quantidade pequena (ex.: 1) em vez de
   insistir — a conversa nunca fica travada numa pergunta sem resposta.
+- Se check_price responder reason="ambiguous_unit", pergunte se o preço é por peso (quilo) ou por
+  unidade. Quando ela responder, chame check_price de novo com o mesmo item/price mais
+  unit="KG" ou unit="UN".
 - Se a sua última mensagem nesta conversa foi uma pergunta, trate a próxima mensagem da pessoa
   como resposta a ela antes de cogitar qualquer outra ação — mesmo que a resposta seja curta.
+- Se check_price/compare_stores recusar por ambiguidade de tipo, PERGUNTE à pessoa qual das opções
+  listadas, do mesmo jeito que já faz para produto/mercado ambíguo — nunca escolha sozinho.
+- Se a sua última mensagem nesta conversa foi um COMENTÁRIO seu (não uma pergunta de dado) —
+  brincadeira, pergunta retórica, opinião — e a mensagem nova reage a esse comentário sem citar
+  nenhum produto de mercado nem preço, responda em texto reconhecendo a piada/comentário. NÃO
+  chame search_prices tentando tratar palavras do seu próprio comentário anterior (ex.: "luz",
+  "tempo") como se fossem um produto novo. Só chame uma ação se a pessoa citar um item de mercado
+  de verdade, mesmo que fora do catálogo.
+- Se o produto que a pessoa citou agora é muito parecido com o que ela citou na mensagem anterior
+  — mesma marca/categoria, só com variação de tamanho/embalagem — pergunte em texto se é o mesmo
+  item antes de tratar como pergunta nova, especialmente quando o PREÇO citado agora é igual (ou
+  muito perto) do preço citado na mensagem anterior: preço repetido pra um "produto novo" é o
+  sinal mais forte de que é a MESMA compra, descrita de duas formas (ex.: "coca por 12 reais",
+  depois "refrigerante 2L por 12 reais" — mesmo preço, provavelmente a mesma garrafa). NUNCA trate
+  dois nomes parecidos como o mesmo produto quando eles podem ser tipos diferentes (ex.: "guaraná"
+  e "guaraná zero" continuam produtos distintos até a pessoa confirmar) — só pergunte, nunca
+  decida sozinho.
 
 Escrita (renomear, marcar, tipo, conteúdo, fundir, desfundir):
 - passe o produto ou o mercado pelo id quando a pessoa deu um id; senão, pelo nome como ela falou.
@@ -142,6 +167,35 @@ def build_agent(config: Config, model: Model | None = None) -> BotAgent:
         model_settings=settings,
         retries=2,
     )
+
+    @agent.system_prompt(dynamic=True)
+    async def kind_vocabulary(ctx: RunContext[Deps]) -> str:
+        """`dynamic=True` is load-bearing, not the default: `bot/turn.py::handle_text` always
+        reuses `message_history`, and with the default (`dynamic=False`) a system-prompt function
+        only runs on a chat's first turn -- its text gets baked into that first `ModelRequest` and
+        every later turn in the same chat replays it verbatim, never seeing a `kind` registered
+        afterwards by `julius importar`/`produtos revisar` running in the other process. Verified
+        with `FunctionModel` (docs/design/kind-resolution-in-routing.md, Decisão 1): without the
+        flag, a counter inside this function advanced once across three `run()` calls sharing
+        history; with it, three times, one per call.
+
+        `async def`, not a plain `def`, for the same reason `narrate()` is called directly instead
+        of through `asyncio.to_thread` (v2.7, see CLAUDE.md "O achado real do smoke automatizado"):
+        `pydantic_ai._system_prompt.SystemPromptRunner` offloads a *sync* function to a worker
+        thread via `anyio.to_thread`, and `sqlite3.Connection` refuses to be touched outside the
+        thread that opened it (`check_same_thread`, on by default) -- confirmed by reproducing the
+        exact `ProgrammingError` with a sync version of this function before marking it `async`.
+        An async function is awaited in place, no thread involved, even though nothing here
+        actually needs to await."""
+        kinds = search_service.known_kinds(ctx.deps.conn)
+        if not kinds:
+            return ""
+        return (
+            "Tipos (kind) já cadastrados, para os argumentos de check_price/compare_stores: "
+            + ", ".join(kinds)
+            + ". Quando o pedido corresponder a um destes, use exatamente esta grafia; senão, use "
+            "o texto da pessoa mesmo assim -- outra camada resolve marca e erro de digitação depois."
+        )
 
     @agent.output_validator
     def no_unlicensed_data_claims(ctx: RunContext[Deps], data: BotOutput) -> BotOutput:

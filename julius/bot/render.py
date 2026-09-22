@@ -145,10 +145,19 @@ def no_match_facts(term: str | None, alternatives: Sequence[PriceRecord]) -> str
 
 
 def no_match_fallback_line(term: str | None, alternatives: Sequence[PriceRecord]) -> str:
-    """Same spirit as search_fallback_line: no model, always available."""
+    """Same spirit as search_fallback_line: no model, always available.
+
+    The no-alternatives branch dropped the "me diga outro produto que eu confiro?" invitation
+    (docs/requirements/bot-persona-fallback-improvements.md §9): a call-to-action here would ask
+    the person to type a price/store back, and there is no write action to record that -- an
+    invitation this function can't honor would be exactly the kind of claim the bot's honesty
+    guard (no_unlicensed_data_claims) exists to catch elsewhere. This only fixes the WORDING of a
+    single occurrence; it stays deterministic, so it still repeats verbatim on reuse -- the persona
+    prompt's own "busca sem resultado" example (services/suggestions.py) is what's meant to vary
+    when the model is available at all."""
     what = term or "isso"
     if not alternatives:
-        return f"Ainda não tenho preço de {what} no catálogo. Me diga outro produto que eu confiro?"
+        return f"{what[:1].upper()}{what[1:]} eu ainda não tenho na conta."
     parts = [
         f"{record.canonical_name} a {money(record.unit_price)} {_UNIT_PHRASES.get(record.unit, 'a unidade')}"
         f" em {record.store_nickname}"
