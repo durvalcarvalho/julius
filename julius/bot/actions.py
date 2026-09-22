@@ -153,6 +153,31 @@ def _resolve_kind(conn: sqlite3.Connection, item: str) -> str | None:
     return None
 
 
+def _reject_suspicious_match(conn: sqlite3.Connection, outcome: SearchOutcome) -> None:
+    """Blocks a reply that silently mixed a confident product match with a coincidental one --
+    same shape as the real picanha/Pinha incident (now closed before it gets here, by
+    WORD_LENGTH_GAP_LIMIT), measured against the full catalog in docs/design/entity-resolution-
+    architecture.md ("Atualização 2026-09-22"). Only a plain term search is checked: a tag search
+    spanning many kinds is its whole point (RF1), never suspicious on its own -- and a search with
+    nothing confident to compare against (`suspicious_match_ids` returns empty) is left alone,
+    same as today."""
+    if outcome.tag is not None or outcome.term is None:
+        return
+    suspicious = search_service.suspicious_match_ids(conn, outcome.term)
+    if not suspicious:
+        return
+    flagged = {record.product_id for record in outcome.records if record.product_id in suspicious}
+    confident = {record.product_id for record in outcome.records if record.product_id not in suspicious}
+    if not flagged or not confident:
+        return
+    names = sorted({record.canonical_name for record in outcome.records if record.product_id in flagged})
+    raise ModelRetry(
+        f"«{outcome.term}» também bateu, por coincidência de letras, em {', '.join(names)}, que parece "
+        "ser outra coisa. Pergunte à pessoa se é isso mesmo antes de mostrar o preço, ou refaça a busca "
+        "só com o que ela quis dizer."
+    )
+
+
 async def search_prices(
     ctx: RunContext[Deps], words: str, tag: str | None = None, limit: int = 20, note: str | None = None
 ) -> SearchOutcome:
@@ -176,11 +201,13 @@ async def search_prices(
     if limit < 1:
         raise ModelRetry(f"limit precisa ser pelo menos 1, recebi {limit}.")
     try:
-        return search_service.search_free_text(
+        outcome = search_service.search_free_text(
             ctx.deps.conn, parts, tag=tag.lower() if tag else None, limit=limit
         )
     except ValueError as error:
         raise ModelRetry(str(error)) from None
+    _reject_suspicious_match(ctx.deps.conn, outcome)
+    return outcome
 
 
 async def compare_stores(

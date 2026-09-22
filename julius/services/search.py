@@ -264,32 +264,29 @@ def match_kind(conn: sqlite3.Connection, term: str) -> str | None:
     like "pikana" -> "picanha" (76.9, a typo one edit away) is not second-guessed, only measured to
     confirm it doesn't land exactly on 75 too.
 
-    In that same borderline band, if the product fallback itself finds 2+ disagreeing kinds
-    (genuine brand ambiguity, not a single confident correction), this returns `None` rather than
-    the coincidental direct match -- found by `advisor` review, not observed in production yet:
-    without this, a term landing exactly on the cutoff *and* matching two real, disagreeing
-    products would silently keep the coincidence (`match_kind` non-`None`), and `kind_candidates`
-    would never even be consulted (`_resolve_kind` only calls it when `match_kind` refused). `None`
-    here is what lets that ambiguity surface as a question instead of a guess."""
+    In that same borderline band, and in the tied case above, the product fallback is what breaks
+    the tie towards real product identity instead of coincidental letters -- **regression found and
+    fixed 2026-09-22, same day as the tie reversal above**: the first version of the tie fix
+    returned `None` for *any* unresolved lexical tie without ever consulting the product fallback,
+    which broke "coca" -- it ties at exactly `KIND_MATCH_CUTOFF` (75) against **two** kinds at
+    once ("cacau em pó" *and* "chocolate", both via the same prefix-trick coincidence
+    `MATCH_SCORE_CUTOFF` already documents), so it now landed in the `tied` branch instead of the
+    single-`direct`-at-cutoff branch the original override only guarded. Caught by the `real_ai`
+    suite (`test_the_original_coca_incident_no_longer_says_not_in_catalog`), not by the unit
+    tests written for the tie reversal -- none of them happened to pick a term that ties against
+    2+ kinds *and* has unambiguous product evidence. `_resolve_kind` below is the fix: one
+    function, consulted by both `match_kind` and `kind_candidates`, so "does the product fallback
+    win here" is answered identically regardless of whether the lexical signal was a single
+    borderline match or a multi-way tie -- the two can no longer disagree about *why* a term
+    refused, because there is only one place that decides."""
     term_words = _strip_kind_noise(normalize_text(term).split())
-    best_score, direct, tied = _score_kinds(conn, term_words)
-    if tied:
-        return None
-    if direct is None:
-        return _match_kind_via_product(conn, term_words)
-    if best_score == KIND_MATCH_CUTOFF:
-        found = _kinds_via_product(conn, term_words)
-        if len(found) > 1:
-            return None
-        if len(found) == 1 and next(iter(found)) != direct:
-            return next(iter(found))
-    return direct
+    resolved, _ = _resolve_kind(conn, term_words)
+    return resolved
 
 
 def _kinds_via_product(conn: sqlite3.Connection, term_words: Sequence[str]) -> frozenset[str]:
     """The `kind`s of every product `term_words` matches by name (`matching_product_ids`, the same
-    calibrated matcher `search_prices` uses) -- the raw evidence both `_match_kind_via_product`
-    (resolve when unanimous) and `kind_candidates` (offer when it's not) are built from."""
+    calibrated matcher `search_prices` uses) -- the raw evidence `_resolve_kind` is built from."""
     term = " ".join(term_words)
     if not term:
         return frozenset()
@@ -299,19 +296,39 @@ def _kinds_via_product(conn: sqlite3.Connection, term_words: Sequence[str]) -> f
     )
 
 
-def _match_kind_via_product(conn: sqlite3.Connection, term_words: Sequence[str]) -> str | None:
-    """When no `kind` name itself matches, resolves via product name instead -- the same
-    calibrated matcher `search_prices` already uses (`matching_product_ids`, MATCH_SCORE_CUTOFF),
-    reused instead of a hand-maintained brand-to-kind list that would need a new entry for every
-    brand the catalog ever gains. Real incident: "coca" and "pepsi" have no `kind` of their own
-    (both live under kind "refrigerante"), but "coca" already matches exactly the two Coca-Cola
-    products by name. Resolves only when every matched product agrees on the same kind -- "pepsi"
-    also brushes "Cream cheese President" (a known false positive of the word-level scorer, see
-    MATCH_SCORE_CUTOFF's docstring), and the two disagree on kind, so this stays unresolved
-    (`None`) rather than guessing between them; `kind_candidates` is where that disagreement
-    surfaces instead of being discarded."""
-    found = _kinds_via_product(conn, term_words)
-    return next(iter(found)) if len(found) == 1 else None
+def _resolve_kind(conn: sqlite3.Connection, term_words: Sequence[str]) -> tuple[str | None, tuple[str, ...]]:
+    """The one place that decides a `kind`, or what to offer instead of guessing -- `match_kind`
+    and `kind_candidates` are both thin wrappers around this, so they can never disagree about
+    *why* a term didn't resolve (the bug this replaced: two call sites each deciding independently
+    whether the product fallback applied, and one of them forgetting to check it for the
+    multi-way-tie case -- see `match_kind`'s docstring).
+
+    Returns `(resolved_kind, candidates)`: `candidates` is non-empty only when `resolved_kind` is
+    `None` and there's something concrete to offer -- either a lexical tie against the `kind`
+    vocabulary itself, or 2+ real products disagreeing on kind (a brand with no `kind` of its own,
+    like "coca"/"pepsi", or a coincidental letter overlap like "coca"~"cacau em pó"). The product
+    fallback is consulted, and preferred over the lexical signal, whenever that signal is anything
+    less than a single confident match above the cutoff: right at `KIND_MATCH_CUTOFF` (where a
+    coincidence like "coca"~"cacau em pó" lives, see MATCH_SCORE_CUTOFF's docstring) or an outright
+    tie (where "coca" now *also* lives, tying "cacau em pó" and "chocolate" at once) -- a confident
+    match above the cutoff ("arroz" at 100, "picanha" at 76.9 for a typo) is never second-guessed."""
+    best_score, direct, tied = _score_kinds(conn, term_words)
+    if best_score < KIND_MATCH_CUTOFF:
+        found = _kinds_via_product(conn, term_words)
+        if len(found) == 1:
+            return next(iter(found)), ()
+        return (None, tuple(sorted(found))) if found else (None, ())
+    if tied or best_score == KIND_MATCH_CUTOFF:
+        found = _kinds_via_product(conn, term_words)
+        if len(found) == 1:
+            return next(iter(found)), ()
+        if len(found) > 1:
+            return None, tuple(sorted(found))
+        # No product evidence either way: fall back to the lexical signal alone.
+        if tied:
+            return None, tied
+        return direct, ()
+    return direct, ()
 
 
 def kind_candidates(conn: sqlite3.Connection, term: str) -> tuple[str, ...]:
@@ -329,17 +346,18 @@ def kind_candidates(conn: sqlite3.Connection, term: str) -> tuple[str, ...]:
     tie" to "wrong category entirely". `match_kind` now returns `None` for any unresolved tie, and
     this surfaces it every time, not just for "queijo".
 
-    Measured against the 98 real kinds (2026-09-22) for the effect on already-relied-upon generic
-    single-word terms (`KIND_MATCH_CUTOFF`'s own list) -- bigger than the one incident that
-    triggered this reversal:
+    Measured against the 98 real kinds (2026-09-22, re-measured same day after the product-fallback
+    regression fix -- the candidates below come from `_kinds_via_product`, not the raw lexical tie,
+    so the list is the union of what real product names bring in, sometimes wider than the pure
+    kind-vocabulary tie):
 
     | term | now asks between |
     |---|---|
     | leite | creme de leite, leite condensado, leite uht |
-    | pão | pão australiano, baguete, de alho, de forma, de queijo |
+    | pão | cacau em pó, pão australiano, baguete, de alho, de forma, de queijo |
     | água | água com gás, água mineral |
-    | queijo | pão de queijo, queijo brie, mussarela, parmesão, parmesão ralado |
-    | creme | creme de leite, creme de ricota |
+    | queijo | pão de queijo, queijo brie, mussarela, parmesão, parmesão ralado, requeijão |
+    | creme | cream cheese, creme de leite, creme de ricota |
 
     "tomate" and "maca" are untouched (the exact-match shortcut still wins those ties outright);
     "carne", "arroz", "suco", "cebola" have no tie at all and are also untouched. Five real generic
@@ -350,18 +368,12 @@ def kind_candidates(conn: sqlite3.Connection, term: str) -> tuple[str, ...]:
     real use, which is exactly the kind of evidence this project has always required to re-tune a
     cutoff either direction.
 
-    Checks `match_kind` itself first, rather than trusting the caller to only ask when it already
-    returned `None`: this is what makes the scope boundary above true by construction. The extra
-    `match_kind` call is cheap (same cost this project already pays everywhere else for a personal
-    catalog of a few hundred products)."""
-    if match_kind(conn, term) is not None:
-        return ()
+    Thin wrapper around `_resolve_kind` -- same function `match_kind` calls, so the two can never
+    disagree about *why* a term refused (see `match_kind`'s docstring for the regression this
+    replaced: two independent decisions about the product fallback, one of them wrong)."""
     term_words = _strip_kind_noise(normalize_text(term).split())
-    _, _, tied = _score_kinds(conn, term_words)
-    if tied:
-        return tied
-    found = _kinds_via_product(conn, term_words)
-    return tuple(sorted(found)) if len(found) > 1 else ()
+    _, candidates = _resolve_kind(conn, term_words)
+    return candidates
 
 
 def search_free_text(
@@ -469,13 +481,33 @@ def _name_score(term_words: Sequence[str], name_words: Sequence[str]) -> float:
     return min(max(_word_score(word, other) for other in name_words) for word in term_words)
 
 
-def matching_product_ids(conn: sqlite3.Connection, term: str) -> set[int]:
+def _scored_matches(conn: sqlite3.Connection, term: str) -> dict[int, float]:
     term_words = normalize_text(term).split()
     return {
-        product_id
+        product_id: score
         for product_id, name in products.product_names(conn)
-        if _name_score(term_words, normalize_text(name).split()) >= MATCH_SCORE_CUTOFF
+        if (score := _name_score(term_words, normalize_text(name).split())) >= MATCH_SCORE_CUTOFF
     }
+
+
+def matching_product_ids(conn: sqlite3.Connection, term: str) -> set[int]:
+    return set(_scored_matches(conn, term))
+
+
+def suspicious_match_ids(conn: sqlite3.Connection, term: str) -> frozenset[int]:
+    """Ids in `matching_product_ids(term)` that only got there by typo-tolerance (score < 100,
+    never a whole-word or prefix hit -- see MATCH_SCORE_CUTOFF) while at least one other id for the
+    same term IS a confident, exact hit (100). This is the signature docs/design/entity-resolution-
+    architecture.md ("Atualização 2026-09-22") measured against the full catalog: "vinho" -> "Pão
+    Zinho" (80, alongside "Vinho Norton" at 100), "queijo" -> "Requeijão" (80, alongside 8 real
+    queijos at 100) -- coincidental letter overlap, not a legitimate plural result like "leite"
+    (four hits, all 100, nothing flagged). A term where nothing reaches 100 has no confident anchor
+    to compare against and is left alone -- that shape was never measured, and guessing a margin for
+    it would be a new cutoff invented without a real incident, not this one closing."""
+    scores = _scored_matches(conn, term)
+    if not scores or max(scores.values()) < 100.0:
+        return frozenset()
+    return frozenset(product_id for product_id, score in scores.items() if score < 100.0)
 
 
 def _candidate_ids(conn: sqlite3.Connection, term: str | None, tag: str | None) -> set[int]:

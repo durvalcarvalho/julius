@@ -18,6 +18,7 @@ from julius.services.search import (
     records_for_products,
     search_free_text,
     search_prices,
+    suspicious_match_ids,
 )
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -75,6 +76,40 @@ def test_typo_tolerance_does_not_pull_in_an_unrelated_shorter_word(conn):
     rows = search_prices(conn, "picanha")
 
     assert all(r.canonical_name != "Pinha" for r in rows), "Pinha nao e picanha"
+
+
+def test_suspicious_match_ids_flags_a_coincidental_hit_alongside_a_confident_one(conn):
+    """Measured against the real production catalog (docs/design/entity-resolution-architecture.md,
+    "Atualização 2026-09-22"): "vinho" matches "Vinho Norton" at 100 (whole word) and "Pão Zinho" at
+    exactly 80 (coincidental letter overlap, the same shape MATCH_SCORE_CUTOFF's docstring already
+    names as "the price of typo tolerance"). Only the coincidental id is flagged."""
+    wine = _product(conn, "Vinho Norton", "V1")
+    bread = _product(conn, "Pão Zinho", "P1")
+
+    assert suspicious_match_ids(conn, "vinho") == {bread}
+    assert wine not in suspicious_match_ids(conn, "vinho")
+
+
+def test_suspicious_match_ids_leaves_a_legitimate_plural_result_alone(conn):
+    """"leite" is the real counter-example measured in the same design update: every match is a
+    whole-word hit (100), so nothing is flagged even though the result spans several real, unrelated
+    products (leite uht, leite condensado, creme de leite) -- heterogeneity alone is not the signal,
+    a coincidental score is."""
+    _product(conn, "Leite Uht", "L1")
+    _product(conn, "Leite Condensado", "L2")
+    _product(conn, "Creme de Leite", "L3")
+
+    assert suspicious_match_ids(conn, "leite") == frozenset()
+
+
+def test_suspicious_match_ids_needs_a_confident_anchor_to_compare_against(conn):
+    """A term where nothing reaches a whole-word/prefix hit (100) has no confident match to compare
+    a typo-tolerant one against, even if two coincidental-looking hits show up together -- left
+    alone, unmeasured, not this incident's shape."""
+    _product(conn, "Arroz Integral", "A1")  # typo tolerance: "arros" -> 80, not a whole-word hit
+    _product(conn, "Carros de Brinquedo", "A2")  # coincidence: "arros" -> 90.9, also not 100
+
+    assert suspicious_match_ids(conn, "arros") == frozenset()
 
 
 def test_unrelated_term_returns_empty(conn):
@@ -447,6 +482,26 @@ def test_match_kind_borderline_coincidence_yields_to_real_brand_ambiguity(conn):
 
     assert match_kind(conn, "coca") is None
     assert kind_candidates(conn, "coca") == ("doces", "refrigerante")
+
+
+def test_match_kind_multiway_lexical_tie_still_yields_to_unanimous_product_fallback(conn):
+    """Regressão real (2026-09-22, achada pela suíte real_ai, não pelos testes unitários da própria
+    reversão do empate): "coca" empata no corte exatamente contra DOIS kinds ao mesmo tempo
+    ("cacau em pó" e "chocolate", 75.0 cada -- a mesma coincidência de letras documentada em
+    MATCH_SCORE_CUTOFF). A primeira versão da reversão do empate devolvia None assim que via
+    `tied` não-vazio, sem nunca consultar o fallback por produto -- diferente do caso de empate
+    único (`test_match_kind_prefers_product_over_a_borderline_coincidental_kind_match`), que já
+    checava. `_resolve_kind` unifica os dois caminhos: mesmo com empate múltiplo, um fallback por
+    produto unânime (aqui, "refrigerante", via os produtos reais de Coca-Cola) ainda vence."""
+    cocoa = _product(conn, "CACAU EM PO 200G", "1")
+    set_kind(conn, cocoa, "cacau em pó")
+    chocolate = _product(conn, "CHOCOLATE BARRA 100G", "2")
+    set_kind(conn, chocolate, "chocolate")
+    soda = _product(conn, "REFRIGERANTE COCA-COLA ORIGINAL PET 1,5L", "3")
+    set_kind(conn, soda, "refrigerante")
+
+    assert match_kind(conn, "coca") == "refrigerante"
+    assert kind_candidates(conn, "coca") == ()
 
 
 def test_match_kind_ambiguous_brand_fallback_stays_unresolved(conn):

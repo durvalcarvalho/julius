@@ -8,8 +8,9 @@ from pydantic_ai.models.function import FunctionModel
 from conftest import copied_fixtures
 from julius.bot.actions import READ_ACTIONS, Deps, ProductListing, ShoppingComparison, StoreListing, resolve_product, resolve_store
 from julius.config import Config
-from julius.domain.models import PriceCheck, SearchOutcome
+from julius.domain.models import PriceCheck, Receipt, ReceiptItem, SearchOutcome
 from julius.parsers.df import DFReceiptParser
+from julius.repositories.prices import insert_price
 from julius.repositories.products import resolve_product_id
 from julius.repositories.stores import ensure_store
 from julius.services import catalog, comparison as comparison_service, importing, search
@@ -176,6 +177,72 @@ def test_search_prices_with_a_limit_below_one_retries(stocked, cfg):
     result, _ = _run(READ_ACTIONS[0], {"words": "picanha", "limit": 0}, stocked, cfg)
 
     assert any("limit precisa ser pelo menos 1" in content for content in _retries(result))
+
+
+_SYNTHETIC_STORE = "00000000000099"
+
+
+def _synthetic_product(conn, name: str, code: str) -> int:
+    ensure_store(conn, _SYNTHETIC_STORE, "Loja sintética")
+    return resolve_product_id(conn, _SYNTHETIC_STORE, code, name)
+
+
+def _synthetic_price(conn, product_id: int, unit_price: float) -> None:
+    receipt = Receipt(
+        access_key=f"key-{product_id}",
+        issued_at="2026-09-22T00:00:00",
+        store_cnpj=_SYNTHETIC_STORE,
+        store_legal_name="Loja sintética",
+        items=(),
+    )
+    item = ReceiptItem(1, "c", "d", 1.0, "UN", unit_price, unit_price)
+    insert_price(conn, receipt, item, product_id)
+
+
+def test_search_prices_retries_on_a_coincidental_match_alongside_a_confident_one(stocked, cfg):
+    """Same shape as the real "vinho" -> "Pão Zinho" catalog coincidence measured in docs/design/
+    entity-resolution-architecture.md ("Atualização 2026-09-22"): a confident whole-word match (100)
+    and an unrelated product that only cleared MATCH_SCORE_CUTOFF by coincidence (80) -- the action
+    must ask instead of silently showing both under one price table."""
+    wine = _synthetic_product(stocked, "Vinho Norton", "V1")
+    bread = _synthetic_product(stocked, "Pão Zinho", "P1")
+    _synthetic_price(stocked, wine, 30.0)
+    _synthetic_price(stocked, bread, 8.0)
+
+    result, state = _run(READ_ACTIONS[0], {"words": "vinho"}, stocked, cfg)
+
+    assert any("Pão Zinho" in content for content in _retries(result))
+    assert state["calls"] == 2, "the model got a second turn, which is what a retry is for"
+
+
+def test_search_prices_does_not_retry_on_a_legitimate_plural_result(stocked, cfg):
+    """The real counter-example from the same design update: "leite" spans several unrelated real
+    products, but every one is a whole-word hit (100) -- heterogeneity alone must not trigger the
+    question, only a coincidental score does."""
+    uht = _synthetic_product(stocked, "Leite Uht", "L1")
+    condensado = _synthetic_product(stocked, "Leite Condensado", "L2")
+    _synthetic_price(stocked, uht, 5.0)
+    _synthetic_price(stocked, condensado, 7.0)
+
+    result, state = _run(READ_ACTIONS[0], {"words": "leite"}, stocked, cfg)
+
+    assert state["calls"] == 1, "no ModelRetry expected for a legitimate multi-product result"
+    assert isinstance(result.output, SearchOutcome)
+
+
+def test_search_prices_tag_search_is_never_checked_for_coincidence(stocked, cfg):
+    """RF1: a tag search spanning many kinds is its whole point, never suspicious on its own -- even
+    when one of the tagged products would otherwise look like a coincidental match by name."""
+    wine = _synthetic_product(stocked, "Vinho Norton", "V1")
+    bread = _synthetic_product(stocked, "Pão Zinho", "P1")
+    _synthetic_price(stocked, wine, 30.0)
+    _synthetic_price(stocked, bread, 8.0)
+    catalog.tag_product(stocked, wine, "bebidas")
+    catalog.tag_product(stocked, bread, "bebidas")
+
+    result, state = _run(READ_ACTIONS[0], {"words": "", "tag": "bebidas"}, stocked, cfg)
+
+    assert state["calls"] == 1
 
 
 def _tomato_ids(stocked) -> tuple[int, int]:
