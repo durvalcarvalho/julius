@@ -1,0 +1,54 @@
+tests/test_bot_turn.py
+  s_36f8cccf1d7828::t_755bf36489104e 726-753
+  s_36f8cccf1d7828::t_74a44a44b6825d 107-142
+julius/bot/actions.py
+  s_36f8cccf1d7828::t_fd65067fd6a386 293-295,301-302,311
+  s_36f8cccf1d7828::t_5093e7e7fe6263 240-245
+  s_36f8cccf1d7828::t_c62274175adf83 186-188,199-200
+  s_36f8cccf1d7828::t_b191aa9e2e0012 277-278
+  s_36f8cccf1d7828::t_509e8d5b107e2e 312-317
+  s_36f8cccf1d7828::t_ff960fc131d63e 156-158,167-171
+tests/test_bot_agent.py
+  s_36f8cccf1d7828::t_2bbe619da169eb 344
+  s_36f8cccf1d7828::t_012b68c31c008d 354
+claudedocs/research_entity_resolution_lexical_matching_scaling_20260922.md
+  s_36f8cccf1d7828::t_aab94297b6a1b0 1-89
+tests/test_real_ai.py
+  s_36f8cccf1d7828::t_c648ea0bc720bd 320-343
+tests/test_services_search.py
+  s_36f8cccf1d7828::t_abdb91cc11da55 358-361,367-369,386-396
+  s_36f8cccf1d7828::t_026c1b0ccf6a65 370-385
+  s_36f8cccf1d7828::t_4dba61a28aba41 311-317,323-324
+julius/bot/turn.py
+  s_36f8cccf1d7828::t_78a5ea11d88883 16
+  s_36f8cccf1d7828::t_357928d00d3179 349-350
+  s_36f8cccf1d7828::t_46d82a261e48f4 112-132
+  s_36f8cccf1d7828::t_6459a65f1bba82 183-210
+  s_36f8cccf1d7828::t_8cf4840222a9fc 433-437
+julius/services/search.py
+  s_36f8cccf1d7828::t_fae69b65115726 333-351
+  s_36f8cccf1d7828::t_c5b282099a8d25 318-320,323-332,354-356,360-362
+  s_36f8cccf1d7828::t_60dc92722ee314 211-233,243-254,275-278
+julius/bot/agent.py
+  s_36f8cccf1d7828::t_6ed043b8a55318 28
+  s_36f8cccf1d7828::t_3dbc47a0f2704f 123-127
+  s_36f8cccf1d7828::t_469eb360f58f9e 74-77
+tests/test_bot_actions_read.py
+  s_36f8cccf1d7828::t_54bf1f9ec26761 288-291,300-302
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "cec016860fe61aaec4ec510c0083807acb18d69f",
+  "prompts": {},
+  "sessions": {
+    "s_36f8cccf1d7828": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dd3cd7fe-add2-4dd0-beae-979d6aeadc2b",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
