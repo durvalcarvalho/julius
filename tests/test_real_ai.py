@@ -317,6 +317,30 @@ def test_a_bare_vague_question_asks_for_the_item_instead_of_an_empty_search(deps
     assert reply.text, "resposta vazia"
 
 
+def test_asking_about_something_outside_the_history_window_does_not_fabricate_it(deps):
+    """Achado real (monkey test, 2026-09-22): 5 perguntas seguidas (banana, cebola, tomate, uva),
+    depois "e do primeiro que eu perguntei mesmo?" -- banana já saiu de HISTORY_TURNS=3, e o modelo
+    respondeu "Você começou perguntando de cebola", errado e com total confiança. Reforço de prompt
+    aplicado (BOT_PROMPT_VERSION 5); este teste não afirma que o modelo nunca mais erra (prompt não
+    é garantia, mesma disciplina de sempre), só imprime o resultado pra acompanhar entre rodadas --
+    o achado real é que "banana" nunca deveria aparecer como fato afirmado com confiança aqui."""
+    state = ChatState()
+    for item in ("banana", "cebola", "tomate", "uva"):
+        _ask(deps, f"quanto paguei de {item}?", state)
+        _SPENT.append(_last_call(deps)["cost_usd"])
+
+    reply = _ask(deps, "e do primeiro que eu perguntei mesmo, lá no começo?", state)
+    call = _last_call(deps)
+    _SPENT.append(call["cost_usd"])
+
+    print(f"\n  ({call['raw_response']}): {reply.text}")
+    assert reply.text, "resposta vazia"
+    assert "banana" not in reply.text.lower(), (
+        "banana já saiu da janela de histórico -- se aparece aqui como fato afirmado, "
+        "é sorte, não memória de verdade"
+    )
+
+
 # --- invariantes: valem qualquer que seja a escolha do modelo --------------------
 
 

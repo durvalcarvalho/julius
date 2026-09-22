@@ -308,16 +308,20 @@ def test_match_kind_prefers_exact_kind_over_a_compound_that_contains_the_word(co
     assert match_kind(conn, "tomate") == "tomate"
 
 
-def test_match_kind_inexact_tie_keeps_todays_alphabetical_order(conn):
-    """No kind here is exactly "leite" -- the exact-match shortcut must not fire, and the
-    unresolved ambiguity (documented in KIND_MATCH_CUTOFF) stays exactly as it was: whichever
-    tied kind sorts first alphabetically."""
+def test_match_kind_inexact_tie_now_refuses_instead_of_guessing(conn):
+    """No kind here is exactly "leite" -- the exact-match shortcut must not fire. Reversed
+    2026-09-22 (monkey test, real incident: "queijo" -> "pão de queijo" alphabetically, comparing a
+    live cheese price against frozen cheese bread): an unresolved tie against the vocabulary itself
+    is now `None`, not a silent alphabetical pick -- `kind_candidates` is where the bot asks
+    instead. See KIND_MATCH_CUTOFF / kind_candidates for the measured scope (5 real single-word
+    terms affected, "leite" among them)."""
     condensed = _product(conn, "LEITE CONDENSADO 395G", "1")
     set_kind(conn, condensed, "leite condensado")
     cream = _product(conn, "CREME DE LEITE 200G", "2")
     set_kind(conn, cream, "creme de leite")
 
-    assert match_kind(conn, "leite") == "creme de leite"
+    assert match_kind(conn, "leite") is None
+    assert kind_candidates(conn, "leite") == ("creme de leite", "leite condensado")
 
 
 def test_known_kinds_matches_all_kinds(conn):
@@ -351,16 +355,45 @@ def test_kind_candidates_lists_disagreeing_products_for_an_ambiguous_brand(conn)
     assert kind_candidates(conn, "pepsi") == ("refrigerante", "salgadinho")
 
 
-def test_kind_candidates_stays_empty_for_the_pre_existing_accepted_tie(conn):
-    """Limite de escopo da Decisão 3: o empate já aceito do match direto contra o vocabulário
-    (v2.10, "leite" -> "creme de leite") não tem candidato de kind_candidates -- não é a
-    ambiguidade nova que este mecanismo cobre."""
+def test_kind_candidates_lists_the_direct_vocabulary_tie_too(conn):
+    """Decisão revertida em 2026-09-22 (ver match_kind e kind_candidates): o empate direto contra o
+    vocabulário (antes silenciosamente aceito, v2.10) agora é exatamente o tipo de ambiguidade que
+    kind_candidates existe para expor -- real incident, "queijo" -> "pão de queijo"."""
     condensed = _product(conn, "LEITE CONDENSADO 395G", "1")
     set_kind(conn, condensed, "leite condensado")
     cream = _product(conn, "CREME DE LEITE 200G", "2")
     set_kind(conn, cream, "creme de leite")
 
-    assert kind_candidates(conn, "leite") == ()
+    assert kind_candidates(conn, "leite") == ("creme de leite", "leite condensado")
+
+
+def test_match_kind_reproduces_the_real_queijo_incident(conn):
+    """Real bug (monkey test, 2026-09-22, live against production): match_kind("queijo") picked
+    "pão de queijo" -- alphabetically first among the tied kinds ('p' < 'q') -- and a live cheese
+    price got compared against frozen cheese bread. Fixture reproduces the same shape (a bread kind
+    whose name contains "queijo" tying against real cheese kinds) with a synthetic catalog."""
+    bread = _product(conn, "PAO DE QUEIJO CONGELADO 800G", "1")
+    set_kind(conn, bread, "pão de queijo")
+    mozzarella = _product(conn, "QUEIJO MUSSARELA FATIADO 150G", "2")
+    set_kind(conn, mozzarella, "queijo mussarela")
+    parmesan = _product(conn, "QUEIJO PARMESAO PEDACO", "3")
+    set_kind(conn, parmesan, "queijo parmesão")
+
+    assert match_kind(conn, "queijo") is None
+    assert kind_candidates(conn, "queijo") == ("pão de queijo", "queijo mussarela", "queijo parmesão")
+
+
+def test_kind_candidates_exact_match_still_wins_the_tie_silently(conn):
+    """Limite do que a Decisão 3 revertida NÃO toca: quando o termo é exatamente igual a um dos
+    kinds empatados ("tomate" vs "passata de tomate"), o desempate exato de sempre continua
+    resolvendo sem pergunta nenhuma -- só o empate SEM vencedor exato passou a perguntar."""
+    loose = _product(conn, "TOMATE ITALIANO kg", "1")
+    set_kind(conn, loose, "tomate")
+    sauce = _product(conn, "MOLHO PASSATA TOMATE 500G", "2")
+    set_kind(conn, sauce, "passata de tomate")
+
+    assert match_kind(conn, "tomate") == "tomate"
+    assert kind_candidates(conn, "tomate") == ()
 
 
 def test_match_kind_strips_article_and_quantity_noise(conn):

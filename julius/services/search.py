@@ -208,6 +208,29 @@ def _strip_kind_noise(words: Sequence[str]) -> list[str]:
     return filtered or list(words)
 
 
+def _score_kinds(conn: sqlite3.Connection, term_words: Sequence[str]) -> tuple[float, str | None, tuple[str, ...]]:
+    """Scores `term_words` against every known `kind` once -- the one place the tie-break lives,
+    shared by `match_kind` (resolve or refuse) and `kind_candidates` (what to offer on refusal).
+    Returns `(best_score, resolved_kind, tied_candidates)`: `resolved_kind` is `None` exactly when
+    `tied_candidates` is non-empty (a genuine unresolved tie, 2+ kinds at the best score with none
+    exactly matching the term) or when nothing cleared `KIND_MATCH_CUTOFF`."""
+    kinds = products.all_kinds(conn)
+    if not kinds:
+        return 0.0, None, ()
+    scored = [(_name_score(term_words, normalize_text(kind).split()), kind) for kind in kinds]
+    best_score = max(score for score, _ in scored)
+    if best_score < KIND_MATCH_CUTOFF:
+        return best_score, None, ()
+    tied = [kind for score, kind in scored if score == best_score]
+    if len(tied) == 1:
+        return best_score, tied[0], ()
+    term_norm = " ".join(term_words)
+    exact = [kind for kind in tied if " ".join(normalize_text(kind).split()) == term_norm]
+    if exact:
+        return best_score, exact[0], ()
+    return best_score, None, tuple(sorted(tied))
+
+
 def match_kind(conn: sqlite3.Connection, term: str) -> str | None:
     """One term, one kind -- unlike detect_tag (a list of words competing for one tag), each item
     of a shopping list is matched independently. No kind registered yet -> None, without paying
@@ -216,6 +239,18 @@ def match_kind(conn: sqlite3.Connection, term: str) -> str | None:
     Uses _name_score (word-level, prefix-aware), not whole-string fuzz.ratio: a `kind` vocabulary
     mixes single words ("tomate") with compounds ("leite uht"), the same short-term-vs-long-name
     shape that already broke product-name matching before v2.3.1 -- see KIND_MATCH_CUTOFF.
+
+    An unresolved tie against the vocabulary itself (2+ kinds at the same best score, none of them
+    exactly the term) is `None`, not a silent alphabetical pick -- reversed 2026-09-22 after a real
+    monkey-test incident: "queijo" tied "pão de queijo" against every real cheese kind (queijo
+    mussarela/parmesão/brie), and alphabetical order picked the bread, so a live cheese price got
+    compared against frozen cheese bread. `kind_candidates` exposes the tied options so
+    `bot/actions.py::_resolve_kind` can ask instead of guess (docs/design/kind-resolution-in-
+    routing.md, Decisão 3, extended). This is a real behavior change from the tie this project
+    accepted in v2.10 ("leite" -> "creme de leite" silently): that tie was measured as low-stakes
+    (still dairy); "queijo" -> bread is not the same shape, and asking is now the default for any
+    tie without an exact-match winner -- see MEASURED note in kind_candidates for how many real
+    single-word terms this touches.
 
     Falls back to product-name resolution (`_match_kind_via_product`) when no `kind` value itself
     matches -- a brand ("coca", "pepsi") has no `kind` of its own, only the category it belongs to
@@ -236,21 +271,12 @@ def match_kind(conn: sqlite3.Connection, term: str) -> str | None:
     products would silently keep the coincidence (`match_kind` non-`None`), and `kind_candidates`
     would never even be consulted (`_resolve_kind` only calls it when `match_kind` refused). `None`
     here is what lets that ambiguity surface as a question instead of a guess."""
-    kinds = products.all_kinds(conn)
-    if not kinds:
-        return None
     term_words = _strip_kind_noise(normalize_text(term).split())
-    scored = [(_name_score(term_words, normalize_text(kind).split()), kind) for kind in kinds]
-    best_score = max(score for score, _ in scored)
-    if best_score < KIND_MATCH_CUTOFF:
+    best_score, direct, tied = _score_kinds(conn, term_words)
+    if tied:
+        return None
+    if direct is None:
         return _match_kind_via_product(conn, term_words)
-    tied = [kind for score, kind in scored if score == best_score]
-    if len(tied) > 1:
-        term_norm = " ".join(term_words)
-        exact = [kind for kind in tied if " ".join(normalize_text(kind).split()) == term_norm]
-        if exact:
-            return exact[0]
-    direct = tied[0]
     if best_score == KIND_MATCH_CUTOFF:
         found = _kinds_via_product(conn, term_words)
         if len(found) > 1:
@@ -289,25 +315,51 @@ def _match_kind_via_product(conn: sqlite3.Connection, term_words: Sequence[str])
 
 
 def kind_candidates(conn: sqlite3.Connection, term: str) -> tuple[str, ...]:
-    """What `match_kind` knows but discards when it refuses by brand ambiguity (2+ real products
+    """What `match_kind` knows but discards when it refuses -- either a genuine tie against the
+    `kind` vocabulary itself (2+ kinds at the same score, none exactly the term: "queijo" ties
+    "queijo mussarela"/"parmesão"/"brie" and "pão de queijo") or brand ambiguity (2+ real products
     disagreeing on kind, via `_match_kind_via_product`) -- the same information `resolve_product`
     already exposes so the bot can ask the person instead of guessing (docs/design/
-    kind-resolution-in-routing.md, Decisão 3). Empty whenever `match_kind` already resolved, or its
-    refusal has nothing concrete to offer -- deliberately NOT the tie already accepted for a direct
-    match against the `kind` vocabulary itself (e.g. "leite" -> "creme de leite", KIND_MATCH_CUTOFF):
-    that ambiguity was measured and accepted in v2.10, and reopening it needs its own evidence, not
-    a side effect of this function.
+    kind-resolution-in-routing.md, Decisão 3).
+
+    **Reversed 2026-09-22**: until this date the direct-vocabulary tie was deliberately excluded
+    here (`match_kind` picked one silently, "leite" -> "creme de leite", accepted since v2.10) --
+    a second monkey-test round found "queijo" -> "pão de queijo" (alphabetically first, 'p' < 'q'),
+    a live cheese price compared against frozen bread, and that crossed from "low-stakes dairy
+    tie" to "wrong category entirely". `match_kind` now returns `None` for any unresolved tie, and
+    this surfaces it every time, not just for "queijo".
+
+    Measured against the 98 real kinds (2026-09-22) for the effect on already-relied-upon generic
+    single-word terms (`KIND_MATCH_CUTOFF`'s own list) -- bigger than the one incident that
+    triggered this reversal:
+
+    | term | now asks between |
+    |---|---|
+    | leite | creme de leite, leite condensado, leite uht |
+    | pão | pão australiano, baguete, de alho, de forma, de queijo |
+    | água | água com gás, água mineral |
+    | queijo | pão de queijo, queijo brie, mussarela, parmesão, parmesão ralado |
+    | creme | creme de leite, creme de ricota |
+
+    "tomate" and "maca" are untouched (the exact-match shortcut still wins those ties outright);
+    "carne", "arroz", "suco", "cebola" have no tie at all and are also untouched. Five real generic
+    terms trade a silent (sometimes wrong, as "queijo" -> bread just proved) answer for one extra
+    question -- a bigger trade than "queijo" alone, and worth knowing it's five, not one, before
+    calling this closed. Accepted as the right side of that trade given the concrete harm the
+    alternative just caused; revisit if asking this often for "pão"/"leite" reads as annoying in
+    real use, which is exactly the kind of evidence this project has always required to re-tune a
+    cutoff either direction.
 
     Checks `match_kind` itself first, rather than trusting the caller to only ask when it already
-    returned `None`: "leite" alone would otherwise report "leite condensado"/"creme de leite" as
-    candidates too, via the exact same `_kinds_via_product` machinery -- real failure caught by
-    `test_kind_candidates_stays_empty_for_the_pre_existing_accepted_tie` before this check existed.
-    The extra `match_kind` call is cheap (same cost this project already pays everywhere else for
-    a personal catalog of a few hundred products) and makes the scope boundary above true by
-    construction, not just by convention at the one call site that happens to honor it today."""
+    returned `None`: this is what makes the scope boundary above true by construction. The extra
+    `match_kind` call is cheap (same cost this project already pays everywhere else for a personal
+    catalog of a few hundred products)."""
     if match_kind(conn, term) is not None:
         return ()
     term_words = _strip_kind_noise(normalize_text(term).split())
+    _, _, tied = _score_kinds(conn, term_words)
+    if tied:
+        return tied
     found = _kinds_via_product(conn, term_words)
     return tuple(sorted(found)) if len(found) > 1 else ()
 

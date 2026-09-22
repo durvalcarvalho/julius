@@ -285,10 +285,10 @@ def test_compare_stores_action_ambiguous_brand_aborts_the_whole_call(stocked, cf
     assert not isinstance(result.output, ShoppingComparison), "the call must abort, not return a partial result"
 
 
-def test_check_price_action_pre_existing_kind_tie_still_resolves_silently(stocked, cfg):
-    """Limite de escopo da Decisão 3 (docs/design/kind-resolution-in-routing.md): o empate já
-    aceito do match direto contra o vocabulário de kind (v2.10, KIND_MATCH_CUTOFF -- "leite" ->
-    "creme de leite") não é a ambiguidade nova que pergunta; continua resolvendo em silêncio."""
+def test_check_price_action_direct_kind_tie_now_asks_too(stocked, cfg):
+    """Decisão revertida em 2026-09-22 (monkey test, incidente real: "queijo" -> "pão de queijo"):
+    o empate direto contra o vocabulário de kind (antes silenciosamente aceito, v2.10) agora vira
+    a mesma pergunta que a ambiguidade de marca já disparava."""
     ensure_store(stocked, "00000000000098", "Synthetic store")
     condensed = resolve_product_id(stocked, "00000000000098", "c1", "LEITE CONDENSADO 395G")
     cream = resolve_product_id(stocked, "00000000000098", "c2", "CREME DE LEITE 200G")
@@ -297,8 +297,9 @@ def test_check_price_action_pre_existing_kind_tie_still_resolves_silently(stocke
 
     result, state = _run(READ_ACTIONS[4], {"item": "leite", "price": 10.0}, stocked, cfg)
 
-    assert state["calls"] == 1, "must not retry -- the tie resolves silently, same as today"
-    assert result.output.kind == "creme de leite"
+    retries = _retries(result)
+    assert any("creme de leite" in content and "leite condensado" in content for content in retries)
+    assert state["calls"] == 2
 
 
 def test_compare_stores_action_reports_requested_count_and_single_store_kinds(stocked, cfg):

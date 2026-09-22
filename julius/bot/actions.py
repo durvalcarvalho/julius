@@ -153,7 +153,9 @@ def _resolve_kind(conn: sqlite3.Connection, item: str) -> str | None:
     return None
 
 
-async def search_prices(ctx: RunContext[Deps], words: str, tag: str | None = None, limit: int = 20) -> SearchOutcome:
+async def search_prices(
+    ctx: RunContext[Deps], words: str, tag: str | None = None, limit: int = 20, note: str | None = None
+) -> SearchOutcome:
     """Busca no histórico de preços já pagos, por nome de produto e/ou categoria.
 
     Args:
@@ -162,6 +164,11 @@ async def search_prices(ctx: RunContext[Deps], words: str, tag: str | None = Non
         tag: categoria para filtrar (ex.: "hortifruti", "limpeza"). Use apenas quando o usuário
             pedir uma categoria inteira.
         limit: quantas linhas no máximo por unidade de venda. O padrão, 20, serve quase sempre.
+        note: se o pedido original tinha mais de uma parte (ex.: "quanto paguei de tomate E qual
+            mercado é mais barato pra cebola?"), diga aqui, em texto curto, que a outra parte vem
+            na próxima mensagem (ex.: "cebola eu comparo a seguir"). Deixe de fora quando o pedido
+            só tinha uma parte -- texto livre não pode conviver com a chamada desta ação no mesmo
+            turno, então é este o único jeito de avisar sobre a segunda parte.
     """
     parts = words.split()
     if not parts and tag is None:
@@ -176,7 +183,9 @@ async def search_prices(ctx: RunContext[Deps], words: str, tag: str | None = Non
         raise ModelRetry(str(error)) from None
 
 
-async def compare_stores(ctx: RunContext[Deps], items: tuple[str, ...]) -> ShoppingComparison:
+async def compare_stores(
+    ctx: RunContext[Deps], items: tuple[str, ...], note: str | None = None
+) -> ShoppingComparison:
     """Compara o preço dos mesmos tipos de produto entre os mercados, para dizer qual mercado sai
     mais barato para uma lista de compras.
 
@@ -187,6 +196,8 @@ async def compare_stores(ctx: RunContext[Deps], items: tuple[str, ...]) -> Shopp
     Args:
         items: os itens que a pessoa quer comprar, como ela falou (ex.: ("tomate", "leite")).
             Junte itens mencionados nas últimas mensagens da conversa, não só na mais recente.
+        note: se o pedido original tinha mais de uma parte, diga aqui, em texto curto, que a outra
+            parte vem na próxima mensagem. Deixe de fora quando o pedido só tinha uma parte.
     """
     terms = [item.strip() for item in items if item.strip()]
     if not terms:
@@ -226,7 +237,12 @@ async def compare_stores(ctx: RunContext[Deps], items: tuple[str, ...]) -> Shopp
 
 
 async def check_price(
-    ctx: RunContext[Deps], item: str, price: float, quantity: float | None = None, unit: SaleUnit | None = None
+    ctx: RunContext[Deps],
+    item: str,
+    price: float,
+    quantity: float | None = None,
+    unit: SaleUnit | None = None,
+    note: str | None = None,
 ) -> PriceCheck:
     """Confere se um preço que a pessoa está vendo agora no mercado é bom, comparado ao histórico.
 
@@ -258,6 +274,8 @@ async def check_price(
             chamada anterior devolveu. NUNCA chute um valor.
         unit: "KG" ou "UN", só ao responder à pergunta que uma chamada anterior fez por causa de
             reason="ambiguous_unit". Nunca informe por conta própria.
+        note: se o pedido original tinha mais de uma parte, diga aqui, em texto curto, que a outra
+            parte vem na próxima mensagem. Deixe de fora quando o pedido só tinha uma parte.
     """
     if price <= 0:
         raise ModelRetry(f"O preço precisa ser maior que zero, recebi {price:g}. Confirme com a pessoa.")
@@ -272,12 +290,16 @@ async def check_price(
     return comparison_service.check_price(ctx.deps.conn, kind, price, quantity, unit)
 
 
-async def list_products(ctx: RunContext[Deps], containing: str | None = None) -> ProductListing:
+async def list_products(
+    ctx: RunContext[Deps], containing: str | None = None, note: str | None = None
+) -> ProductListing:
     """Lista os produtos do catálogo, com id, tipo, conteúdo e categorias.
 
     Args:
         containing: filtra pelos produtos cujo nome contém este trecho. Use quando o catálogo for
             grande e o usuário estiver procurando um produto específico.
+        note: se o pedido original tinha mais de uma parte, diga aqui, em texto curto, que a outra
+            parte vem na próxima mensagem. Deixe de fora quando o pedido só tinha uma parte.
     """
     products = catalog.list_products(ctx.deps.conn)
     if containing:
@@ -286,8 +308,13 @@ async def list_products(ctx: RunContext[Deps], containing: str | None = None) ->
     return ProductListing(products=tuple(products), containing=containing)
 
 
-async def list_stores(ctx: RunContext[Deps]) -> StoreListing:
-    """Lista os mercados já importados, com CNPJ, apelido e bairro."""
+async def list_stores(ctx: RunContext[Deps], note: str | None = None) -> StoreListing:
+    """Lista os mercados já importados, com CNPJ, apelido e bairro.
+
+    Args:
+        note: se o pedido original tinha mais de uma parte, diga aqui, em texto curto, que a outra
+            parte vem na próxima mensagem. Deixe de fora quando o pedido só tinha uma parte.
+    """
     return StoreListing(stores=tuple(catalog.list_stores(ctx.deps.conn)))
 
 

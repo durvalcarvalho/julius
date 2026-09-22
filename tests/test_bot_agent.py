@@ -341,6 +341,7 @@ def test_kind_vocabulary_stays_current_across_turns_sharing_history(cfg, deps):
         "caro",
         "busca voltou vazia",
         "quantity_needed",
+        "não lembra tão longe",
     ],
 )
 def test_system_prompt_states_the_rules_it_has_to_state(required):
@@ -350,7 +351,7 @@ def test_system_prompt_states_the_rules_it_has_to_state(required):
 def test_prompt_is_versioned_and_stays_out_of_the_curation_versions():
     from julius.services import suggestions
 
-    assert BOT_PROMPT_VERSION == "4"
+    assert BOT_PROMPT_VERSION == "6"
     assert "bot_turn" not in suggestions.PROMPT_VERSIONS
 
 

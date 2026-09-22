@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from pydantic_ai.exceptions import UnexpectedModelBehavior
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai.messages import ModelMessage, ToolCallPart
 
 from julius.bot.actions import Deps, PendingWrite, ProductListing, ShoppingComparison, StoreListing, WriteFailed, execute
 from julius.bot.agent import BOT_PROMPT_VERSION, BotAgent
@@ -109,6 +109,27 @@ def _output_kind(output: object) -> str:
     return "text" if isinstance(output, str) else type(output).__name__
 
 
+def _tool_note(result) -> str | None:
+    """The `note` argument of whichever action call produced `result.output`, if the model gave
+    one -- real gap (monkey test, 2026-09-22): "quanto paguei de tomate e qual mercado é mais
+    barato pra cebola?" only ever answered tomato; the SYSTEM_PROMPT's own promise ("diga, em
+    texto, que a segunda vem na próxima mensagem") is structurally impossible to keep once the
+    first part becomes an action call -- choosing an action ends the run with ITS return value as
+    the output, and pydantic_ai's output_type is `str` OR one action, never free text alongside a
+    tool call in the same turn. `note` is a normal string parameter every read action now accepts
+    (bot/actions.py), so the model can say "cebola eu comparo a seguir" as part of the SAME call
+    instead of a separate text turn that can't coexist with it -- read back here, from the tool
+    call's own arguments, and appended by the caller after whatever `_render_output` produces.
+    Scans backwards because a retried call (`ModelRetry`) leaves earlier `ToolCallPart`s behind;
+    only the last one is the call that actually produced `result.output`."""
+    for message in reversed(result.new_messages()):
+        for part in getattr(message, "parts", []):
+            if isinstance(part, ToolCallPart):
+                note = part.args_as_dict().get("note")
+                return note.strip() if isinstance(note, str) and note.strip() else None
+    return None
+
+
 def _log_query(config: Config, outcome: SearchOutcome) -> None:
     """Same keys as `julius consultar`, plus the channel -- whoever recalibrates the cutoffs with
     this file has to be able to tell the two apart. `words` is what the model extracted, not what
@@ -157,6 +178,34 @@ def _search_narration_context(records: Sequence[PriceRecord]) -> str:
     if len({record.product_id for record in records}) <= 1:
         return "histórico de preço de um produto"
     return "histórico de preço de vários produtos diferentes que bateram na mesma busca"
+
+
+_PRICE_CHECK_NO_DATA_PHRASES = (
+    "ainda não tenho",
+    "não tenho registrado",
+    "não tenho preço",
+    "sem preço antigo",
+    "não conheço esse item",
+    "não tenho como comparar",
+)
+"""Real bug (monkey test, 2026-09-22), one occurrence, not reproduced in 2 follow-up isolated
+retries: the persona said "esse tipo eu ainda não tenho registrado... me traz o valor e o mercado
+que eu anoto" for a `PriceCheck` that HAD a resolved verdict and reference price (reason=None) --
+the deterministic fallback for the same facts says "Sim, vale a pena... -33% de diferença". The
+existing money-value guard in `narrate()` only catches an invented R$ figure; this reply cited
+none, so it passed clean. Scoped narrowly, same shape as `agent.py::_UNLICENSED_DATA_CLAIMS`: only
+checked when `PriceCheck.reason` says there IS comparable data (`None` or "quantity_needed", both
+carry a real `reference_price`), against phrases lifted from `_PRICE_CHECK_REASON_SENTENCES`
+itself -- the vocabulary this exact code already uses for the *other* reasons, so a false claim
+borrows the same words a true one would. Nasce de UM caso, cresce com o próximo, mesma disciplina
+de toda lista deste tipo no projeto."""
+
+
+def _contradicts_price_check(output: PriceCheck, remark: str) -> bool:
+    if output.reason not in (None, "quantity_needed"):
+        return False
+    lowered = remark.lower()
+    return any(phrase in lowered for phrase in _PRICE_CHECK_NO_DATA_PHRASES)
 
 
 def _first_per_product(records: Sequence[PriceRecord], limit: int) -> list[PriceRecord]:
@@ -297,6 +346,8 @@ async def _render_output(output: object, state: ChatState, deps: Deps) -> Reply:
         if deps.client is None:
             return Reply(base)
         remark = await _narrate(deps, "conferência de preço ao vivo", price_check_facts(output))
+        if remark and _contradicts_price_check(output, remark):
+            remark = None
         return Reply(escape(remark)) if remark else Reply(base)
     if isinstance(output, ProductListing):
         base = render_products(output.products)
@@ -379,7 +430,11 @@ async def handle_text(agent: BotAgent, state: ChatState, deps: Deps, text: str) 
     del state.runs[:-HISTORY_TURNS]
 
     reply = await _render_output(result.output, state, deps)
-    return Reply(f"{prefix}{reply.text}", pending=reply.pending) if prefix else reply
+    note = _tool_note(result)
+    text_out = f"{reply.text}\n\n{escape(note)}" if note else reply.text
+    if prefix:
+        text_out = f"{prefix}{text_out}"
+    return Reply(text_out, pending=reply.pending) if (prefix or note) else reply
 
 
 EXPIRY_EPSILON_SECONDS = 1e-6

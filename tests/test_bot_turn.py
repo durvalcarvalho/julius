@@ -104,6 +104,42 @@ def test_read_reply_is_rendered_from_the_database(deps):
     assert reply.pending is None
 
 
+def test_note_is_appended_after_a_read_reply(deps):
+    """Real gap (monkey test, 2026-09-22): "quanto paguei de tomate e qual mercado é mais barato
+    pra cebola?" only ever answered tomato -- the SYSTEM_PROMPT's own promise ("digo que a segunda
+    vem depois") is structurally impossible as free text alongside a tool call in the same turn.
+    `note` is a normal argument the model can pass on the SAME call; `_tool_note` reads it back
+    from the tool call itself and the turn appends it after whatever the render produced."""
+    model, _ = _model(_action("search_prices", {"words": "picanha", "note": "cebola eu comparo a seguir"}))
+
+    reply, _ = _turn(deps, model, text="quanto paguei de picanha e qual mercado é mais barato pra cebola?")
+
+    assert "Preços por KG" in reply.text
+    assert reply.text.endswith("cebola eu comparo a seguir")
+
+
+def test_no_note_means_no_extra_text(deps):
+    """Scope boundary: a single-part request never gets an appended line -- `note` absent (the
+    default) must be indistinguishable from today's behavior."""
+    model, _ = _model(_action("search_prices", {"words": "picanha"}))
+
+    reply, _ = _turn(deps, model, text="quanto custou a picanha?")
+
+    assert "Preços por KG" in reply.text
+    assert not reply.text.rstrip().endswith("a seguir")
+
+
+def test_note_is_html_escaped(deps):
+    """`note` comes from the model, which can echo user-supplied text -- same escaping rule as
+    every other model-authored string that reaches the user (bot/render.py::escape)."""
+    model, _ = _model(_action("search_prices", {"words": "picanha", "note": "<b>depois</b> eu vejo"}))
+
+    reply, _ = _turn(deps, model, text="picanha e o resto depois")
+
+    assert "<b>depois</b>" not in reply.text
+    assert "&lt;b&gt;depois&lt;/b&gt;" in reply.text
+
+
 def test_read_turn_charges_and_logs(deps):
     model, _ = _model(_action("search_prices", {"words": "picanha"}))
 
@@ -685,6 +721,34 @@ def test_render_price_check_reason_still_narrates(deps):
     reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
 
     assert reply.text == "Não conheço esse item ainda, me fala outra vez?"
+
+
+def test_render_price_check_falls_back_when_persona_contradicts_a_resolved_verdict(deps):
+    """Real bug (monkey test, 2026-09-22): a PriceCheck with a resolved verdict and reference price
+    (reason=None) got narrated as "esse tipo eu ainda não tenho registrado... me traz o valor e o
+    mercado que eu anoto" -- cites no R$ figure, so the money guard in narrate() never sees it.
+    This is a different guard (_contradicts_price_check), scoped to reason in (None,
+    "quantity_needed") -- there IS a reference price, so a "no data" phrase is never legitimate."""
+    output = _check()
+    client = ScriptedLlmClient([_persona_reply("Esse tipo eu ainda não tenho registrado. Me traz o valor que eu anoto.")])
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == render_module.price_check_fallback_line(output)
+
+
+def test_render_price_check_no_data_phrase_is_fine_when_reason_says_so(deps):
+    """Scope boundary of the new guard: the same "no data" wording is exactly correct when the
+    reason itself is "no_history"/"unknown_item"/"no_comparable_basis" -- there is genuinely
+    nothing to compare, so the phrase must not be blocked there (test_render_price_check_reason_
+    still_narrates already covers "unknown_item"; this covers "no_history" specifically, whose
+    fallback line uses "não tenho preço registrado desse tipo ainda")."""
+    output = _check(reason="no_history", verdict=None, reference_price=None, diff_pct=None)
+    client = ScriptedLlmClient([_persona_reply("Ainda não tenho esse tipo registrado, me conta quando comprar.")])
+
+    reply = asyncio.run(_render_output(output, ChatState(), _with_client(deps, client)))
+
+    assert reply.text == "Ainda não tenho esse tipo registrado, me conta quando comprar."
 
 
 def test_product_listing_gets_a_comment_but_keeps_the_table(deps):
