@@ -1,15 +1,17 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from _fakes import ScriptedLlmClient
+from _fakes import ScriptedDecisionClient, ScriptedLlmClient
 from julius.config import Config
 from julius.domain.models import AppliedAction, ContentSuggestion, Product, ProductProposal
+from julius.infra.decision_client import NoulResult
 from julius.infra.llm_client import LlmResponse
 from julius.parsers.df import DFReceiptParser
 from julius.repositories import prices, products, stores
-from julius.services import catalog, curation
+from julius.services import catalog, curation, suggestions
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 CNPJ = "00000000000191"
@@ -291,6 +293,34 @@ def test_judge_duplicates_empty_candidates_does_not_call(conn, cfg):
     client = ScriptedLlmClient(by_kind={"merge": _merge_response([])})
     assert curation.judge_duplicates(conn, cfg, client, []) == []
     assert client.calls == []
+
+
+def test_judge_duplicates_shadow_mode_logs_but_never_changes_the_result(conn, cfg):
+    """Modo shadow (docs/design/structured-ai-decisions.md): o TypeSafe/Jev só é consultado e
+    logado -- quem decide o resultado continua sendo suggest_merges/DeepSeek, mesmo quando o Jev
+    discordaria (aqui ele daria noul baixo para um par que o DeepSeek confirma)."""
+    cfg = replace(cfg, typesafe_api_key="ts-key")
+    a, b = Product(1, "Alho"), Product(2, "Pão de Alho")
+    candidates = [(a, b, 0.9)]
+    llm_client = ScriptedLlmClient(
+        by_kind={"merge": _merge_response([{"id": 1, "rationale": "sim", "same_product": True, "confidence": 0.9}])}
+    )
+    decision_client = ScriptedDecisionClient([NoulResult(0.02)])
+
+    result = curation.judge_duplicates(conn, cfg, llm_client, candidates, decision_client=decision_client)
+
+    assert len(result) == 1  # DeepSeek's verdict still wins -- shadow mode never overrides it
+    assert result[0].ai.same_product is True
+    assert decision_client.noul_calls == [('Produto A: "Alho"\nProduto B: "Pão de Alho"', suggestions.MERGE_NOUL_INSTRUCTIONS)]
+
+
+def test_judge_duplicates_without_decision_client_never_calls_typesafe(conn, cfg):
+    cfg = replace(cfg, typesafe_api_key="ts-key")
+    candidates = [(Product(1, "A"), Product(2, "B"), 0.9)]
+    client = ScriptedLlmClient(
+        by_kind={"merge": _merge_response([{"id": 1, "rationale": "x", "same_product": False, "confidence": 0.6}])}
+    )
+    assert curation.judge_duplicates(conn, cfg, client, candidates) == []
 
 
 def _one_product(conn) -> tuple[int, str]:

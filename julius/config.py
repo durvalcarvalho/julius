@@ -23,10 +23,21 @@ class Config:
     bot_allowed_chat_id: int | None = None
     bot_unlimited_chat_ids: frozenset[int] = field(default_factory=frozenset)
     bot_rate_limit_per_hour: int = 20
+    typesafe_api_key: str | None = None
+    typesafe_base_url: str = "https://api.typesafe.ai/v1/systemone"
+    typesafe_model: str = "jev-latest"
+    typesafe_budget_usd: float = 1.0
+    typesafe_input_price_usd_per_1m: float = 0.042
 
     @property
     def ai_configured(self) -> bool:
         return bool(self.ai_api_key and self.ai_base_url and self.ai_model)
+
+    @property
+    def typesafe_configured(self) -> bool:
+        # Unlike ai_configured, base_url/model have working defaults -- only one provider exists
+        # today, so the key alone is enough to opt in (docs/design/structured-ai-decisions.md).
+        return bool(self.typesafe_api_key)
 
     @property
     def bot_configured(self) -> bool:
@@ -67,6 +78,8 @@ class Config:
 def load(env: Mapping[str, str] | None = None) -> Config:
     env = os.environ if env is None else env
     budget = _optional_float(env, "JULIUS_AI_BUDGET_USD")
+    typesafe_budget = _optional_float(env, "JULIUS_TYPESAFE_BUDGET_USD")
+    typesafe_input_price = _optional_float(env, "JULIUS_TYPESAFE_INPUT_PRICE_USD_PER_1M")
     return Config(
         db_path=Path(env.get("JULIUS_DB") or DEFAULT_DB_PATH),
         ai_api_key=env.get("JULIUS_AI_API_KEY") or None,
@@ -80,6 +93,11 @@ def load(env: Mapping[str, str] | None = None) -> Config:
         bot_allowed_chat_id=_optional_int(env, "JULIUS_BOT_ALLOWED_CHAT_ID"),
         bot_unlimited_chat_ids=_int_set(env, "JULIUS_BOT_UNLIMITED_CHAT_IDS"),
         bot_rate_limit_per_hour=_optional_int(env, "JULIUS_BOT_RATE_LIMIT_PER_HOUR") or 20,
+        typesafe_api_key=env.get("JULIUS_TYPESAFE_API_KEY") or None,
+        typesafe_base_url=env.get("JULIUS_TYPESAFE_BASE_URL") or "https://api.typesafe.ai/v1/systemone",
+        typesafe_model=env.get("JULIUS_TYPESAFE_MODEL") or "jev-latest",
+        typesafe_budget_usd=1.0 if typesafe_budget is None else typesafe_budget,
+        typesafe_input_price_usd_per_1m=0.042 if typesafe_input_price is None else typesafe_input_price,
     )
 
 

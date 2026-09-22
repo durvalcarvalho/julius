@@ -24,6 +24,7 @@ from julius.domain.models import (
 )
 from julius.domain.normalization import normalize_content
 from julius.infra import ai_log
+from julius.infra.decision_client import DecisionClient
 from julius.infra.llm_client import LlmClient
 from julius.services import catalog, curation, suggestions
 
@@ -233,6 +234,7 @@ def review_products(
     *,
     assume_yes: bool,
     interactive: bool,
+    decision_client: DecisionClient | None = None,
 ) -> bool:
     with console.status(f"Consultando IA para {len(product_ids)} {plural(len(product_ids), 'produto')}…"):
         proposals = curation.propose(conn, settings, client, product_ids)
@@ -268,7 +270,8 @@ def review_products(
         pending = _ask_pending_content(conn, settings, client, pending)
 
     candidates = curation.duplicate_candidates(conn, product_ids)
-    _merge_duplicates(conn, settings, curation.judge_duplicates(conn, settings, client, candidates))
+    duplicates = curation.judge_duplicates(conn, settings, client, candidates, decision_client=decision_client)
+    _merge_duplicates(conn, settings, duplicates)
 
     if pending:
         console.print(f"Pendentes: {len(pending)} {plural(len(pending), 'produto')} sem conteúdo.")

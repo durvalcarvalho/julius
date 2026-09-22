@@ -17,11 +17,15 @@ from julius.domain.models import (
     ProductEnrichment,
 )
 from julius.infra import ai_log
+from julius.infra.decision_client import DecisionClient, NoulResult
 from julius.infra.llm_client import LlmClient, LlmResponse
-from julius.repositories import ai_usage
+from julius.repositories import ai_usage, decision_usage
 
 MAX_ATTEMPTS = 2  # one retry on transport error, empty response, or invalid JSON
 ENRICH_BATCH_SIZE = 25
+
+DECISION_PROVIDER = "typesafe"  # only structured-decision provider implemented today; the
+# decision_usage ledger is generic by provider so a second one never asks for a new migration.
 
 PROMPT_VERSIONS: dict[str, str] = {
     "enrich": "2",
@@ -427,6 +431,103 @@ def record_usage(
         prompt_version=prompt_version,
     )
     return cost
+
+
+def typesafe_available(conn: sqlite3.Connection, config: Config, month: str | None = None) -> bool:
+    """Same shape as is_available, for the separate TypeSafe/Jev budget. Never raises: a broken
+    check reads as unavailable, same as a missing key."""
+    try:
+        if not config.typesafe_configured:
+            return False
+        spent = decision_usage.spent_in_month(conn, DECISION_PROVIDER, month or _current_month())
+        return spent < config.typesafe_budget_usd
+    except Exception:
+        return False
+
+
+def _record_decision_usage(
+    conn: sqlite3.Connection,
+    config: Config,
+    call_kind: str,
+    *,
+    mode: str,
+    state: str,
+    result_value: object,
+    input_tokens: int,
+    output_tokens: int,
+    latency_ms: int,
+    error: str | None,
+    month: str | None = None,
+) -> float:
+    """Charges the TypeSafe budget and appends one line to ai_calls.jsonl (same file, tagged by
+    `provider`) -- mirrors record_usage, kept separate because the ledger table and the price
+    model (output is free) differ. Returns the cost in USD."""
+    cost = 0.0 if error is not None else input_tokens / 1e6 * config.typesafe_input_price_usd_per_1m
+    if cost > 0:
+        with conn:
+            decision_usage.add_spent(conn, DECISION_PROVIDER, month or _current_month(), cost)
+    ai_log.append(
+        config.ai_log_path,
+        {
+            "ts": datetime.now().isoformat(timespec="seconds"),
+            "provider": DECISION_PROVIDER,
+            "call_kind": call_kind,
+            "mode": mode,
+            "model": config.typesafe_model,
+            "state": state,
+            "result": result_value,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cost_usd": cost,
+            "latency_ms": latency_ms,
+            "error": error,
+        },
+    )
+    return cost
+
+
+MERGE_NOUL_INSTRUCTIONS = (
+    "Os dois produtos de supermercado descritos no state sao o MESMO produto (mesma marca e "
+    "variedade/sabor), a ponto de fazer sentido juntar o historico de preco dos dois em um so? "
+    "Marca, sabor, variedade ou tipo de corte diferentes contam como produtos DIFERENTES, mesmo "
+    "que sejam da mesma categoria."
+)
+
+
+def shadow_judge_merges(
+    conn: sqlite3.Connection,
+    config: Config,
+    decision_client: DecisionClient,
+    pairs: Sequence[tuple[str, str]],
+    month: str | None = None,
+) -> None:
+    """Modo shadow (docs/design/structured-ai-decisions.md): pergunta o noul do TypeSafe/Jev para
+    cada par e só LOGA o resultado -- nunca influencia `judge_duplicates`, que continua decidindo
+    100% pelo `suggest_merges`/DeepSeek de hoje até uma checklist de graduação medida promover
+    isto a modo `active`. Nunca lança: um par que falhar não derruba a revisão inteira."""
+    if not typesafe_available(conn, config, month):
+        return
+    for name_a, name_b in pairs:
+        state = f'Produto A: "{name_a}"\nProduto B: "{name_b}"'
+        started = time.monotonic()
+        try:
+            result = decision_client.ask_noul(state, MERGE_NOUL_INSTRUCTIONS)
+        except Exception as exc:
+            result = NoulResult(None, error=f"client raised {type(exc).__name__}")
+        latency_ms = int((time.monotonic() - started) * 1000)
+        _record_decision_usage(
+            conn,
+            config,
+            "merge_noul",
+            mode="shadow",
+            state=state,
+            result_value=result.value,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+            latency_ms=latency_ms,
+            error=result.error,
+            month=month,
+        )
 
 
 def _ask(

@@ -15,6 +15,41 @@ def test_defaults_when_env_is_empty():
     assert cfg.ai_input_price_usd_per_1m is None
     assert cfg.ai_output_price_usd_per_1m is None
     assert cfg.ai_configured is False
+    assert cfg.typesafe_api_key is None
+    assert cfg.typesafe_base_url == "https://api.typesafe.ai/v1/systemone"
+    assert cfg.typesafe_model == "jev-latest"
+    assert cfg.typesafe_budget_usd == 1.0
+    assert cfg.typesafe_input_price_usd_per_1m == 0.042
+    assert cfg.typesafe_configured is False
+
+
+def test_typesafe_configured_needs_only_the_key():
+    """Unlike ai_configured, base_url/model have working defaults -- the key alone opts in."""
+    assert config.load({"JULIUS_TYPESAFE_API_KEY": "k"}).typesafe_configured is True
+
+
+def test_typesafe_env_overrides_everything():
+    cfg = config.load(
+        {
+            "JULIUS_TYPESAFE_API_KEY": "secret",
+            "JULIUS_TYPESAFE_BASE_URL": "https://api.example/v1/systemone",
+            "JULIUS_TYPESAFE_MODEL": "other-model",
+            "JULIUS_TYPESAFE_BUDGET_USD": "2.5",
+            "JULIUS_TYPESAFE_INPUT_PRICE_USD_PER_1M": "0.1",
+        }
+    )
+    assert cfg.typesafe_api_key == "secret"
+    assert cfg.typesafe_base_url == "https://api.example/v1/systemone"
+    assert cfg.typesafe_model == "other-model"
+    assert cfg.typesafe_budget_usd == 2.5
+    assert cfg.typesafe_input_price_usd_per_1m == 0.1
+    assert cfg.typesafe_configured is True
+
+
+def test_typesafe_empty_string_counts_as_unset():
+    cfg = config.load({"JULIUS_TYPESAFE_API_KEY": "", "JULIUS_TYPESAFE_BUDGET_USD": ""})
+    assert cfg.typesafe_api_key is None
+    assert cfg.typesafe_budget_usd == 1.0
 
 
 def test_env_overrides_everything():

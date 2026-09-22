@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from julius.infra.decision_client import ChoiceResult, NoulResult
 from julius.infra.llm_client import LlmResponse
 
 # Each JSON response format (design doc §6) has one distinctive key: look for it quoted in the
@@ -63,4 +64,41 @@ class ScriptedLlmClient:
 
 class RaisingLlmClient:
     def complete(self, system_prompt: str, user_prompt: str, *, max_tokens: int) -> LlmResponse:
+        raise RuntimeError("boom")
+
+
+class ScriptedDecisionClient:
+    """Fake for julius.infra.decision_client.DecisionClient: scripted results in order, repeating
+    the last one when the script runs out. Records every call for assertions."""
+
+    def __init__(
+        self,
+        noul_responses: Sequence[NoulResult] = (),
+        choice_responses: Sequence[ChoiceResult] = (),
+    ) -> None:
+        self._noul_responses = list(noul_responses)
+        self._choice_responses = list(choice_responses)
+        self.noul_calls: list[tuple[str, str]] = []
+        self.choice_calls: list[tuple[str, str, dict]] = []
+
+    def ask_noul(self, state: str, instructions: str) -> NoulResult:
+        self.noul_calls.append((state, instructions))
+        if not self._noul_responses:
+            return NoulResult(None, error="no scripted response")
+        index = len(self.noul_calls) - 1
+        return self._noul_responses[min(index, len(self._noul_responses) - 1)]
+
+    def ask_choice(self, state: str, instructions: str, criteria: Mapping[str, str]) -> ChoiceResult:
+        self.choice_calls.append((state, instructions, dict(criteria)))
+        if not self._choice_responses:
+            return ChoiceResult(None, None, None, error="no scripted response")
+        index = len(self.choice_calls) - 1
+        return self._choice_responses[min(index, len(self._choice_responses) - 1)]
+
+
+class RaisingDecisionClient:
+    def ask_noul(self, state: str, instructions: str) -> NoulResult:
+        raise RuntimeError("boom")
+
+    def ask_choice(self, state: str, instructions: str, criteria: Mapping[str, str]) -> ChoiceResult:
         raise RuntimeError("boom")

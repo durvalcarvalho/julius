@@ -3,11 +3,12 @@ from dataclasses import replace
 
 import pytest
 
-from _fakes import RaisingLlmClient, ScriptedLlmClient
+from _fakes import RaisingDecisionClient, RaisingLlmClient, ScriptedDecisionClient, ScriptedLlmClient
 from julius.config import Config
 from julius.domain.models import ContentSuggestion, MergeSuggestion, PackagingHint, Product, ProductEnrichment
+from julius.infra.decision_client import NoulResult
 from julius.infra.llm_client import LlmResponse
-from julius.repositories import ai_usage
+from julius.repositories import ai_usage, decision_usage
 from julius.services import suggestions
 
 MONTH = "2026-09"
@@ -189,6 +190,72 @@ def test_spent_this_month_reads_current_month(conn, monkeypatch):
 def test_is_available_never_raises_on_broken_connection(conn, cfg):
     conn.close()
     assert suggestions.is_available(conn, cfg, MONTH) is False
+
+
+def test_typesafe_available_false_without_key(conn, cfg):
+    assert suggestions.typesafe_available(conn, cfg, MONTH) is False
+
+
+def test_typesafe_available_true_with_key_and_budget(conn, cfg):
+    cfg = replace(cfg, typesafe_api_key="ts-key", typesafe_budget_usd=1.0)
+    assert suggestions.typesafe_available(conn, cfg, MONTH) is True
+
+
+def test_typesafe_available_false_once_budget_is_spent(conn, cfg):
+    cfg = replace(cfg, typesafe_api_key="ts-key", typesafe_budget_usd=0.01)
+    decision_usage.add_spent(conn, suggestions.DECISION_PROVIDER, MONTH, 0.02)
+    assert suggestions.typesafe_available(conn, cfg, MONTH) is False
+
+
+def test_typesafe_available_never_raises_on_broken_connection(conn, cfg):
+    cfg = replace(cfg, typesafe_api_key="ts-key")
+    conn.close()
+    assert suggestions.typesafe_available(conn, cfg, MONTH) is False
+
+
+def test_shadow_judge_merges_logs_noul_per_pair_without_deciding_anything(conn, cfg):
+    cfg = replace(cfg, typesafe_api_key="ts-key", typesafe_input_price_usd_per_1m=1.0)
+    client = ScriptedDecisionClient([NoulResult(0.02, 40, 5), NoulResult(0.8, 30, 4)])
+
+    suggestions.shadow_judge_merges(conn, cfg, client, [("Alho", "Pão de Alho"), ("Cebola", "CEBOLA")], MONTH)
+
+    assert len(client.noul_calls) == 2
+    assert client.noul_calls[0] == ('Produto A: "Alho"\nProduto B: "Pão de Alho"', suggestions.MERGE_NOUL_INSTRUCTIONS)
+    lines = _lines(cfg)
+    assert [line["provider"] for line in lines] == ["typesafe", "typesafe"]
+    assert [line["mode"] for line in lines] == ["shadow", "shadow"]
+    assert [line["result"] for line in lines] == [0.02, 0.8]
+    assert decision_usage.spent_in_month(conn, suggestions.DECISION_PROVIDER, MONTH) == pytest.approx(40e-6 + 30e-6)
+
+
+def test_shadow_judge_merges_does_nothing_without_typesafe_configured(conn, cfg):
+    client = ScriptedDecisionClient([NoulResult(0.02)])
+    suggestions.shadow_judge_merges(conn, cfg, client, [("A", "B")], MONTH)
+    assert client.noul_calls == []
+    assert not cfg.ai_log_path.exists()
+
+
+def test_shadow_judge_merges_empty_pairs_does_not_call(conn, cfg):
+    cfg = replace(cfg, typesafe_api_key="ts-key")
+    client = ScriptedDecisionClient([NoulResult(0.02)])
+    suggestions.shadow_judge_merges(conn, cfg, client, [], MONTH)
+    assert client.noul_calls == []
+
+
+def test_shadow_judge_merges_logs_error_and_never_raises_when_client_raises(conn, cfg):
+    cfg = replace(cfg, typesafe_api_key="ts-key")
+    suggestions.shadow_judge_merges(conn, cfg, RaisingDecisionClient(), [("A", "B")], MONTH)
+    lines = _lines(cfg)
+    assert lines[0]["error"] == "client raised RuntimeError"
+    assert lines[0]["result"] is None
+    assert decision_usage.spent_in_month(conn, suggestions.DECISION_PROVIDER, MONTH) == 0.0
+
+
+def test_shadow_judge_merges_a_provider_error_costs_nothing(conn, cfg):
+    cfg = replace(cfg, typesafe_api_key="ts-key", typesafe_input_price_usd_per_1m=1.0)
+    client = ScriptedDecisionClient([NoulResult(None, input_tokens=50, error="HTTP 429")])
+    suggestions.shadow_judge_merges(conn, cfg, client, [("A", "B")], MONTH)
+    assert decision_usage.spent_in_month(conn, suggestions.DECISION_PROVIDER, MONTH) == 0.0
 
 
 def test_enrich_prompt_lists_categories_and_id_name_lines(conn, cfg):

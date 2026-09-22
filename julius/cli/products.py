@@ -12,6 +12,7 @@ from julius.cli._common import br_date, console, content_text, fail, open_db
 from julius.cli._hints import print_hints
 from julius.domain.models import Product
 from julius.infra import ai_log
+from julius.infra.decision_client import TypeSafeDecisionClient
 from julius.infra.llm_client import HttpLlmClient
 from julius.services import catalog, curation, guidance, suggestions
 
@@ -242,7 +243,10 @@ def review(
             console.print("Nenhum produto pendente de revisão.")
             return
         interactive = not yes and _review._is_interactive()
-        _review.review_products(conn, settings, client, ids, assume_yes=yes, interactive=interactive)
+        decision_client = TypeSafeDecisionClient.from_config(settings)
+        _review.review_products(
+            conn, settings, client, ids, assume_yes=yes, interactive=interactive, decision_client=decision_client
+        )
     finally:
         conn.close()
 

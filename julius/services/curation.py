@@ -8,6 +8,7 @@ from rapidfuzz import fuzz
 from julius.config import Config
 from julius.domain.models import AppliedAction, ContentSuggestion, DuplicateCandidate, Product, ProductProposal
 from julius.domain.normalization import normalize_text
+from julius.infra.decision_client import DecisionClient
 from julius.infra.llm_client import LlmClient
 from julius.repositories import products
 from julius.services import suggestions
@@ -151,10 +152,15 @@ def judge_duplicates(
     client: LlmClient,
     candidates: Sequence[tuple[Product, Product, float]],
     month: str | None = None,
+    decision_client: DecisionClient | None = None,
 ) -> list[DuplicateCandidate]:
     if not candidates:
         return []
     pairs = [(a.canonical_name, b.canonical_name) for a, b, _ in candidates]
+    if decision_client is not None:
+        # Modo shadow (docs/design/structured-ai-decisions.md): só mede, não decide -- o
+        # resultado abaixo continua vindo inteiramente de suggest_merges/DeepSeek.
+        suggestions.shadow_judge_merges(conn, config, decision_client, pairs, month)
     verdicts = suggestions.suggest_merges(conn, config, client, pairs, month)
     return [
         DuplicateCandidate(product_a=a, product_b=b, text_similarity=similarity, ai=verdict)

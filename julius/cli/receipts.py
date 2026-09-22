@@ -25,6 +25,7 @@ from julius.domain.comparison_basis import comparison_basis
 from julius.domain.formatting import plural
 from julius.domain.models import ImportResult, PriceExtreme, PriceRecord, SearchOutcome
 from julius.infra import ai_log, receipt_files
+from julius.infra.decision_client import TypeSafeDecisionClient
 from julius.infra.llm_client import HttpLlmClient
 from julius.parsers.df import DFReceiptParser
 from julius.services import (
@@ -90,8 +91,15 @@ def import_receipts(
             if client is not None:
                 try:
                     interactive = not yes and _review._is_interactive()
+                    decision_client = TypeSafeDecisionClient.from_config(settings)
                     reviewed = _review.review_products(
-                        conn, settings, client, merged.new_product_ids, assume_yes=yes, interactive=interactive
+                        conn,
+                        settings,
+                        client,
+                        merged.new_product_ids,
+                        assume_yes=yes,
+                        interactive=interactive,
+                        decision_client=decision_client,
                     )
                 except Exception as error:
                     error_console.print(f"IA: erro ao aplicar sugestões — {error}")

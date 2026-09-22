@@ -4,7 +4,16 @@ import pytest
 
 from julius.infra import db
 
-EXPECTED_TABLES = {"stores", "products", "product_skus", "tags", "product_tags", "prices", "ai_usage"}
+EXPECTED_TABLES = {
+    "stores",
+    "products",
+    "product_skus",
+    "tags",
+    "product_tags",
+    "prices",
+    "ai_usage",
+    "decision_usage",
+}
 
 INSERT_PRICE = """
 INSERT INTO prices (access_key, item_index, purchased_at, store_cnpj, product_id,
