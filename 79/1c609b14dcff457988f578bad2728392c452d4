@@ -1,0 +1,30 @@
+tests/test_bot_agent.py
+  s_36f8cccf1d7828::t_6b5ee3985608e4 354
+julius/bot/turn.py
+  s_36f8cccf1d7828::t_aa0fd27b004f4c 454
+  s_36f8cccf1d7828::t_99c31fc3babc7a 133-156
+tests/test_real_ai.py
+  s_36f8cccf1d7828::t_333befc67f445e 320,322-333,344-345
+tests/test_bot_turn.py
+  s_36f8cccf1d7828::t_6f7ebcb7081a7b 266,273
+  s_36f8cccf1d7828::t_8ec15a33582843 248-253,262-265,267-272,274-297
+julius/bot/agent.py
+  s_36f8cccf1d7828::t_bdc531c60a4876 28
+  s_36f8cccf1d7828::t_ae4534af4331f7 123-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "791c609b14dcff457988f578bad2728392c452d4",
+  "prompts": {},
+  "sessions": {
+    "s_36f8cccf1d7828": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dd3cd7fe-add2-4dd0-beae-979d6aeadc2b",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
