@@ -1,0 +1,38 @@
+julius/services/search.py
+  s_36f8cccf1d7828::t_8f423b163208c6 267-268
+  s_36f8cccf1d7828::t_c2a96ba87df31e 269-281,283-284,289,299-331
+  s_36f8cccf1d7828::t_fbd65587c5c0c0 371-373,375-376
+  s_36f8cccf1d7828::t_e85b6433cc9e4e 484,487,489,493-510
+  s_36f8cccf1d7828::t_dddea0a5d0325e 349-352,357,359-360
+  s_36f8cccf1d7828::t_89738fab425ad2 511-512
+julius/bot/actions.py
+  s_36f8cccf1d7828::t_eb49584aa66093 156-180
+  s_36f8cccf1d7828::t_f0819450b1af52 204,209-210
+tests/test_bot_actions_read.py
+  s_36f8cccf1d7828::t_5510bf39fa6979 11,13
+  s_36f8cccf1d7828::t_91f6a13dec43f6 182-245
+  s_36f8cccf1d7828::t_9171b6020ca641 246-247
+tests/test_services_search.py
+  s_36f8cccf1d7828::t_8764c30447cc05 21
+  s_36f8cccf1d7828::t_9d3de1c566fdd6 81-97,101-105,111,113-114
+  s_36f8cccf1d7828::t_64f41bd3e774ad 98-100
+  s_36f8cccf1d7828::t_6e6ae8506e342f 106-110,112
+  s_36f8cccf1d7828::t_780df73a9a368d 487-504
+  s_36f8cccf1d7828::t_4e9e1a9e8f7ed6 505-506
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4a86a9ea37d6446d4460eaabf59a75badabdc2b7",
+  "prompts": {},
+  "sessions": {
+    "s_36f8cccf1d7828": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dd3cd7fe-add2-4dd0-beae-979d6aeadc2b",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Durval Carvalho de Souza <dudurval2@gmail.com>"
+    }
+  }
+}
