@@ -245,7 +245,12 @@ def test_free_text_reply_logs_the_actual_text_not_just_the_marker(deps):
     assert _ai_lines(deps.config)[-1]["raw_response"] == "Oi! Isso não tem a ver com preço."
 
 
-def test_history_keeps_only_the_last_three_turns_whole(deps):
+def test_history_pins_the_first_turn_and_slides_the_rest(deps):
+    """Revertido em 2026-09-22 (bug real: 5 perguntas seguidas -- banana, cebola, tomate, uva --
+    depois "o que eu perguntei primeiro?" -- o bot afirmou "cebola", a borda da janela antiga, como
+    se fosse o início real da conversa). HISTORY_TURNS continua valendo 3 turnos no total (mesmo
+    custo de token); o que muda é QUAIS 3 sobrevivem -- o primeiro fica pra sempre, só o resto
+    desliza. Era `test_history_keeps_only_the_last_three_turns_whole`, que afirmava o oposto."""
     state = ChatState()
     for index in range(4):
         model, _ = _model(_prose(f"resposta {index}"))
@@ -254,7 +259,42 @@ def test_history_keeps_only_the_last_three_turns_whole(deps):
     assert len(state.runs) == 3
     flattened = state.history
     assert flattened == [message for run in state.runs for message in run]
-    assert all("pergunta 0" not in str(message) for message in flattened)
+    assert any("pergunta 0" in str(message) for message in flattened), "o primeiro turno tem que sobreviver"
+    assert all("pergunta 1" not in str(message) for message in flattened), "o segundo turno é o que sai agora"
+
+
+from julius.bot import turn as turn_module  # noqa: E402
+from julius.bot.turn import _trim_history  # noqa: E402
+
+
+def test_trim_history_short_conversation_is_unchanged():
+    runs = [["t1"], ["t2"]]
+
+    assert _trim_history(runs) == runs
+
+
+def test_trim_history_pins_the_first_turn():
+    runs = [["banana"], ["cebola"], ["tomate"], ["uva"], ["quinta"]]
+
+    assert _trim_history(runs) == [["banana"], ["uva"], ["quinta"]]
+
+
+def test_trim_history_never_drops_the_immediately_previous_turn():
+    """Os loops de quantity_needed/ambiguous_unit/ambiguidade de kind dependem do turno
+    imediatamente anterior estar visível -- isso não pode regredir."""
+    for size in range(1, 8):
+        runs = [[f"t{i}"] for i in range(size)]
+        trimmed = _trim_history(runs)
+        assert trimmed[-1] == runs[-1]
+        if size > 1:
+            assert trimmed[-2] == runs[-2]
+
+
+def test_trim_history_single_turn_history_length(monkeypatch):
+    monkeypatch.setattr(turn_module, "HISTORY_TURNS", 1)
+    runs = [["t1"], ["t2"], ["t3"]]
+
+    assert turn_module._trim_history(runs) == [["t3"]]
 
 
 def test_empty_listing_renders_the_empty_message(conn, cfg):

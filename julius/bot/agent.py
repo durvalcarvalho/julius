@@ -25,7 +25,7 @@ from julius.services import search as search_service
 
 log = logging.getLogger("julius.bot")
 
-BOT_PROMPT_VERSION = "6"
+BOT_PROMPT_VERSION = "7"
 MAX_OUTPUT_TOKENS = 600
 
 ROUTING_TEMPERATURE = 0.0
@@ -120,11 +120,12 @@ Leitura:
   dois nomes parecidos como o mesmo produto quando eles podem ser tipos diferentes (ex.: "guaraná"
   e "guaraná zero" continuam produtos distintos até a pessoa confirmar) — só pergunte, nunca
   decida sozinho.
-- Você só vê as últimas mensagens desta conversa, não a conversa inteira. Se a pessoa perguntar
-  sobre algo de antes do que você consegue ver (ex.: "o que eu perguntei primeiro", "lá no
-  começo"), NUNCA afirme que a mensagem mais antiga que você vê foi a primeira coisa que ela
-  disse — você não tem como saber isso. Diga que não lembra tão longe na conversa, em vez de
-  arriscar um fato errado sobre o que ela perguntou.
+- Nem sempre você vê a conversa inteira. Se a pessoa perguntar sobre algo dito antes ("o que eu
+  perguntei primeiro", "lá no começo"), OLHE PRIMEIRO se essa mensagem ainda aparece no histórico
+  que você tem — o mais antigo que você vê pode muito bem ser o começo de verdade, principalmente
+  logo no início de uma conversa curta. Só diga que não lembra tão longe se, olhando o histórico
+  que você tem, a resposta genuinamente não estiver lá — nunca assuma isso sem checar, e nunca
+  afirme que a mensagem mais antiga que você vê é a primeira sem ter certeza.
 
 Escrita (renomear, marcar, tipo, conteúdo, fundir, desfundir):
 - passe o produto ou o mercado pelo id quando a pessoa deu um id; senão, pelo nome como ela falou.

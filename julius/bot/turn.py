@@ -130,6 +130,30 @@ def _tool_note(result) -> str | None:
     return None
 
 
+def _trim_history(runs: list[list[ModelMessage]]) -> list[list[ModelMessage]]:
+    """Keeps the first turn of the conversation forever, sliding only the rest -- same
+    `HISTORY_TURNS` budget as before (no extra tokens), different choice of *which* turns survive.
+
+    Real bug (monkey test, 2026-09-22): five questions in a row (banana, cebola, tomate, uva),
+    then "o que eu perguntei primeiro?" -- the old policy (`del runs[:-HISTORY_TURNS]`, keep only
+    the most recent `HISTORY_TURNS`) had already dropped the banana turn by message 5, and the
+    model confidently answered "você começou perguntando de cebola" -- wrong, and stated as fact.
+    Reinforcing SYSTEM_PROMPT (BOT_PROMPT_VERSION 5) did not change this in a live retest: the
+    model was never ignoring an instruction, banana was simply not in any message it could still
+    read -- the "grounding gap" documented in claudedocs/research_entity_resolution_lexical_
+    matching_scaling_20260922.md. Pinning the first turn puts the actual answer back in front of
+    the model, for free -- no new state, no persisted table, no `HISTORY_TURNS` increase.
+
+    `HISTORY_TURNS <= 1` is not today's value (3) but is handled explicitly so a future change to
+    the constant can't silently duplicate the pinned turn (`runs[-0:]` is the whole list, not
+    empty, so the naive `runs[:1] + runs[-(HISTORY_TURNS - 1):]` would double turn 1)."""
+    if len(runs) <= HISTORY_TURNS:
+        return runs
+    if HISTORY_TURNS <= 1:
+        return runs[-1:]
+    return runs[:1] + runs[-(HISTORY_TURNS - 1):]
+
+
 def _log_query(config: Config, outcome: SearchOutcome) -> None:
     """Same keys as `julius consultar`, plus the channel -- whoever recalibrates the cutoffs with
     this file has to be able to tell the two apart. `words` is what the model extracted, not what
@@ -427,7 +451,7 @@ async def handle_text(agent: BotAgent, state: ChatState, deps: Deps, text: str) 
     )
 
     state.runs.append(result.new_messages())
-    del state.runs[:-HISTORY_TURNS]
+    state.runs = _trim_history(state.runs)
 
     reply = await _render_output(result.output, state, deps)
     note = _tool_note(result)

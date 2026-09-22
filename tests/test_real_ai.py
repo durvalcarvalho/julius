@@ -317,13 +317,20 @@ def test_a_bare_vague_question_asks_for_the_item_instead_of_an_empty_search(deps
     assert reply.text, "resposta vazia"
 
 
-def test_asking_about_something_outside_the_history_window_does_not_fabricate_it(deps):
+def test_asking_about_the_first_thing_said_answers_correctly(deps):
     """Achado real (monkey test, 2026-09-22): 5 perguntas seguidas (banana, cebola, tomate, uva),
-    depois "e do primeiro que eu perguntei mesmo?" -- banana já saiu de HISTORY_TURNS=3, e o modelo
-    respondeu "Você começou perguntando de cebola", errado e com total confiança. Reforço de prompt
-    aplicado (BOT_PROMPT_VERSION 5); este teste não afirma que o modelo nunca mais erra (prompt não
-    é garantia, mesma disciplina de sempre), só imprime o resultado pra acompanhar entre rodadas --
-    o achado real é que "banana" nunca deveria aparecer como fato afirmado com confiança aqui."""
+    depois "e do primeiro que eu perguntei mesmo?" -- com a política antiga de histórico (só os
+    últimos HISTORY_TURNS turnos), banana já tinha saído da janela e o modelo respondeu "Você
+    começou perguntando de cebola", errado e com total confiança.
+
+    Duas correções depois (ticket 181, docs/design/entity-resolution-architecture.md Frente B):
+    `bot/turn.py::_trim_history` fixa o turno 1 pra sempre (banana nunca mais sai da janela), e
+    `SYSTEM_PROMPT` (v7) passou a mandar checar o histórico visível antes de desistir, não só
+    "diga que não lembra" (v5, testado e insuficiente sozinho -- o modelo dizia "não lembro" mesmo
+    com banana já visível). As duas juntas, medido ao vivo 2x com duas formulações da pergunta:
+    responde "banana" corretamente as duas vezes. Este teste cobra o resultado ideal (não só "não
+    inventa mais", que já era o mínimo aceitável) porque isso já foi observado consistentemente --
+    se um dia voltar a falhar, é sinal de regressão em `_trim_history` ou no prompt, não ruído."""
     state = ChatState()
     for item in ("banana", "cebola", "tomate", "uva"):
         _ask(deps, f"quanto paguei de {item}?", state)
@@ -334,11 +341,8 @@ def test_asking_about_something_outside_the_history_window_does_not_fabricate_it
     _SPENT.append(call["cost_usd"])
 
     print(f"\n  ({call['raw_response']}): {reply.text}")
-    assert reply.text, "resposta vazia"
-    assert "banana" not in reply.text.lower(), (
-        "banana já saiu da janela de histórico -- se aparece aqui como fato afirmado, "
-        "é sorte, não memória de verdade"
-    )
+    assert "banana" in reply.text.lower(), "o turno 1 (banana) está fixado no histórico -- a resposta certa está disponível"
+    assert "cebola" not in reply.text.lower(), "cebola foi a 2ª pergunta, não a 1ª -- não pode aparecer como se fosse"
 
 
 # --- invariantes: valem qualquer que seja a escolha do modelo --------------------
